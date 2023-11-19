@@ -7,13 +7,8 @@
 in {
   imports = [
     suites.base
-    suites.wsl
     suites.tailscale
   ];
-
-  wsl = {
-    nativeSystemd = true;
-  };
 
   bee.system = system;
   bee.home = inputs.home;

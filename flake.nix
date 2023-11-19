@@ -50,14 +50,6 @@
 
     nixos-hardware.url = "github:nixos/nixos-hardware";
 
-    nixos-wsl = {
-      url = "github:nix-community/NixOS-WSL";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
-    };
-
     colmena = {
       url = "github:zhaofengli/colmena";
       inputs = {
@@ -191,13 +183,11 @@
         ["klipper" "packages"]
         ["common" "packages"]
         ["pam-reattach" "packages"]
-        ["minecraft-servers" "packages"]
       ];
 
       nixosModules = hive.pick inputs.self [
         ["klipper" "nixosModules"]
         ["k8s" "nixosModules"]
-        ["minecraft-servers" "nixosModules"]
       ];
 
       homeModules = hive.pick inputs.self [
