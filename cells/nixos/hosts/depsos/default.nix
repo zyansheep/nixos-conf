@@ -11,7 +11,6 @@ in {
 
     profiles.docker
     profiles.common.networking.tailscale
-    profiles.remote-builds
 
     ./hardware-configuration.nix
     ./postgres.nix

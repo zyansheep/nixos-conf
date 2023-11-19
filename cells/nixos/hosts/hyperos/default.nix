@@ -10,7 +10,6 @@ in {
     suites.base
 
     profiles.common.networking.tailscale
-    profiles.remote-builds
     profiles.faster-linux
 
     ./hardware-configuration.nix
