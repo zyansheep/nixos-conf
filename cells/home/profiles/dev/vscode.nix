@@ -69,7 +69,7 @@ in {
       redhat.vscode-xml
       redhat.vscode-yaml
       tim-koehler.helm-intellisense
-      whi-tw.klipper-config-syntax
+      # whi-tw.klipper-config-syntax
       xadillax.viml
       # yzane.markdown-pdf
       roscop.activefileinstatusbar
