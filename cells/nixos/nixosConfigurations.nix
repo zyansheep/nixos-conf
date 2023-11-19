@@ -15,7 +15,6 @@ in
       cell.nixosProfiles
       // {
         common = cells.common.commonProfiles;
-        secrets = cells.secrets.nixosProfiles.secrets;
         users = cells.home.users.nixos;
       };
     userProfiles = cells.home.userProfiles;

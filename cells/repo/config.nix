@@ -43,7 +43,7 @@ in {
       export NODE_PATH=${inputs.nixpkgs.nodePackages.prettier-plugin-toml}/lib/node_modules:''${NODE_PATH:-}
     '';
     data = {
-      global.excludes = ["cells/*/sources/generated.*" "cells/secrets/*"];
+      global.excludes = ["cells/*/sources/generated.*"];
       formatter = {
         nix = {
           command = "alejandra";

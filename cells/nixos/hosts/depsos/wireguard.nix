@@ -27,7 +27,6 @@
       '';
 
       # public: BTc6Jjt1kcfPmI+0YH+XwiOFXifEz6LN4NqLxQJK/Qs=
-      privateKeyFile = config.sops.secrets.depsos-wg-pk.path;
 
       peers = [
         {

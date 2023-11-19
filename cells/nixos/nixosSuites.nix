@@ -13,13 +13,6 @@ in
         profiles.core
         users.truelecter
         users.root
-        inputs.cells.secrets.nixosProfiles.common
-      ];
-    };
-
-    mc-server = _: {
-      imports = [
-        inputs.cells.secrets.nixosProfiles.minecraft-servers
       ];
     };
   }
