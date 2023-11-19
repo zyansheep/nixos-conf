@@ -99,12 +99,10 @@ in
         std.std.devshellProfiles.default
       ];
 
+      # Import nixago from config
       nixago = [
-        config.conform
         config.treefmt
         config.editorconfig
-        config.githubsettings
-        config.lefthook
         # config.mdbook
       ];
 

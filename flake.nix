@@ -57,14 +57,6 @@
         flake-utils.follows = "flake-utils";
       };
     };
-
-    sops-nix = {
-      url = "github:TrueLecter/sops-nix/darwin-upstream";
-      inputs = {
-        nixpkgs.follows = "nixos";
-        nixpkgs-stable.follows = "nixos";
-      };
-    };
   };
 
   # nixpkgs & home-manager
@@ -72,11 +64,6 @@
     latest.url = "github:nixos/nixpkgs/nixos-unstable";
     nixos.url = "github:nixos/nixpkgs/release-23.05";
     nixpkgs.follows = "nixos";
-
-    darwin = {
-      url = "github:LnL7/nix-darwin";
-      inputs.nixpkgs.follows = "nixos";
-    };
 
     home = {
       url = "github:nix-community/home-manager/release-23.05";
@@ -129,9 +116,7 @@
       };
 
       systems = [
-        "aarch64-darwin"
         "aarch64-linux"
-        "x86_64-darwin"
         "x86_64-linux"
       ];
 

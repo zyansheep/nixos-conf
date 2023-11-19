@@ -7,7 +7,6 @@
   profiles = cell.nixosProfiles;
   users = inputs.cells.home.users.nixos;
 in
-  # with cell.darwinProfiles;
   {
     base = _: {
       imports = [

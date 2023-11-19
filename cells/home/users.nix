@@ -8,47 +8,6 @@
   homeModules = cell.homeModules;
   modulesImportables = l.attrValues homeModules;
 in {
-  darwin = {
-    "andrii.panasiuk" = {...}: let
-      home = "/Users/andrii.panasiuk";
-    in {
-      users.users."andrii.panasiuk".home = home;
-
-      home-manager.users."andrii.panasiuk" = _: {
-        imports =
-          [
-            userProfiles.workstation
-            inputs.cells.darwin.homeProfiles.shell.iterm
-            inputs.cells.darwin.homeProfiles.smart-card-fix
-          ]
-          ++ modulesImportables;
-
-        programs.git.extraConfig = {
-          user = {
-            email = "andrew.panassiouk@gmail.com";
-            name = "Andrii Panasiuk";
-          };
-        };
-
-        home.stateVersion = "22.11";
-      };
-
-      home-manager.backupFileExtension = ".bak";
-
-      users.groups.keys.members = ["andrii.panasiuk"];
-
-      # The filesystem path to which screencaptures should be written.
-      system.defaults.screencapture.location = "${home}/Documents/Captures";
-    };
-
-    root = {...}: {
-      users.users.root = {
-        uid = 0;
-        gid = 0;
-      };
-    };
-  };
-
   nixos = rec {
     truelecter = {pkgs, ...}: {
       home-manager.users.truelecter = {

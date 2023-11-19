@@ -4,7 +4,6 @@
 }: {
   common = _: {
     imports = [
-      inputs.sops-nix.nixosModules.sops
       ./_common.nix
     ];
 
