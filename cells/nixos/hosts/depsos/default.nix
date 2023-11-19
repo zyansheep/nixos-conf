@@ -13,11 +13,7 @@ in {
     profiles.common.networking.tailscale
     profiles.remote-builds
 
-    inputs.cells.k8s.nixosModules.k8s
-    inputs.cells.secrets.nixosProfiles.k8s
-
     ./hardware-configuration.nix
-    ./k8s
     ./postgres.nix
     ./mongo.nix
     ./wireguard.nix
@@ -31,11 +27,9 @@ in {
   bee.pkgs = import inputs.nixos {
     inherit system;
     config.allowUnfree = true;
-    overlays = with inputs.cells.common.overlays;
-    with inputs.cells.k8s.overlays; [
+    overlays = with inputs.cells.common.overlays; [
       common-packages
       latest-overrides
-      k8s-overrides
     ];
   };
 

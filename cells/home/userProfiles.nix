@@ -16,7 +16,6 @@
     ];
     develop = [
       dev.aws
-      dev.k8s
       dev.terraform
       dev.nix
     ];

@@ -26,25 +26,6 @@
     };
   };
 
-  k8s = {
-    sops.secrets = {
-      k3s-token = {
-        key = "k3sToken";
-        sopsFile = ./sops/k3s.yaml;
-      };
-
-      k3s-depsos-external-ip = {
-        key = "depsosK3sEnv";
-        sopsFile = ./sops/k3s.yaml;
-      };
-
-      depsos-wg-pk = {
-        key = "depsosWG";
-        sopsFile = ./sops/k3s.yaml;
-      };
-    };
-  };
-
   minecraft-servers = _: {
     users.groups.minecraft-servers-backup = {};
 
