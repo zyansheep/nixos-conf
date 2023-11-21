@@ -10,7 +10,7 @@ in
   {
     base = _: {
       imports = [
-        profiles.core
+        # profiles.core
         users.truelecter
         users.root
       ];
