@@ -87,11 +87,11 @@ in {
     # arduino
   ];
 
-  hardware.enableAllFirmware = true;
+  # hardware.enableAllFirmware = true;
 
   programs.kdeconnect.enable = true;
 
-  services.flatpak.enable = true;
+  # services.flatpak.enable = true;
 
   documentation.info.enable = false;
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
