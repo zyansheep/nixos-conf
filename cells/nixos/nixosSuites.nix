@@ -11,6 +11,7 @@ in
     base = _: {
       imports = [
         # profiles.core
+        inputs.cells.common.commonProfiles.core
         users.zyansheep
         users.root
       ];
