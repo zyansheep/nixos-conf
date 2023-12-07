@@ -10,25 +10,25 @@ in {
     suites.base
 
     ./hardware-configuration.nix
-    /* creative.common
-    creative.steno
+    # creative.common
+    # creative.steno
     development.common
-    development.shell.zsh
-    development.arduino
+    # development.shell.zsh
+    # development.arduino
     # development.shell.starship
 
-    development.rust */
+    # development.rust
     # development.android
 
     core.minimal
     core.common
     core.tools
     # core.hacking-tools
-    # services.containers
+    services.containers
     # core.privacy
     core.communications
     core.laptop
-    /* gaming.common
+    gaming.common
 
     graphics.plasma
     graphics.drivers.intel
@@ -38,7 +38,7 @@ in {
 
     services.printing
     services.syncthing
-    services.containers */
+    services.containers
   ];
 
   bee.system = system;
@@ -87,11 +87,11 @@ in {
     # arduino
   ]; */
 
-  # hardware.enableAllFirmware = true;
+  hardware.enableAllFirmware = true;
 
   programs.kdeconnect.enable = true;
 
-  # services.flatpak.enable = true;
+  services.flatpak.enable = true;
 
   documentation.info.enable = false;
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
