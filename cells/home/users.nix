@@ -9,8 +9,8 @@
   modulesImportables = l.attrValues homeModules;
 in {
   nixos = rec {
-    truelecter = {pkgs, ...}: {
-      home-manager.users.truelecter = {
+    zyansheep = {pkgs, ...}: {
+      home-manager.users.zyansheep = {
         imports = [userProfiles.minimal] ++ modulesImportables;
 
         programs.git.extraConfig = {
@@ -25,7 +25,7 @@ in {
 
       programs.zsh.enable = true;
 
-      users.users.truelecter = {
+      users.users.zyansheep = {
         isNormalUser = true;
         shell = pkgs.zsh;
         extraGroups = ["wheel" "docker"];
@@ -36,10 +36,10 @@ in {
       };
     };
 
-    truelecter-dev = {pkgs, ...}: {
-      imports = [truelecter];
+    zyansheep-dev = {pkgs, ...}: {
+      imports = [zyansheep];
 
-      home-manager.users.truelecter = {
+      home-manager.users.zyansheep = {
         imports = [userProfiles.server-dev];
       };
     };

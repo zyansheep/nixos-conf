@@ -14,7 +14,7 @@
       "authentik"
     ];
     identMap = ''
-      map-name truelecter truelecter
+      map-name zyansheep zyansheep
     '';
     ensureUsers = [
       {
@@ -30,7 +30,7 @@
         };
       }
       {
-        name = "truelecter";
+        name = "zyansheep";
         ensurePermissions = {
           "ALL TABLES IN SCHEMA public" = "ALL PRIVILEGES";
           "DATABASE cqdata" = "ALL PRIVILEGES";

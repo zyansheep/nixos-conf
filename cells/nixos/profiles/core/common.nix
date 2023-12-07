@@ -2,10 +2,12 @@
   inputs,
   common,
 }: {lib, pkgs, ...}: {
+  
   imports =
     [
       # Include minimal configuration
-      # ./minimal.nix
+      # inputs.nixos.nixosProfiles.core.minimal
+      #builtins.trace [inputs common] ./minimal
     ];
 
   environment.systemPackages = with pkgs; [
@@ -39,7 +41,7 @@
   # Fonts
   # Font Declaration
   fonts = {
-    fonts = with pkgs; [
+    packages = with pkgs; [
       powerline-fonts
       dejavu_fonts
       font-awesome

@@ -2,7 +2,6 @@
   inputs,
   suites,
   profiles,
-  pkgs,
   ...
 }: let
   system = "x86_64-linux";
@@ -21,6 +20,7 @@ in {
     development.rust */
     # development.android
 
+    core.minimal
     core.common
     core.tools
     # core.hacking-tools
@@ -77,15 +77,15 @@ in {
     persist = true;
   }];
 
-  services.udev.packages = [
+  /* services.udev.packages = [
     pkgs.android-udev-rules
-  ];
+  ]; */
   programs.adb.enable = true;
   users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
 
-  environment.systemPackages = with pkgs; [
+  /* environment.systemPackages = with pkgs; [
     # arduino
-  ];
+  ]; */
 
   # hardware.enableAllFirmware = true;
 

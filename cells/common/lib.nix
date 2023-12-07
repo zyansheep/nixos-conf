@@ -71,8 +71,5 @@ in rec {
         }
       );
   in
-    pkgs
-    // {
-      sources = sources';
-    };
+    pkgs;
 }

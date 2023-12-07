@@ -4,18 +4,18 @@
 }: _: let
   hostnames = builtins.attrNames inputs.cells.nixos.colmenaConfigurations;
 in {
-  home.file = {
+  /* home.file = {
     ".ssh/config" = {
       text = ''
         Include ~/.ssh/config.local
 
         Host ${builtins.concatStringsSep " " hostnames}
-          User truelecter
+          User zyansheep
           ForwardAgent yes
 
         Host depsos
           Port 2265
       '';
     };
-  };
+  }; */
 }

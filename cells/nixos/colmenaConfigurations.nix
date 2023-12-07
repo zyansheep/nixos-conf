@@ -21,7 +21,7 @@ in
           deployment = {
             targetHost = name;
             targetPort = 22;
-            targetUser = "truelecter";
+            targetUser = "zyansheep";
           };
         }
         (

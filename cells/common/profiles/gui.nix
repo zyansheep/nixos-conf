@@ -7,7 +7,7 @@
 }: let
   inherit (lib) fileContents;
 in {
-  fonts.fonts = with pkgs; [
+  fonts.packages = with pkgs; [
     powerline-fonts
     dejavu_fonts
     (

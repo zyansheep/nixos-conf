@@ -62,11 +62,11 @@
   # nixpkgs & home-manager
   inputs = {
     latest.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixos.url = "github:nixos/nixpkgs/release-23.05";
+    nixos.url = "github:nixos/nixpkgs/release-23.11";
     nixpkgs.follows = "nixos";
 
     home = {
-      url = "github:nix-community/home-manager/release-23.05";
+      url = "github:nix-community/home-manager/release-23.11";
       inputs.nixpkgs.follows = "nixos";
     };
 

@@ -9,11 +9,7 @@
     (inputs.cells.common.overrides)
     alejandra
     nixUnstable
-    cachix
-    nix-index
-    statix
     nvfetcher
-    act
     ;
 
   inherit
@@ -114,11 +110,6 @@ in
 
       commands = [
         (nix nixUnstable)
-        (nix cachix)
-        (nix nix-index)
-        (nix statix)
-
-        (ci act)
 
         (infra sops)
         (infra inputs.colmena.packages.colmena)

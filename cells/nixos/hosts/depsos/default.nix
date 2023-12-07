@@ -15,7 +15,7 @@ in {
     ./hardware-configuration.nix
     ./postgres.nix
     ./mongo.nix
-    ./wireguard.nix
+    # ./wireguard.nix
     ./tailscale-exit-node.nix
     ./zabbix.nix
     ./journal.nix
