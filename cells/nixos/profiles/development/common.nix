@@ -29,5 +29,6 @@ with lib;
         mkhl.direnv
       ];
     }) */
+    nodejs # So I don't have to constantly do nix-shell -p nodejs
   ];
 }
