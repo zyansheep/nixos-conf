@@ -5,5 +5,6 @@ with lib;
     cargo
     rustc
     rust-analyzer
+    cargo-edit
   ];
 }

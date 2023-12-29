@@ -17,7 +17,7 @@ in {
     # development.arduino
     # development.shell.starship
 
-    # development.rust
+    development.rust
     # development.android
 
     core.minimal
