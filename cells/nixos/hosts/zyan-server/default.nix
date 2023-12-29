@@ -14,6 +14,7 @@ in {
 
     graphics.plasma
 
+    core.minimal
     core.common
     core.tools
     core.privacy
@@ -23,6 +24,7 @@ in {
     # creative.common
 
     development.common
+    development.rust
     # development.android
     # development.shell.zsh
     # development.arduino
@@ -60,11 +62,6 @@ in {
     persist = true;
   }];
 
-  # Packages for zyan-server
-  /* environment.systemPackages = with pkgs; [
-    brave
-    virt-manager
-  ]; */
   services.flatpak.enable = true;
 
   # Enable virtualization
