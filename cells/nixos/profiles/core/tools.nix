@@ -7,6 +7,7 @@ with lib;
   environment.systemPackages = with pkgs; [
     # File Tools
     unzip # Unzip
+    zip # Zip
     file # Print File Info
     curl # Clone URL
     # micro # Micro Text Editor
@@ -45,6 +46,7 @@ with lib;
     moreutils # More Utilities
     dnsutils # DNS Utilities
     iputils # IP utilities
+    inotify-tools # File Watching tools
     jq # Json processor
     usbutils # Usb utilities
     util-linux # Linux utilities
@@ -60,7 +62,7 @@ with lib;
     glxinfo
     libva-utils
     inxi
-    
+
     # appimage
     (appimage-run.override { extraPkgs = (pkgs: [ libthai ]); })
   ];
