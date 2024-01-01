@@ -39,6 +39,7 @@ in {
     services.printing
     services.syncthing
     services.containers
+    services.ssh
   ];
 
   bee.system = system;

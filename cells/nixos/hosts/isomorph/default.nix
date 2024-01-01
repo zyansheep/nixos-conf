@@ -31,7 +31,7 @@ in {
     gaming.common
 
     graphics.plasma
-    graphics.drivers.intel
+    # graphics.drivers.intel
 
     # devices.xp-pen
     # devices.realtek-wifi-adapter
@@ -39,6 +39,7 @@ in {
     services.printing
     services.syncthing
     services.containers
+    services.ssh
   ];
 
   bee.system = system;
@@ -53,21 +54,17 @@ in {
   };
 
   # Bootloader
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-  boot.loader.timeout = 1;
-  boot.kernel.sysctl = {
-    "dev.i915.perf_stream_paranoid" = 0;
+  boot.loader.grub = {
+    enable = true;
+    zfsSupport = true;
+    efiSupport = true;
+    efiInstallAsRemovable = true;
+    mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
   };
-
-  boot.initrd.luks.devices = {
-    zyandrive = {
-      device = "/dev/disk/by-uuid/cf9dfcd1-68b1-41b0-8e28-f0a569f20313";
-      preLVM = true;
-      allowDiscards = true;
-    };
-  };
-
+  
+  boot.zfs.extraPools = [ "zpool" ];
+  
+  networking.hostId = "14df389e";
   networking.hostName = "isomorph";
   networking.firewall.enable = false;
 
