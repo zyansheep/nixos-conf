@@ -19,8 +19,8 @@
   ];
 
   # Fan Control & Power Management
-  services.tlp.enable = true;
-  services.power-profiles-daemon.enable = false;
+  # services.tlp.enable = true;
+  # services.power-profiles-daemon.enable = false;
 
   # MDNS
   services.avahi.enable = true;

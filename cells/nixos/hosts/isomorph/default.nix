@@ -10,6 +10,8 @@ in {
     suites.base
 
     ./hardware-configuration.nix
+    inputs.nixos-hardware.nixosModules.framework-13-7040-amd
+
     # creative.common
     # creative.steno
     development.common
@@ -27,7 +29,7 @@ in {
     services.containers
     # core.privacy
     core.communications
-    core.laptop
+    core.laptop-tlp
     gaming.common
 
     graphics.plasma
@@ -74,15 +76,7 @@ in {
     persist = true;
   }];
 
-  /* services.udev.packages = [
-    pkgs.android-udev-rules
-  ]; */
-  programs.adb.enable = true;
   users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
-
-  /* environment.systemPackages = with pkgs; [
-    # arduino
-  ]; */
 
   hardware.enableAllFirmware = true;
 
@@ -91,6 +85,8 @@ in {
   services.flatpak.enable = true;
 
   documentation.info.enable = false;
+  services.fwupd.enable = true;
+
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
 

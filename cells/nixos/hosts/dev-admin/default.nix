@@ -27,7 +27,7 @@ in {
     services.containers
     # core.privacy
     core.communications
-    core.laptop
+    core.laptop-tlp
     gaming.common
 
     graphics.plasma
