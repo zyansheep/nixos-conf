@@ -31,6 +31,7 @@ in {
     core.communications
     core.laptop-tlp
     gaming.common
+    gaming.steam
 
     graphics.plasma
     # graphics.drivers.intel
