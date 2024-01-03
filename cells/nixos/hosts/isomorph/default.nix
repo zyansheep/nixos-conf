@@ -2,6 +2,7 @@
   inputs,
   suites,
   profiles,
+  lib,
   ...
 }: let
   system = "x86_64-linux";
@@ -11,6 +12,7 @@ in {
 
     ./hardware-configuration.nix
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
+    inputs.lanzaboote.nixosModules.lanzaboote
 
     # creative.common
     # creative.steno
@@ -29,7 +31,6 @@ in {
     services.containers
     # core.privacy
     core.communications
-    core.laptop-tlp
     gaming.common
     gaming.steam
 
@@ -56,37 +57,65 @@ in {
     ];
   };
 
+  # enable all firmware
+  hardware.enableAllFirmware = true;
+
   # Bootloader
   boot.loader.grub = {
-    enable = true;
     zfsSupport = true;
     efiSupport = true;
     efiInstallAsRemovable = true;
     mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
   };
+
+  # Secureboot config
+  /* boot.loader.systemd-boot.enable = lib.mkForce false;
+  boot.lanzaboote = {
+    enable = true;
+    pkiBundle = "/etc/secureboot";
+  }; */
   
+  # ZFS
   boot.zfs.extraPools = [ "zpool" ];
   
   networking.hostId = "14df389e";
   networking.hostName = "isomorph";
   networking.firewall.enable = false;
 
+  # doas
   security.doas.extraRules = [{
-    users = [ "zon" ];
+    users = [ "zyansheep" ];
     keepEnv = true;
     persist = true;
   }];
 
+  # groups
   users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
 
-  hardware.enableAllFirmware = true;
-
   programs.kdeconnect.enable = true;
-
   services.flatpak.enable = true;
 
   documentation.info.enable = false;
   services.fwupd.enable = true;
+
+  # Power Management
+  services.power-profiles-daemon.enable = false;
+  services.tlp = {
+    enable = true;
+    settings = {
+      CPU_DRIVER_OPMODE_ON_AC = "active";
+      CPU_DRIVER_OPMODE_ON_BAT = "active";
+
+      CPU_SCALING_GOVERNOR_ON_AC = "powersave";
+      CPU_SCALING_GOVERNOR_ON_BAT = "powersave";
+
+      CPU_ENERGY_PERF_POLICY_ON_AC = "balance_performance";
+      CPU_ENERGY_PERF_POLICY_ON_BAT = "balance_power";
+
+      START_CHARGE_THRESH_BAT0 = 70;
+      STOP_CHARGE_THRESH_BAT0 = 80;
+    };
+  };
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;

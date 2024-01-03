@@ -19,6 +19,7 @@ with lib;
     gcc
     python3
     vscodium
+    gdb
 
     /* (vscode-with-extensions.override {
       vscode = vscodium;

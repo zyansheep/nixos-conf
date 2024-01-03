@@ -62,6 +62,7 @@ with lib;
     glxinfo
     libva-utils
     inxi
+    sbctl
 
     # appimage
     (appimage-run.override { extraPkgs = (pkgs: [ libthai ]); })
