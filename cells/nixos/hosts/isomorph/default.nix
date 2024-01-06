@@ -11,6 +11,8 @@ in {
     suites.base
 
     ./hardware-configuration.nix
+    ./bat-limit.nix
+
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
 
@@ -99,7 +101,7 @@ in {
   services.fwupd.enable = true;
 
   # Power Management
-  services.power-profiles-daemon.enable = false;
+  /* services.power-profiles-daemon.enable = false;
   services.tlp = {
     enable = true;
     settings = {
@@ -115,7 +117,7 @@ in {
       START_CHARGE_THRESH_BAT0 = 70;
       STOP_CHARGE_THRESH_BAT0 = 80;
     };
-  };
+  }; */
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
