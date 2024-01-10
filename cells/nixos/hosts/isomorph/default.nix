@@ -49,8 +49,8 @@ in {
   ];
 
   bee.system = system;
-  bee.home = inputs.home;
-  bee.pkgs = import inputs.nixos {
+  bee.home = inputs.home-unstable;
+  bee.pkgs = import inputs.latest {
     inherit system;
     config.allowUnfree = true;
     overlays = with inputs.cells.common.overlays; [
