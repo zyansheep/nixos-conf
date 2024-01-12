@@ -18,8 +18,9 @@ with lib;
     gnumake
     gcc
     python3
-    vscodium
+    # vscodium
     gdb
+    rnix-lsp
 
     /* (vscode-with-extensions.override {
       vscode = vscodium;

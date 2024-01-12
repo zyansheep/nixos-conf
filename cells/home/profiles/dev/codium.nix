@@ -6,30 +6,16 @@
   lib,
   ...
 }: let
-  chromium = pkgs.stdenv.mkDerivation rec {
-    name = "Chromium";
-    version = "101.0.4904.0";
-    revision = "973630";
-    src = builtins.fetchurl {
-      url = "https://storage.googleapis.com/chromium-browser-snapshots/Mac_Arm/${revision}/chrome-mac.zip";
-      sha256 = "16qk18xydaf69xwz5shdz3p4h4ggrcgcmman3dhd2xbhnksf1cgd";
-    };
-    sourceRoot = "chrome-mac/Chromium.app";
-    buildInputs = with pkgs; [undmg unzip];
-    phases = ["installPhase"];
-    installPhase = ''
-      mkdir -p "$out/Applications/${name}.app"
-      cp -pR * "$out/Applications/${name}.app"
-    '';
-  };
-  vs-exts = inputs.nix-vscode-extensions.extensions.vscode-marketplace;
+  exts = inputs.nix-vscode-extensions.extensions;
+  open-vsx = exts.open-vsx;
 in {
   programs.vscode = {
     enable = true;
-    package = inputs.cells.common.overrides.vscode;
+    package = inputs.cells.common.overrides.vscodium;
     # TODO split extensions based on active modules
-    extensions = with vs-exts; [
-      arrterian.nix-env-selector
+    extensions = with open-vsx; [
+      zokugun.sync-settings
+      /* arrterian.nix-env-selector
       bbenoist.nix
       coolbear.systemd-unit-file
       davidanson.vscode-markdownlint
@@ -80,13 +66,13 @@ in {
       # mkhl.direnv
       # remote
       ms-vscode-remote.remote-ssh
-      ms-vscode-remote.remote-ssh-edit
+      ms-vscode-remote.remote-ssh-edit */
     ];
-    userSettings =
+    /* userSettings =
       lib.recursiveUpdate
       (builtins.fromJSON (builtins.readFile ./_files/vscode-settings.json))
       {
         "python.defaultInterpreterPath" = "${pkgs.python39}/bin/python3";
-      };
+      }; */
   };
 }

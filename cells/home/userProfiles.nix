@@ -8,6 +8,7 @@
     base = [
       shell.direnv
       git
+      dev.codium
       shell.zsh
       shell.tmux
       shell.nvim
@@ -18,9 +19,6 @@
       dev.aws
       dev.terraform
       dev.nix
-    ];
-    develop-gui = [
-      dev.vscode
     ];
     android = [dev.android];
   };

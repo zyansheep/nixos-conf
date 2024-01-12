@@ -76,10 +76,12 @@ in {
     enable = true;
     pkiBundle = "/etc/secureboot";
   }; */
-  
+
   # ZFS
-  boot.zfs.extraPools = [ "zpool" ];
-  
+  boot.zfs = {
+    extraPools = [ "zpool" ];
+  };
+
   networking.hostId = "14df389e";
   networking.hostName = "isomorph";
   networking.firewall.enable = false;

@@ -9,7 +9,7 @@
 in {
   inherit
     (latest)
-    vscode
+    vscodium
     alejandra
     rnix-lsp
     nixUnstable
