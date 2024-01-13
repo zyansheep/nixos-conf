@@ -11,7 +11,7 @@ in {
     suites.base
 
     ./hardware-configuration.nix
-    ./bat-limit.nix
+    ./power-conf.nix
 
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
@@ -37,7 +37,7 @@ in {
     gaming.steam
 
     graphics.plasma
-    # graphics.drivers.intel
+    graphics.drivers.amd
 
     # devices.xp-pen
     # devices.realtek-wifi-adapter
@@ -59,8 +59,13 @@ in {
     ];
   };
 
-  # enable all firmware
+  # TODO: Remove when update to kernel 6.7
+  hardware.framework.amd-7040.preventWakeOnAC = true;
+
+  # firmware conf
   hardware.enableAllFirmware = true;
+  hardware.bluetooth.enable = true;
+  hardware.bluetooth.powerOnBoot = false;
 
   # Bootloader
   boot.loader.grub = {
@@ -96,30 +101,12 @@ in {
   # groups
   users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
 
+  documentation.info.enable = false;
+
+  # Services
+  services.fwupd.enable = true;
   programs.kdeconnect.enable = true;
   services.flatpak.enable = true;
-
-  documentation.info.enable = false;
-  services.fwupd.enable = true;
-
-  # Power Management
-  /* services.power-profiles-daemon.enable = false;
-  services.tlp = {
-    enable = true;
-    settings = {
-      CPU_DRIVER_OPMODE_ON_AC = "active";
-      CPU_DRIVER_OPMODE_ON_BAT = "active";
-
-      CPU_SCALING_GOVERNOR_ON_AC = "powersave";
-      CPU_SCALING_GOVERNOR_ON_BAT = "powersave";
-
-      CPU_ENERGY_PERF_POLICY_ON_AC = "balance_performance";
-      CPU_ENERGY_PERF_POLICY_ON_BAT = "balance_power";
-
-      START_CHARGE_THRESH_BAT0 = 70;
-      STOP_CHARGE_THRESH_BAT0 = 80;
-    };
-  }; */
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
