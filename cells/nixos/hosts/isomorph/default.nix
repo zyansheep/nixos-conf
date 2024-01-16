@@ -75,6 +75,10 @@ in {
     mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
   };
 
+  # Other boot stuff
+  # This enables the brightness and airplane mode keys to work
+  # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
+  boot.blacklistedKernelModules = [ "hid-sensor-hub" ]; # Fix 
   # Secureboot config
   /* boot.loader.systemd-boot.enable = lib.mkForce false;
   boot.lanzaboote = {
@@ -86,6 +90,8 @@ in {
   boot.zfs = {
     extraPools = [ "zpool" ];
   };
+  boot.kernelParams = [ "zfs.zfs_arc_max=12884901888" ]; # Set Adaptive Replacement Cache size to max 12gb.
+  services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "14df389e";
   networking.hostName = "isomorph";

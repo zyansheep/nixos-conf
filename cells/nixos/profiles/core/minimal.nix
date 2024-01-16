@@ -22,7 +22,7 @@ with lib;
 	}; */
 
 	# Send notifications when program is killed due to OOM
-	services.earlyoom.enable = true;
+	services.earlyoom.enable = lib.mkDefault true;
 	services.earlyoom.enableNotifications = true;
 
 	# Enable doas instead of sudo
