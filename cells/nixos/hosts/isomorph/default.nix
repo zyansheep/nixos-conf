@@ -90,6 +90,7 @@ in {
   boot.zfs = {
     extraPools = [ "zpool" ];
   };
+  services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
   boot.kernelParams = [ "zfs.zfs_arc_max=12884901888" ]; # Set Adaptive Replacement Cache size to max 12gb.
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
