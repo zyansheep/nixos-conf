@@ -1,29 +1,82 @@
-{ suites, profiles, lib, config, pkgs, ... }:
-with lib;
 {
-  imports =
-    with profiles; [
-      # Include the results of the hardware scan.
-      ./hardware-configuration.nix
+  inputs,
+  suites,
+  profiles,
+  lib,
+  ...
+}: let
+  system = "x86_64-linux";
+in {
+  imports = with profiles; [
+    suites.base
+    ./hardware-configuration.nix
 
-      core.minimal
-      services.containers
-      core.tools
-      services.ssh
-      development.shell.zsh
-    ] ++ suites.base;
+    core.minimal
+    # core.common
+    # core.tools
+
+    # devices.xp-pen
+    # devices.realtek-wifi-adapter
+    services.syncthing
+    services.containers
+    services.ssh
+  ];
+
+  bee.system = system;
+  bee.home = inputs.home-unstable;
+  bee.pkgs = import inputs.latest {
+    inherit system;
+    config.allowUnfree = true;
+    overlays = with inputs.cells.common.overlays; [
+      common-packages
+      latest-overrides
+    ];
+  };
+
+  # firmware conf
+  hardware.enableAllFirmware = true;
 
   # Bootloader
-  boot.loader.grub.enable = true;
-  boot.loader.grub.version = 2;
-  boot.loader.grub.device = "/dev/disk/by-id/wwn-0x600508b1001c779cf2d23254a9610eb9";
-  boot.loader.timeout = 1;
+  boot.loader.grub = {
+    zfsSupport = true;
+    efiSupport = true;
+    efiInstallAsRemovable = true;
+    mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
+  };
 
-  services.openssh.ports = [ 22022 ];
+  # ZFS
+  boot.zfs = {
+    extraPools = [ "mpool" ];
+  };
+  services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
+  boot.kernelParams = [ "zfs.zfs_arc_max=12884901888" ]; # Set Adaptive Replacement Cache size to max 12gb.
+  services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
-  # Hostname
-  networking.hostName = "hp-server";
+  networking.hostId = "49408a0f";
+  networking.hostName = "hpserver";
+  networking.firewall.enable = false;
 
-  bud.enable = true;
-  bud.localFlakeClone = "/root/devos-conf";
+  # doas
+  security.doas.extraRules = [{
+    keepEnv = true;
+    persist = true;
+  }];
+
+  # groups
+
+  documentation.info.enable = false;
+
+  # Services
+  services.flatpak.enable = true;
+
+  # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
+  # nix.useSandbox = false;
+
+  # This value determines the NixOS release from which the default
+  # settings for stateful data, like file locations and database versions
+  # on your system were taken. It‘s perfectly fine and recommended to leave
+  # this value at the release version of the first install of this system.
+  # Before changing this value read the documentation for this option
+  # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
+  system.stateVersion = "24.05"; # Did you read the comment?
 }
