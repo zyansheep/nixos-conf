@@ -67,7 +67,7 @@ in {
   documentation.info.enable = false;
 
   # Services
-  services.flatpak.enable = true;
+  # services.flatpak.enable = true;
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
