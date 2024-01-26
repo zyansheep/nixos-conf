@@ -45,7 +45,7 @@ in {
     services.printing
     services.syncthing
     services.containers
-    services.ssh
+    # services.ssh
   ];
 
   bee.system = system;
@@ -75,10 +75,6 @@ in {
     mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
   };
 
-  # Other boot stuff
-  # This enables the brightness and airplane mode keys to work
-  # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
-  boot.blacklistedKernelModules = [ "hid-sensor-hub" ]; # Fix 
   # Secureboot config
   /* boot.loader.systemd-boot.enable = lib.mkForce false;
   boot.lanzaboote = {
@@ -91,7 +87,11 @@ in {
     extraPools = [ "zpool" ];
   };
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
-  boot.kernelParams = [ "zfs.zfs_arc_max=12884901888" ]; # Set Adaptive Replacement Cache size to max 12gb.
+  boot.kernelParams = [
+    "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb.
+    # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11 
+    "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
+  ]; 
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "14df389e";
@@ -124,5 +124,5 @@ in {
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
-  system.stateVersion = "22.05"; # Did you read the comment?
+  system.stateVersion = "24.05"; # Did you read the comment?
 }

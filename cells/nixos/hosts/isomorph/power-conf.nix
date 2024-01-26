@@ -8,16 +8,22 @@
   # amd_pstate requires newest kernel (>=6.5) -> use newest kernel that zfs currently supports
   boot.kernelPackages = pkgs.zfs.latestCompatibleLinuxPackages;
   
-  boot.extraModulePackages = with config.boot.kernelPackages; [
-    (config.boot.kernelPackages.callPackage ./framework-laptop-kmod.nix {})
-  ]; # Load battery limit kmod
-  boot.kernelModules = [ "framework-laptop-kmod" ];
-  # boot.initrd.availableKernelModules = [ "framework-laptop-kmod" ];
-  # boot.initrd.kernelModules = [ "framework-laptop-kmod" ];
-
+  boot.extraModulePackages = with config.boot.kernelPackages; [ framework-laptop-kmod ]; # Load battery limit kmod
+  
   powerManagement.cpuFreqGovernor = lib.mkDefault "powersave";
-  powerManagement.powertop.enable = true; # Run powertop on boot
+  
+  # powerManagement.powertop.enable = true; # Run powertop on boot
+  
+  boot.kernelParams = [
+    "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
+    "nvme.noacpi=1" # Get s2idle sleep perf without the wake-up delay. (Q: does this work either?)
+  ];
 
-  # enable adaptive backlight management
-  boot.kernelParams = [ "amdgpu.abmlevel=3" ];
+  /* boot.kernelPatches = lib.singleton {
+    name = "enable-cpufreq-stat";
+    patch = null;
+    extraStructuredConfig = with lib.kernel; {
+      CONFIG_CPU_FREQ_STAT = yes;
+    };
+  }; */
 }
