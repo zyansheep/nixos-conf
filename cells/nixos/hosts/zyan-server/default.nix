@@ -35,6 +35,8 @@ in {
     services.containers
   ];
 
+  nix.settings.auto-optimise-store = true;
+
   bee.system = system;
   bee.home = inputs.home;
   bee.pkgs = import inputs.nixos {

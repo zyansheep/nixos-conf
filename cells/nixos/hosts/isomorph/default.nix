@@ -114,6 +114,7 @@ in {
   services.fwupd.enable = true;
   programs.kdeconnect.enable = true;
   services.flatpak.enable = true;
+  nix.settings.auto-optimise-store = true; # Auto-optimize
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
