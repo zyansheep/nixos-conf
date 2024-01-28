@@ -16,7 +16,6 @@
   
   boot.kernelParams = [
     "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
-    "nvme.noacpi=1" # Get s2idle sleep perf without the wake-up delay. (Q: does this work either?)
   ];
 
   /* boot.kernelPatches = lib.singleton {
