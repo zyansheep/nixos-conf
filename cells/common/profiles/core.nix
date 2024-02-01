@@ -66,6 +66,8 @@
     registry = {
       home.flake = inputs.home;
       l.flake = inputs.latest;
+      nixpkgs.flake = nixpkgs;
+      nixos-hardware.flake = nixos-hw;
     };
   };
 }
