@@ -12,7 +12,7 @@
   
   powerManagement.cpuFreqGovernor = lib.mkDefault "powersave";
   
-  # powerManagement.powertop.enable = true; # Run powertop on boot
+  powerManagement.powertop.enable = true; # Run powertop on boot
   
   boot.kernelParams = [
     "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
