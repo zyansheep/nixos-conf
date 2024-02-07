@@ -6,7 +6,7 @@ with lib;
 {
   environment.systemPackages = with pkgs; [
     # use flatpak for lutris and steam, they run better
-    # lutris-unwrapped
+    lutris-unwrapped
     # steam
 
     prismlauncher
