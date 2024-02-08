@@ -20,7 +20,7 @@ with lib;
     python3
     # vscodium
     gdb
-    rnix-lsp
+    nil # Nix LSP
 
     /* (vscode-with-extensions.override {
       vscode = vscodium;

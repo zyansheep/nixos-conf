@@ -11,7 +11,7 @@ in {
     (latest)
     vscodium
     alejandra
-    rnix-lsp
+    nil
     nixUnstable
     #
     ffmpeg_5-full

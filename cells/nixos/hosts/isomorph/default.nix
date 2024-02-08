@@ -2,7 +2,6 @@
   inputs,
   suites,
   profiles,
-  lib,
   ...
 }: let
   system = "x86_64-linux";
@@ -85,6 +84,7 @@ in {
   # ZFS
   boot.zfs = {
     extraPools = [ "zpool" ];
+    enableUnstable = true;
   };
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
   boot.kernelParams = [
