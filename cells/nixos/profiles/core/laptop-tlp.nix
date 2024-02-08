@@ -2,7 +2,6 @@
   inputs,
   common,
 }: { lib, config, pkgs, ... }:
-with lib;
 {
   services.power-profiles-daemon.enable = false;
   services.tlp = {
