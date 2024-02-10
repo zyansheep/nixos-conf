@@ -56,9 +56,10 @@ with lib;
     imagemagick # Image Converter
     sshfs # Mount remote filesystems
     atool # Archive Tools
+    dmidecode # Hardware/Firmware info
     mpv
 
-    # Extra tools 
+    # Extra tools
     glxinfo
     libva-utils
     inxi
