@@ -49,17 +49,18 @@ in {
   };
 
   # Bootloader
-  boot.loader.systemd-boot.enable = true;
-  boot.loader.efi.canTouchEfiVariables = true;
-  boot.loader.timeout = 3;
-  boot.tmp.cleanOnBoot = true;
+  boot = {
+    zfs = { extraPools = [ "zpool" ]; };
+    loader.systemd-boot.enable = true;
+  };
 
   # Hostname
-  networking.hostName = "zyan-server";
+  networking.hostName = "functor";
+  networking.hostId = "95196fe2";
   networking.firewall.enable = false;
 
   security.doas.extraRules = [{
-    users = [ "zyansheep" ];
+    users = [ "zon" ];
     keepEnv = true;
     persist = true;
   }];
