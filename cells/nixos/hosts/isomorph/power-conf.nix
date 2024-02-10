@@ -5,7 +5,6 @@
   lib,
   ...
 }: {
-  # amd_pstate requires newest kernel (>=6.5) -> use newest kernel that zfs currently supports
   boot.kernelPackages = pkgs.zfsUnstable.latestCompatibleLinuxPackages;
   
   boot.extraModulePackages = with config.boot.kernelPackages; [ framework-laptop-kmod ]; # Load battery limit kmod

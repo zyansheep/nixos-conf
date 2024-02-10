@@ -62,12 +62,13 @@ in {
         nvim-lspconfig # language server config plugin
         nvim-treesitter-with-plugins # code highlighting
         plenary-nvim # common lua functions
-        gruvbox-material
+        # gruvbox-material
         mini-nvim # ???
-        fzfWrapper # fuzzy finder
         nerdtree # filetree viewer
         vimux # tmux integration
         direnv-vim # direnv integration
+        telescope-nvim # fuzzy finder
+        telescope-fzf-native-nvim
       ];
 
     extraConfig = builtins.readFile ./_files/init.vim;

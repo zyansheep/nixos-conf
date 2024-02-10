@@ -25,8 +25,8 @@ in {
       domain = "gitlab.freedesktop.org";
       owner = "superm1";
       repo = "power-profiles-daemon";
-      rev = "26fa4de0af579ad88636b58c77a81b520250f19a";
-      sha256 = "sha256-SNG5ajiq5kcADqQrZtlVxNIAEwtcYlAUQIQF005t5Jo=";
+      rev = "e94256aaf6b9a9ef23686bef8c46c83e6442f121";
+      sha256 = "sha256-TL9PDYTQQEc8m/VtxdtH/Z9W/Oq56TMojMz4sHXULHI=";
     };
   });
 }

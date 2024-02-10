@@ -87,8 +87,9 @@ in {
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb.
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
-    "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
+    # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
+    "usbcore.autosuspend=20"
   ];
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
