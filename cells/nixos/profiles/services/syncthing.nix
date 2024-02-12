@@ -2,7 +2,6 @@
   inputs,
   common,
 }: { lib, config, ... }:
-with lib;
 {
   services.syncthing = {
     enable = true;

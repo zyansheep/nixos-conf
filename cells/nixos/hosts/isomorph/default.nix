@@ -74,16 +74,19 @@ in {
       pkiBundle = "/persist/etc/secureboot";
     };
     # Erase my Darlings https://grahamc.com/blog/erase-your-darlings/
+    # Note don't do this until you've added links to persist dataset for passwords, github login, fingerprint, timezone
     # initrd.postDeviceCommands = lib.mkAfter ''
     #   zfs rollback -r zpool/local/root@blank
     # '';
   };
 
-  environment.etc."NetworkManager/system-connections" = {
-    source = "/persist/etc/NetworkManager/system-connections/";
+  environment.etc = {
+    "shadow" = { source = "/persist/etc/shadow"; };
+    "NetworkManager/system-connections" = { source = "/persist/etc/NetworkManager/system-connections/"; };
   };
   systemd.tmpfiles.rules = [
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth"
+    "L /var/lib/fprint - - - - /persist/var/lib/fprint"
   ];
   time.timeZone = lib.mkDefault "America/New_York";
 

@@ -36,6 +36,7 @@ in {
     root = {config, ...}: {
       users.users.root = {
         uid = 0;
+        initialHashedPassword = "\$6\$dnWr7aCjnJFOrj1f\$2Hb5yZCiDTvwgh.qPXSofOH/z30EHO98uwUWxBtkbrbhyXmemsl804l3LC9NX.25aaX/hl0aAIB2hcma822SX/"; # iusemutablepasswordslol
       };
     };
   };
