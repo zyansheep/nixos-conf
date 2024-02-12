@@ -59,30 +59,22 @@ in {
   };
 
   # firmware conf
-  hardware.enableAllFirmware = true;
-  hardware.bluetooth.enable = true;
-  hardware.bluetooth.powerOnBoot = false;
+  hardware = {
+    enableAllFirmware = true;
+    bluetooth = { enable = true; powerOnBoot = false; };
+  };
 
   # Bootloader
-  boot.loader.grub = {
-    zfsSupport = true;
-    efiSupport = true;
-    efiInstallAsRemovable = true;
-    mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
+  boot = {
+    zfs = { extraPools = [ "zpool" ]; enableUnstable = true; };
+    loader = { /* systemd-boot.enable = true; */ efi.canTouchEfiVariables = true; };
+    lanzaboote = {
+      enable = true;
+      pkiBundle = "/etc/secureboot";
+    };
   };
-
-  # Secureboot config
-  /* boot.loader.systemd-boot.enable = lib.mkForce false;
-  boot.lanzaboote = {
-    enable = true;
-    pkiBundle = "/etc/secureboot";
-  }; */
 
   # ZFS
-  boot.zfs = {
-    extraPools = [ "zpool" ];
-    enableUnstable = true; # Enable unstable to allow for latest kernels
-  };
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb.

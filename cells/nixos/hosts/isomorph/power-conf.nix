@@ -6,15 +6,19 @@
   ...
 }: {
   boot.kernelPackages = pkgs.zfsUnstable.latestCompatibleLinuxPackages;
-  
-  boot.extraModulePackages = with config.boot.kernelPackages; [ framework-laptop-kmod ]; # Load battery limit kmod
-  
-  powerManagement.cpuFreqGovernor = lib.mkDefault "powersave";
-  
-  powerManagement.powertop.enable = true; # Run powertop on boot
-  
+
+  # Enable module that exposes battery charge limit (TODO: WHY DOESN'T THIS WORK???)
+  boot.extraModulePackages = with pkgs.zfsUnstable.latestCompatibleLinuxPackages; [ framework-laptop-kmod ];
+
+  powerManagement = {
+    enable = true;
+    cpuFreqGovernor = lib.mkDefault "powersave";
+    # powertop.enable = true;
+  };
+
+
   boot.kernelParams = [
-    "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
+    # "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
   ];
 
   /* boot.kernelPatches = lib.singleton {
