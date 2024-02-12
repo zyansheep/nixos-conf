@@ -2,6 +2,7 @@
   inputs,
   suites,
   profiles,
+  lib,
   ...
 }: let
   system = "x86_64-linux";
@@ -70,16 +71,29 @@ in {
     loader = { /* systemd-boot.enable = true; */ efi.canTouchEfiVariables = true; };
     lanzaboote = {
       enable = true;
-      pkiBundle = "/etc/secureboot";
+      pkiBundle = "/persist/etc/secureboot";
     };
+    # Erase my Darlings https://grahamc.com/blog/erase-your-darlings/
+    # initrd.postDeviceCommands = lib.mkAfter ''
+    #   zfs rollback -r zpool/local/root@blank
+    # '';
   };
+
+  environment.etc."NetworkManager/system-connections" = {
+    source = "/persist/etc/NetworkManager/system-connections/";
+  };
+  systemd.tmpfiles.rules = [
+    "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth"
+  ];
+  time.timeZone = lib.mkDefault "America/New_York";
+
 
   # ZFS
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb.
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
-    # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
+    "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
     "usbcore.autosuspend=20"
   ];

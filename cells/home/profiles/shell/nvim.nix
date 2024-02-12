@@ -62,6 +62,7 @@ in {
         nvim-lspconfig # language server config plugin
         nvim-treesitter-with-plugins # code highlighting
         plenary-nvim # common lua functions
+        gruvbox
         # gruvbox-material
         mini-nvim # ???
         nerdtree # filetree viewer
