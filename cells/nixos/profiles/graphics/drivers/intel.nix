@@ -1,12 +1,18 @@
 {
   inputs,
   common,
-}: { lib, config, pkgs, ... }:
-with lib;
-{
-  /* pkgs.config.packageOverrides = pkgs: {
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+with lib; {
+  /*
+     pkgs.config.packageOverrides = pkgs: {
     vaapiIntel = pkgs.vaapiIntel.override { enableHybridCodec = true; };
-  }; */
+  };
+  */
   hardware.opengl = {
     enable = true;
     extraPackages = with pkgs; [

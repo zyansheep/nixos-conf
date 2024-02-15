@@ -44,11 +44,13 @@ in {
   networking.hostName = "live";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zyansheep"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   hardware.enableAllFirmware = true;
 

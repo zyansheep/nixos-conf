@@ -72,21 +72,27 @@ in {
   networking.hostName = "dev-admin";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zyansheep"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
-  /* services.udev.packages = [
+  /*
+     services.udev.packages = [
     pkgs.android-udev-rules
-  ]; */
+  ];
+  */
   programs.adb.enable = true;
-  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
+  users.users.zyansheep.extraGroups = ["adbusers" "uucp"];
 
-  /* environment.systemPackages = with pkgs; [
+  /*
+     environment.systemPackages = with pkgs; [
     # arduino
-  ]; */
+  ];
+  */
 
   hardware.enableAllFirmware = true;
 

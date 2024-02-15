@@ -1,9 +1,13 @@
 {
   inputs,
   common,
-}: { lib, config, pkgs, ... }:
-with lib;
-{
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+with lib; {
   virtualisation.podman = {
     dockerCompat = true;
     enable = true;

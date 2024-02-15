@@ -14,12 +14,14 @@ in {
     nil
     nixUnstable
     #
+    
     ffmpeg_5-full
     ;
 
   nvfetcher = inputs.nvfetcher.packages.default;
 
-  power-profiles-daemon = latest.power-profiles-daemon.overrideAttrs (prev: { # temp fix to use version with amd pstate patch
+  power-profiles-daemon = latest.power-profiles-daemon.overrideAttrs (prev: {
+    # temp fix to use version with amd pstate patch
     version = "git";
     src = latest.fetchFromGitLab {
       domain = "gitlab.freedesktop.org";

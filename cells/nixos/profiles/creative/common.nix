@@ -1,5 +1,7 @@
-{ inputs, common }: { pkgs, ... }:
 {
+  inputs,
+  common,
+}: {pkgs, ...}: {
   environment.systemPackages = with pkgs; [
     blender # It's Blender!
     #krita 			# Image Editor

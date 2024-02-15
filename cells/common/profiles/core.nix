@@ -29,9 +29,9 @@
 
   nix = {
     package = pkgs.nixFlakes;
-		extraOptions = ''
-		experimental-features = nix-command flakes
-		'';
+    extraOptions = ''
+      experimental-features = nix-command flakes
+    '';
     settings = let
       GB = 1024 * 1024 * 1024;
     in {
@@ -53,10 +53,12 @@
     };
 
     # Improve nix store disk usage
-    /* gc = {
+    /*
+       gc = {
       automatic = true;
       options = "--delete-older-than 7d";
-    }; */
+    };
+    */
 
     nixPath = [
       "nixpkgs=${pkgs.path}"
@@ -67,7 +69,7 @@
       home.flake = inputs.home;
       l.flake = inputs.latest;
       nixpkgs.flake = inputs.nixos; # stable
-      nixos-hardware.flake = inputs.nixos-hardware; # 
+      nixos-hardware.flake = inputs.nixos-hardware; #
     };
   };
 }

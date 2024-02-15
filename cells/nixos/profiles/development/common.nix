@@ -1,6 +1,13 @@
-{ inputs, common }: { lib, config, pkgs, ... }:
-with lib;
 {
+  inputs,
+  common,
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+with lib; {
   imports = [
     # "./aliases.nix"
     ./aliases.nix
@@ -22,7 +29,8 @@ with lib;
     gdb
     nil # Nix LSP
 
-    /* (vscode-with-extensions.override {
+    /*
+       (vscode-with-extensions.override {
       vscode = vscodium;
       vscodeExtensions = with vscode-extensions; [
         bbenoist.nix
@@ -30,7 +38,8 @@ with lib;
         vadimcn.vscode-lldb
         mkhl.direnv
       ];
-    }) */
+    })
+    */
     nodejs # So I don't have to constantly do nix-shell -p nodejs
   ];
 }

@@ -9,7 +9,8 @@ _: {
     enableZshIntegration = true;
   };
 
-  /* programs.zsh = {
+  /*
+     programs.zsh = {
     enable = true;
     enableCompletion = true;
 
@@ -78,5 +79,6 @@ _: {
       DISABLE_UNTRACKED_FILES_DIRTY = "true";
       HIST_STAMPS = "dd.mm.yyyy";
     };
-  }; */
+  };
+  */
 }

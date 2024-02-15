@@ -4,7 +4,8 @@
 }: _: let
   hostnames = builtins.attrNames inputs.cells.nixos.colmenaConfigurations;
 in {
-  /* home.file = {
+  /*
+     home.file = {
     ".ssh/config" = {
       text = ''
         Include ~/.ssh/config.local
@@ -17,5 +18,6 @@ in {
           Port 2265
       '';
     };
-  }; */
+  };
+  */
 }

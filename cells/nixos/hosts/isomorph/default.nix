@@ -62,13 +62,24 @@ in {
   # firmware conf
   hardware = {
     enableAllFirmware = true;
-    bluetooth = { enable = true; powerOnBoot = false; };
+    bluetooth = {
+      enable = true;
+      powerOnBoot = false;
+    };
   };
 
   # Bootloader
   boot = {
-    zfs = { extraPools = [ "zpool" ]; enableUnstable = true; };
-    loader = { /* systemd-boot.enable = true; */ efi.canTouchEfiVariables = true; };
+    zfs = {
+      extraPools = ["zpool"];
+      enableUnstable = true;
+    };
+    loader = {
+      /*
+      systemd-boot.enable = true;
+      */
+      efi.canTouchEfiVariables = true;
+    };
     lanzaboote = {
       enable = true;
       pkiBundle = "/persist/etc/secureboot";
@@ -81,15 +92,14 @@ in {
   };
 
   environment.etc = {
-    "shadow" = { source = "/persist/etc/shadow"; };
-    "NetworkManager/system-connections" = { source = "/persist/etc/NetworkManager/system-connections/"; };
+    "shadow" = {source = "/persist/etc/shadow";};
+    "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";};
   };
   systemd.tmpfiles.rules = [
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth"
     "L /var/lib/fprint - - - - /persist/var/lib/fprint"
   ];
   time.timeZone = lib.mkDefault "America/New_York";
-
 
   # ZFS
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
@@ -107,14 +117,16 @@ in {
   networking.firewall.enable = false;
 
   # doas
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zyansheep"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   # groups
-  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
+  users.users.zyansheep.extraGroups = ["adbusers" "uucp"];
 
   documentation.info.enable = false;
 

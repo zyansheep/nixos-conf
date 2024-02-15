@@ -1,14 +1,16 @@
 {
   inputs,
   common,
-}: {lib, pkgs, ...}: {
-  
-  imports =
-    [
-      # Include minimal configuration
-      # inputs.nixos.nixosProfiles.core.minimal
-      #builtins.trace [inputs common] ./minimal
-    ];
+}: {
+  lib,
+  pkgs,
+  ...
+}: {
+  imports = [
+    # Include minimal configuration
+    # inputs.nixos.nixosProfiles.core.minimal
+    #builtins.trace [inputs common] ./minimal
+  ];
 
   environment.systemPackages = with pkgs; [
     firefox-wayland # Browser
@@ -50,8 +52,8 @@
       source-code-pro
     ];
     fontconfig.defaultFonts = {
-      monospace = [ "DejaVu Sans Mono for Powerline" ];
-      sansSerif = [ "DejaVu Sans" ];
+      monospace = ["DejaVu Sans Mono for Powerline"];
+      sansSerif = ["DejaVu Sans"];
     };
   };
 

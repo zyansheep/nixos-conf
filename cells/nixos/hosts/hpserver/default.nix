@@ -41,15 +41,20 @@ in {
     zfsSupport = true;
     efiSupport = true;
     efiInstallAsRemovable = true;
-    mirroredBoots = [ { devices = ["nodev"]; path = "/boot"; } ];
+    mirroredBoots = [
+      {
+        devices = ["nodev"];
+        path = "/boot";
+      }
+    ];
   };
 
   # ZFS
   boot.zfs = {
-    extraPools = [ "mpool" ];
+    extraPools = ["mpool"];
   };
   services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
-  boot.kernelParams = [ "zfs.zfs_arc_max=12884901888" ]; # Set Adaptive Replacement Cache size to max 12gb.
+  boot.kernelParams = ["zfs.zfs_arc_max=12884901888"]; # Set Adaptive Replacement Cache size to max 12gb.
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "49408a0f";
@@ -57,10 +62,12 @@ in {
   networking.firewall.enable = false;
 
   # doas
-  security.doas.extraRules = [{
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   # groups
 

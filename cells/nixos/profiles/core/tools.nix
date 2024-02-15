@@ -1,9 +1,13 @@
 {
   inputs,
   common,
-}: { lib, config, pkgs, ... }:
-with lib;
-{
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+with lib; {
   environment.systemPackages = with pkgs; [
     # File Tools
     unzip # Unzip
@@ -66,7 +70,7 @@ with lib;
     sbctl
 
     # appimage
-    (appimage-run.override { extraPkgs = (pkgs: [ libthai ]); })
+    (appimage-run.override {extraPkgs = pkgs: [libthai];})
   ];
   # Set appimage-run as default interpreter for AppImage executables
   boot.binfmt.registrations.appimage = {

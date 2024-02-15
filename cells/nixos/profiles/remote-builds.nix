@@ -3,6 +3,6 @@
   common,
 }: {
   users.users.root = {
-    openssh.authorizedKeys.keys = [ ];
+    openssh.authorizedKeys.keys = [];
   };
 }

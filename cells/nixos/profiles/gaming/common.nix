@@ -1,9 +1,13 @@
 {
   inputs,
   common,
-}: { lib, config, pkgs, ... }:
-with lib;
-{
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}:
+with lib; {
   environment.systemPackages = with pkgs; [
     # use flatpak for lutris and steam, they run better
     lutris-unwrapped
@@ -25,6 +29,6 @@ with lib;
   hardware.opengl = {
     enable = true;
     driSupport32Bit = true;
-    extraPackages32 = with pkgs.pkgsi686Linux; [ libva ];
+    extraPackages32 = with pkgs.pkgsi686Linux; [libva];
   };
 }

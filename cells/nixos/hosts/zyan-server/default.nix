@@ -50,7 +50,7 @@ in {
 
   # Bootloader
   boot = {
-    zfs = { extraPools = [ "zpool" ]; };
+    zfs = {extraPools = ["zpool"];};
     loader.systemd-boot.enable = true;
   };
 
@@ -59,11 +59,13 @@ in {
   networking.hostId = "95196fe2";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [{
-    users = [ "zon" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zon"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   services.flatpak.enable = true;
 
