@@ -38,6 +38,7 @@ in {
 
     graphics.plasma
     graphics.drivers.amd
+    fs.zfs
 
     # devices.xp-pen
     # devices.realtek-wifi-adapter
@@ -74,12 +75,7 @@ in {
       extraPools = ["zpool"];
       enableUnstable = true;
     };
-    loader = {
-      /*
-      systemd-boot.enable = true;
-      */
-      efi.canTouchEfiVariables = true;
-    };
+    loader.efi.canTouchEfiVariables = true;
     lanzaboote = {
       enable = true;
       pkiBundle = "/persist/etc/secureboot";
@@ -92,12 +88,12 @@ in {
   };
 
   environment.etc = {
-    "shadow" = {source = "/persist/etc/shadow";};
-    "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";};
+    "shadow" = {source = "/persist/etc/shadow";}; # persist passwords
+    "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";}; # persist NetworkManager
   };
   systemd.tmpfiles.rules = [
-    "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth"
-    "L /var/lib/fprint - - - - /persist/var/lib/fprint"
+    "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
+    "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
   ];
   time.timeZone = lib.mkDefault "America/New_York";
 

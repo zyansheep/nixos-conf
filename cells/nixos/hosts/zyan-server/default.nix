@@ -13,6 +13,7 @@ in {
     # devices.rtl-sdr
 
     graphics.plasma
+    fs.zfs
 
     core.minimal
     core.common
