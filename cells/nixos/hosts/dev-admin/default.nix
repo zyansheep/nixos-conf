@@ -13,7 +13,6 @@ in {
     # creative.common
     # creative.steno
     development.common
-    # development.shell.zsh
     # development.arduino
     # development.shell.starship
 

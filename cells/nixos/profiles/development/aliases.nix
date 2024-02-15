@@ -1,7 +1,6 @@
 {
   lib,
   config,
-  pkgs,
   ...
 }: {
   environment.shellAliases = let
@@ -24,8 +23,7 @@
     myip = "dig +short myip.opendns.com @208.67.222.222 2>&1";
 
     # nix
-    dbsu = "doas bud switch update";
-    dbs = "does bud switch";
+    nus = "doas nixos-rebuild --flake .#$(hostname) switch";
     n = "nix";
     np = "n profile";
     ni = "np install";
