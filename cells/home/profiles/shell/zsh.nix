@@ -5,11 +5,11 @@ _: {
 }: {
   # programs.tmux.shell = lib.mkForce "${pkgs.zsh}/bin/zsh";
 
-  programs.direnv = {
-    enableZshIntegration = true;
-  };
+  programs.direnv.enableZshIntegration = true;
 
-  /*
+  programs.zoxide.enable = true;
+
+  
      programs.zsh = {
     enable = true;
     enableCompletion = true;
@@ -26,29 +26,10 @@ _: {
       enable = true;
 
       plugins = [
-        # "aws"
-        # "kubectl"
-        # "kube-ps1"
         "git"
         "tmux"
-        # "thefuck"
       ];
     };
-
-    initExtraBeforeCompInit = ''
-      (( ''${+commands[direnv]} )) && emulate zsh -c "$(direnv export zsh)"
-
-      # p10k instant prompt
-      P10K_INSTANT_PROMPT="''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh"
-      [[ ! -r "$P10K_INSTANT_PROMPT" ]] || source "$P10K_INSTANT_PROMPT"
-
-      (( ''${+commands[direnv]} )) && emulate zsh -c "$(direnv hook zsh)"
-    '';
-
-    initExtra = ''
-      [[ -f "$HOME/.sh.local" ]] && source "$HOME/.sh.local"
-      export GPG_TTY=$TTY
-    '';
 
     plugins = [
       {
@@ -61,16 +42,6 @@ _: {
         src = lib.cleanSource ./_files/p10k-config;
         file = "p10k.zsh";
       }
-      {
-        name = "fast-syntax-highlighting";
-        file = "F-Sy-H.plugin.zsh";
-        src = pkgs.fetchFromGitHub {
-          owner = "zdharma";
-          repo = "fast-syntax-highlighting";
-          rev = "v1.66";
-          sha256 = "sha256-uoLrXfq31GvfHO6GTrg7Hus8da2B4SCM1Frc+mRFbFc=";
-        };
-      }
     ];
 
     localVariables = {
@@ -80,5 +51,5 @@ _: {
       HIST_STAMPS = "dd.mm.yyyy";
     };
   };
-  */
+ 
 }

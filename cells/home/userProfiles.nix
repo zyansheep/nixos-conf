@@ -10,7 +10,6 @@
       git
       dev.codium
       shell.zsh
-      shell.tmux
       shell.nvim
       home-manager-base
       ssh
