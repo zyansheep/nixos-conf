@@ -36,7 +36,6 @@ in {
     imports = with suites;
       l.flatten [
         develop
-        inputs.nixos-vscode-server.homeModules.default
       ];
   };
 }
