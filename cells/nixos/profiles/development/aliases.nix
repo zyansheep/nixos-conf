@@ -6,12 +6,6 @@
   environment.shellAliases = let
     ifSudo = lib.mkIf config.security.sudo.enable;
   in {
-    # quick cd
-    ".." = "cd ..";
-    "..." = "cd ../..";
-    "...." = "cd ../../..";
-    "....." = "cd ../../../..";
-
     # git
     g = "git";
 
@@ -23,25 +17,17 @@
     myip = "dig +short myip.opendns.com @208.67.222.222 2>&1";
 
     # nix
-    nus = "doas nixos-rebuild --flake .#$(hostname) switch";
+    nrbu = "git add . && doas nixos-rebuild --flake .#nixos-$(hostname) switch";
     n = "nix";
-    np = "n profile";
-    ni = "np install";
-    nr = "np remove";
+    np = "n profile"; # nix profile
+    npi = "np install"; # nix profile install
+    npr = "np remove"; # nix profile remove
     ns = "n search --no-update-lock-file";
+    nsl = "ns l"; # search latest nixpkgs
     nf = "n flake";
-    nepl = "n repl '<nixpkgs>'";
-    srch = "ns nixos";
-    orch = "ns override";
-    mn = ''
-      manix "" | grep '^# ' | sed 's/^# \(.*\) (.*/\1/;s/ (.*//;s/^# //' | sk --preview="manix '{}'" | xargs manix
-    '';
 
     # sudo
     sudo = "doas";
-
-    # top
-    top = "btm";
 
     # systemd
     ctl = "systemctl";
