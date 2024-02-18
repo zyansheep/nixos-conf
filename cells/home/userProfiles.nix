@@ -15,8 +15,6 @@
       ssh
     ];
     develop = [
-      dev.aws
-      dev.terraform
       dev.nix
     ];
     android = [dev.android];
