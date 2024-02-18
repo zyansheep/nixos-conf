@@ -28,7 +28,6 @@ in {
     core.minimal
     core.common
     core.tools
-    core.laptop-tlp
     # core.hacking-tools
     services.containers
     # core.privacy
