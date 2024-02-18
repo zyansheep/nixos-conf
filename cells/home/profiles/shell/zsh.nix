@@ -9,8 +9,7 @@ _: {
 
   programs.zoxide.enable = true;
 
-  
-     programs.zsh = {
+  programs.zsh = {
     enable = true;
     enableCompletion = true;
 
@@ -51,5 +50,4 @@ _: {
       HIST_STAMPS = "dd.mm.yyyy";
     };
   };
- 
 }

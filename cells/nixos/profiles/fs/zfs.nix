@@ -8,7 +8,7 @@
     autoScrub.enable = true;
     trim.enable = true;
   };
-  
+
   networking.hostId = lib.mkDefault (abort "ZFS requires networking.hostId to be set");
 
   # Set schedulers for ZFS drives

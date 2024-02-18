@@ -21,7 +21,7 @@ in {
       users.users.zyansheep = {
         isNormalUser = true;
         shell = pkgs.zsh;
-        extraGroups = ["wheel" "docker"];
+        extraGroups = ["wheel"];
       };
     };
 
