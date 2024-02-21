@@ -66,6 +66,10 @@ in {
       enable = true;
       powerOnBoot = false;
     };
+    # Early KMS unnecessarily slows boot
+    amdgpu.loadInInitrd = false;
+    pulseaudio.enable = false; # use pipewire
+    sensor.iio = false;
   };
 
   # Bootloader
@@ -105,6 +109,11 @@ in {
     "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
     "usbcore.autosuspend=20"
   ];
+  boot.extraModprobeConfig = ''
+    options cfg80211 ieee80211_regdom="US" # configure regulatory domain
+    options snd_hda_intel power_save=1 # sound card powersave
+  '';
+
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "14df389e";
