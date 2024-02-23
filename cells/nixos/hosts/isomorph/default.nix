@@ -69,7 +69,7 @@ in {
     # Early KMS unnecessarily slows boot
     amdgpu.loadInInitrd = false;
     pulseaudio.enable = false; # use pipewire
-    sensor.iio = false;
+    sensor.iio.enable = false;
   };
 
   # Bootloader

@@ -17,7 +17,7 @@
   };
 
   boot.kernelParams = [
-    # "amdgpu.abmlevel=3" # enable adaptive backlight management (Q: does this actually help with power usage?)
+    "amdgpu.abmlevel=4" # enable adaptive backlight management (Q: does this actually help with power usage?)
   ];
 
   /*

@@ -68,6 +68,7 @@ with lib; {
     libva-utils
     inxi
     sbctl
+    drm_info
 
     # appimage
     (appimage-run.override {extraPkgs = pkgs: [libthai];})
