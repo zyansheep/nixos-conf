@@ -19,10 +19,10 @@ in {
     # creative.common
     # creative.steno
     development.common
+    development.tools
+    development.rust
     # development.arduino
     # development.shell.starship
-
-    development.rust
     # development.android
 
     core.minimal
@@ -140,6 +140,8 @@ in {
   programs.kdeconnect.enable = true;
   services.flatpak.enable = true;
   nix.settings.auto-optimise-store = true; # Auto-optimize
+
+  services.plantuml-server.enable = true;
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
