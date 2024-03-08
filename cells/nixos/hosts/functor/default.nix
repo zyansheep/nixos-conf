@@ -22,6 +22,7 @@ in {
     core.communications
 
     gaming.common
+    gaming.steam
     # creative.common
 
     development.common
@@ -62,7 +63,7 @@ in {
 
   security.doas.extraRules = [
     {
-      users = ["zon"];
+      users = ["zyansheep"];
       keepEnv = true;
       persist = true;
     }
