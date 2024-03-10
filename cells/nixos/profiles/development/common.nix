@@ -20,26 +20,13 @@ with lib; {
     keyMap = "us";
   };
 
-  # Development Packages
+  # Commonly used dev packages
   environment.systemPackages = with pkgs; [
     gnumake
     gcc
     python3
-    # vscodium
+    nodejs
     gdb
     nil # Nix LSP
-
-    /*
-       (vscode-with-extensions.override {
-      vscode = vscodium;
-      vscodeExtensions = with vscode-extensions; [
-        bbenoist.nix
-        llvm-vs-code-extensions.vscode-clangd
-        vadimcn.vscode-lldb
-        mkhl.direnv
-      ];
-    })
-    */
-    nodejs # So I don't have to constantly do nix-shell -p nodejs
   ];
 }

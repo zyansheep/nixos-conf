@@ -11,20 +11,17 @@
 with lib; {
   environment.systemPackages = with pkgs; [
     vim
-    helix
     git
     git-lfs
   ];
 
   # Enable Flakes and the Nix Command
-  /*
-     nix = {
-  	package = pkgs.nixFlakes;
-  	extraOptions = ''
-  	experimental-features = nix-command flakes ca-references
-  	'';
+  # Automatically clear old packages
+  nix.gc = {
+    automatic = true;
+    dates = "weekly";
+    options = "--delete-older-than 30d";
   };
-  */
 
   # Send notifications when program is killed due to OOM
   services.earlyoom.enable = lib.mkDefault true;
@@ -44,7 +41,4 @@ with lib; {
   environment.shellAliases = {
     sudo = "doas";
   };
-
-  # Time Zone
-  time.timeZone = null;
 }

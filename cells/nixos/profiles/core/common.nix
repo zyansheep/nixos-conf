@@ -12,33 +12,19 @@
     #builtins.trace [inputs common] ./minimal
   ];
 
+  # default packages
   environment.systemPackages = with pkgs; [
-    firefox-wayland # Browser
-    neovim
-
-    # Pipewire
-    plasma-pa
+    firefox # Browser
   ];
-
-  # Fan Control & Power Management
-  # services.tlp.enable = true;
-  # services.power-profiles-daemon.enable = false;
 
   # MDNS
   services.avahi.enable = true;
 
   # Touchpad
-  services.xserver.libinput = {
-    enable = true;
-    touchpad.naturalScrolling = true;
-  };
-
-  # Automatically clear old packages
-  nix.gc = {
-    automatic = true;
-    dates = "weekly";
-    options = "--delete-older-than 30d";
-  };
+  # services.xserver.libinput = {
+  #   enable = true;
+  #   touchpad.naturalScrolling = true;
+  # };
 
   # Fonts
   # Font Declaration
@@ -70,10 +56,4 @@
 
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;
-
-  # Fix device mounting as cdrom instead of normally (because it has built-in drivers)
-  # hardware.usb-modeswitch.enable = true;
-
-  # Set backend to iwd instead of wpa_supplicant to fix slow reconnect on unsuspend bug
-  networking.networkmanager.wifi.backend = "wpa_supplicant";
 }

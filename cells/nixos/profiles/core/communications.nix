@@ -10,9 +10,9 @@
 with lib; {
   environment.systemPackages = with pkgs; [
     signal-desktop
+    discord
     # cinny-desktop
   ];
-  services.pcscd.enable = true;
   programs.gnupg.agent = {
     enable = true;
     enableSSHSupport = true;

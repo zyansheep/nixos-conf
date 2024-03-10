@@ -12,8 +12,4 @@ with lib; {
   environment.systemPackages = [
     pkgs.osu-lazer
   ];
-
-  /*
-  nixpkgs.config.allowUnfreePackages = [ "osu-lazer" ];
-  */
 }

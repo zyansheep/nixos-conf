@@ -77,7 +77,6 @@ in {
   boot = {
     zfs = {
       extraPools = ["zpool"];
-      enableUnstable = true;
     };
     loader.efi.canTouchEfiVariables = true;
     lanzaboote = {
@@ -86,9 +85,9 @@ in {
     };
     # Erase my Darlings https://grahamc.com/blog/erase-your-darlings/
     # Note don't do this until you've added links to persist dataset for passwords, github login, fingerprint, timezone
-    # initrd.postDeviceCommands = lib.mkAfter ''
-    #   zfs rollback -r zpool/local/root@blank
-    # '';
+    initrd.postDeviceCommands = lib.mkAfter ''
+      zfs rollback -r zpool/local/root@blank
+    '';
   };
 
   environment.etc = {
@@ -97,14 +96,12 @@ in {
   };
   systemd.tmpfiles.rules = [
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
-    "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
+    # "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
   ];
   time.timeZone = lib.mkDefault "America/New_York";
 
-  # ZFS
-  services.zfs.autoScrub.enable = true; # Auto scrub every sunday at 2am
   boot.kernelParams = [
-    "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb.
+    "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
     "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
@@ -136,10 +133,10 @@ in {
   documentation.info.enable = false;
 
   # Services
-  services.fwupd.enable = true;
+  # services.fwupd.enable = true;
+  services.fprintd.enable = true;
   programs.kdeconnect.enable = true;
   services.flatpak.enable = true;
-  nix.settings.auto-optimise-store = true; # Auto-optimize
 
   services.plantuml-server.enable = true;
 
