@@ -11,7 +11,7 @@
 
     ffmpeg-full # Video Converter
     yt-dlp # Video Downloader
-    kdenlive # Video Editor
+    kdePackages.kdenlive # Video Editor
     obs-studio # Screen Recorder
     # obsidian 		# Note Taking Tool
   ];

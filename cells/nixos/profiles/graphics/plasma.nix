@@ -19,8 +19,8 @@ with lib; {
     enable = true;
     xkb.layout = "us";
     displayManager.sddm.enable = true;
-    displayManager.defaultSession = "plasmawayland";
-    desktopManager.plasma5.enable = true;
+    displayManager.defaultSession = "plasma";
+    desktopManager.plasma6.enable = true;
   };
 
   xdg = {
