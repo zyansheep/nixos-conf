@@ -10,9 +10,12 @@
 with lib; {
   environment.systemPackages = with pkgs; [
     # latte-dock
-    qt5.qttools
+    qt6.qttools
     okular
     ark
+    aha # firmware security window in KDE info center
+    wayland-utils # for info center
+    clinfo # opencl info for info center
   ];
 
   services.xserver = {

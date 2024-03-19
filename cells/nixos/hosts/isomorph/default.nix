@@ -88,6 +88,15 @@ in {
     initrd.postDeviceCommands = lib.mkAfter ''
       zfs rollback -r zpool/local/root@blank
     '';
+    # Enable kernel lockdown (note this prevents hibernation from working, but it doesn't work anyway because of ZFS). Note: Takes too long to build
+    /* kernelPatches = [{
+     name = "kernel-lockdown";
+     patch = null;
+     extraConfig = ''
+       SECURITY_LOCKDOWN_LSM y
+       MODULE_SIG y
+     '';
+    }]; */
   };
 
   environment.etc = {
@@ -96,7 +105,7 @@ in {
   };
   systemd.tmpfiles.rules = [
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
-    # "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
+    "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
   ];
   time.timeZone = lib.mkDefault "America/New_York";
 
@@ -133,7 +142,7 @@ in {
   documentation.info.enable = false;
 
   # Services
-  # services.fwupd.enable = true;
+  services.fwupd.enable = true;
   services.fprintd.enable = true;
   programs.kdeconnect.enable = true;
   services.flatpak.enable = true;
