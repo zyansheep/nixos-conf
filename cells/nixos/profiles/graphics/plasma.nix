@@ -17,22 +17,12 @@ with lib; {
     wayland-utils # for info center
     clinfo # opencl info for info center
   ];
+  services.xserver.enable = true;
+  services.xserver.displayManager.sddm.enable = true;
+  services.desktopManager.plasma6.enable = true;
 
-  services.xserver = {
-    enable = true;
-    xkb.layout = "us";
-    displayManager.sddm.enable = true;
-    displayManager.defaultSession = "plasma";
-    desktopManager.plasma6.enable = true;
-  };
-
-  xdg = {
-    portal = {
-      enable = true;
-      extraPortals = with pkgs; [
-        xdg-desktop-portal-wlr
-        xdg-desktop-portal-gtk
-      ];
-    };
-  };
+  xdg.portal.extraPortals = with pkgs; [
+    xdg-desktop-portal-wlr
+    xdg-desktop-portal-gtk
+  ];
 }
