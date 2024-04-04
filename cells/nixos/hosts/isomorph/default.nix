@@ -145,9 +145,10 @@ in {
   services.fwupd.enable = true;
   services.fprintd.enable = true;
   programs.kdeconnect.enable = true;
+  programs.nix-ld.enable = true;
   services.flatpak.enable = true;
 
-  services.plantuml-server.enable = true;
+  # services.plantuml-server.enable = true;
 
   # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
   # nix.useSandbox = false;
