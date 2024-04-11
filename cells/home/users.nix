@@ -25,14 +25,6 @@ in {
       };
     };
 
-    zyansheep-dev = {pkgs, ...}: {
-      imports = [zyansheep];
-
-      home-manager.users.zyansheep = {
-        imports = [userProfiles.server-dev];
-      };
-    };
-
     root = {config, ...}: {
       users.users.root = {
         uid = 0;
