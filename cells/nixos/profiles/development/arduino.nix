@@ -1,7 +1,8 @@
 {
-  self,
+  inputs,
+  common,
+}: {
   lib,
-  config,
   pkgs,
   ...
 }:

@@ -21,7 +21,7 @@ in {
     development.common
     development.tools
     development.rust
-    # development.arduino
+    development.arduino
     # development.shell.starship
     # development.android
 
