@@ -18,7 +18,7 @@ with lib; {
     clinfo # opencl info for info center
   ];
   services.xserver.enable = true;
-  services.xserver.displayManager.sddm.enable = true;
+  services.displayManager.sddm.enable = true;
   services.desktopManager.plasma6.enable = true;
 
   xdg.portal.extraPortals = with pkgs; [

@@ -17,11 +17,11 @@ with lib; {
 
   # Enable Flakes and the Nix Command
   # Automatically clear old packages
-  nix.gc = {
+  /* nix.gc = {
     automatic = true;
     dates = "weekly";
     options = "--delete-older-than 30d";
-  };
+  }; */
 
   # Send notifications when program is killed due to OOM
   services.earlyoom.enable = lib.mkDefault true;
