@@ -13,6 +13,10 @@ _: {
     enable = true;
     enableCompletion = true;
 
+    initExtra = ''
+      export PATH="$HOME/.npm-packages/bin:$PATH" # node stuff
+    '';
+
     history = {
       extended = true;
       ignoreDups = true;
