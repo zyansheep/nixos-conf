@@ -10,7 +10,6 @@
 with lib; {
   environment.systemPackages = with pkgs; [
     signal-desktop
-    discord
     # cinny-desktop
   ];
   programs.gnupg.agent = {
