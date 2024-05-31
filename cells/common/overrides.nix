@@ -12,11 +12,16 @@ in {
     vscodium
     alejandra
     nil
-    nixUnstable
+    nixpkgs-fmt
+    statix
+    nix
+    cachix
+    nix-index
     #
     
     ffmpeg_5-full
     ;
 
+  # nix-diff = inputs.nix-diff.packages.default;
   nvfetcher = inputs.nvfetcher.packages.default;
 }

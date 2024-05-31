@@ -1,4 +1,8 @@
-{inputs, ...}: {
+{
+  inputs,
+  cell,
+  ...
+}: {
   self,
   config,
   lib,
@@ -36,7 +40,7 @@
       GB = 1024 * 1024 * 1024;
     in {
       # Prevents impurities in builds
-      sandbox = true;
+      sandbox = lib.mkDefault true;
 
       # Give root user and wheel group special Nix privileges.
       trusted-users = ["root" "@wheel"];

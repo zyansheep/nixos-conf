@@ -67,16 +67,20 @@
       url = "github:nix-community/lanzaboote/v0.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    nix-rpi-kernel = {
+      url = "github:TrueLecter/nix-rpi-kernel";
+    };
   };
 
   # nixpkgs & home-manager
   inputs = {
     latest.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixos.url = "github:nixos/nixpkgs/release-23.11";
+    nixos.url = "github:nixos/nixpkgs/nixos-24.05";
     nixpkgs.follows = "nixos";
 
     home = {
-      url = "github:nix-community/home-manager/release-23.11";
+      url = "github:nix-community/home-manager/release-24.05";
       inputs.nixpkgs.follows = "nixos";
     };
 
@@ -84,6 +88,8 @@
       url = "github:nix-community/home-manager";
       inputs.nixpkgs.follows = "latest";
     };
+
+    rpi-4-kernel.url = "github:nixos/nixpkgs/refs/pull/292880/merge";
   };
 
   # tools
@@ -102,6 +108,12 @@
         flake-utils.follows = "flake-utils";
       };
     };
+    # nix-diff = {
+    #   url = "github:Gabriella439/nix-diff";
+    #   inputs = {
+    #     nixpkgs.follows = "nixpkgs";
+    #   };
+    # };
   };
 
   outputs = {
@@ -110,8 +122,11 @@
     nixpkgs,
     hive,
     ...
-  } @ inputs:
-    std.growOn {
+  } @ inputs: let
+    collect-unrenamed = hive.collect // {renamer = _: target: target;};
+    collect-renamed = hive.collect;
+  in
+    hive.growOn {
       inherit inputs;
 
       nixpkgsConfig = {
@@ -179,14 +194,12 @@
       ];
     }
     {
-      colmenaHive = hive.collect self "colmenaConfigurations";
-      nixosConfigurations = hive.collect self "nixosConfigurations";
-      homeConfigurations = hive.collect self "homeConfigurations";
-      darwinConfigurations = hive.collect self "darwinConfigurations";
+      colmenaHive = collect-unrenamed self "colmenaConfigurations";
+      nixosConfigurations = collect-unrenamed self "nixosConfigurations";
+      homeConfigurations = collect-unrenamed self "homeConfigurations";
+      darwinConfigurations = collect-unrenamed self "darwinConfigurations";
     }
     {
-      darwinConfigurations.squadbook = self.darwinConfigurations.darwin-squadbook;
-
       debug = hive.harvest inputs.self ["repo" "debug"];
     };
 }

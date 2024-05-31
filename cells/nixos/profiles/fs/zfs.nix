@@ -1,7 +1,20 @@
 {
   inputs,
   common,
-}: {lib, ...}: {
+}: {
+  lib,
+  pkgs,
+  ...
+}: {
+  boot = {
+    kernelParams = ["nohibernate"];
+    zfs = {
+      forceImportRoot = false;
+      package = pkgs.zfs_unstable;
+    };
+    supportedFilesystems = ["zfs"];
+  };
+
   services.zfs = {
     # autoSnapshot.enable = true;
     # autoSnapshot.monthly = 1;
