@@ -5,7 +5,7 @@
   ...
 }: {
   boot.kernelPackages = pkgs.linuxKernel.packages.linux_6_8;
-  boot.zfs.package = pkgs.zfs_unstable;
+  # boot.zfs.package = pkgs.zfs_unstable;
 
   # Enable module that exposes battery charge limit (TODO: WHY DOESN'T THIS WORK???)
   boot.kernelModules = [ "framework-laptop-kmod" ];
