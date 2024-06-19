@@ -67,10 +67,6 @@
       url = "github:nix-community/lanzaboote/v0.3.0";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    nix-rpi-kernel = {
-      url = "github:TrueLecter/nix-rpi-kernel";
-    };
   };
 
   # nixpkgs & home-manager
@@ -89,7 +85,6 @@
       inputs.nixpkgs.follows = "latest";
     };
 
-    rpi-4-kernel.url = "github:nixos/nixpkgs/refs/pull/292880/merge";
   };
 
   # tools
