@@ -4,30 +4,29 @@
   lib,
   ...
 }: {
-  boot.kernelPackages = pkgs.linuxKernel.packages.linux_6_8;
   # boot.zfs.package = pkgs.zfs_unstable;
-
+  boot = {
+    blacklistedKernelModules = ["hid_sensor_hub"];
+    extraModprobeConfig = ''
+      options snd_hda_intel power_save=1
+    '';
+    kernelPackages = pkgs.linuxPackages_latest;
+    kernel.sysctl = {
+      # enable REISUB: https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html
+      "kernel.sysrq" = 1 + 16 + 32 + 64 + 128;
+    };
+  };
   # Enable module that exposes battery charge limit (TODO: WHY DOESN'T THIS WORK???)
   boot.kernelModules = [ "framework-laptop-kmod" ];
+
+  services.udev.extraRules = ''
+    SUBSYSTEM=="pci", ATTR{power/control}="auto"
+    ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="auto"
+  '';
 
   powerManagement = {
     enable = true;
     cpuFreqGovernor = lib.mkDefault "powersave";
-    # powertop.enable = true;
+    powertop.enable = true;
   };
-
-  boot.kernelParams = [
-    "amdgpu.abmlevel=4" # enable adaptive backlight management (Q: does this actually help with power usage?)
-  ];
-
-  
-  /* boot.kernelPatches = lib.singleton {
-    name = "enable-cpufreq-stat";
-    patch = null;
-    extraStructuredConfig = with lib.kernel; {
-      CONFIG_CPU_FREQ_STAT = yes;
-      CONFIG_I2C_DESIGNWARE_PLATFORM = yes;
-    };
-  }; */
- 
 }
