@@ -147,6 +147,7 @@ in {
   programs.kdeconnect.enable = true;
   programs.nix-ld.enable = true;
   services.flatpak.enable = true;
+  services.logmein-hamachi.enable = true;
   # Nix Helper
   programs.nh = {
     enable = true;
