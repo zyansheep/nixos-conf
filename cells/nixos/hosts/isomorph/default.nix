@@ -30,7 +30,6 @@ in {
     core.tools
     # core.laptop-tlp
     # core.hacking-tools
-    services.containers
     # core.privacy
     core.communications
     gaming.common
@@ -83,21 +82,10 @@ in {
       enable = true;
       pkiBundle = "/persist/etc/secureboot";
     };
-    # Erase my Darlings https://grahamc.com/blog/erase-your-darlings/
-    # Note don't do this until you've added links to persist dataset for passwords, github login, fingerprint, timezone
-    initrd.postDeviceCommands = lib.mkAfter ''
-      zfs rollback -r zpool/local/root@blank
-    '';
-    # Enable kernel lockdown (note this prevents hibernation from working, but it doesn't work anyway because of ZFS). Note: Takes too long to build
-    /* kernelPatches = [{
-     name = "kernel-lockdown";
-     patch = null;
-     extraConfig = ''
-       SECURITY_LOCKDOWN_LSM y
-       MODULE_SIG y
-     '';
-    }]; */
   };
+  
+  # Root Rollback via "Erase my Darlings" https://grahamc.com/blog/erase-your-darlings/
+  zfsConfig.enableSystemdRollback = true; # enable systemd initrd rollback via zfs module
 
   environment.etc = {
     "shadow" = {source = "/persist/etc/shadow";}; # persist passwords
@@ -112,13 +100,12 @@ in {
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
-    "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
-    "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
-    "usbcore.autosuspend=20"
+    # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
+    # "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
+    # "usbcore.autosuspend=20"
   ];
   boot.extraModprobeConfig = ''
     options cfg80211 ieee80211_regdom="US" # configure regulatory domain
-    options snd_hda_intel power_save=1 # sound card powersave
   '';
 
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
@@ -142,12 +129,12 @@ in {
   documentation.info.enable = false;
 
   # Services
-  services.fwupd.enable = true;
-  services.fprintd.enable = true;
-  programs.kdeconnect.enable = true;
-  programs.nix-ld.enable = true;
-  services.flatpak.enable = true;
-  services.logmein-hamachi.enable = true;
+  services.fwupd.enable = true; # firmware update
+  services.fprintd.enable = true; # fingerprint
+  programs.kdeconnect.enable = true; # kde connect
+  programs.nix-ld.enable = true; # run non nix-linked program
+  services.flatpak.enable = true; # enable flatpak
+  # services.logmein-hamachi.enable = true; # enable logmein
   # Nix Helper
   programs.nh = {
     enable = true;
@@ -156,6 +143,7 @@ in {
     flake = "/home/zyansheep/nixos-conf";
   };
 
+  # zfs snapshot service
   services.sanoid = {
       enable = true;
       interval = "hourly";
