@@ -12,7 +12,7 @@
 
   inherit
     (nixpkgs)
-    alejandra
+    # alejandra
     editorconfig-checker
     ;
 
@@ -46,7 +46,7 @@ in
         (infra inputs.nixos-generators.packages.nixos-generate)
 
         (linter editorconfig-checker)
-        (linter alejandra)
+        # (linter alejandra)
       ];
     };
   }
