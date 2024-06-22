@@ -10,7 +10,6 @@
     extraModprobeConfig = ''
       options snd_hda_intel power_save=1
     '';
-    kernelPackages = pkgs.linuxPackages_latest;
     kernel.sysctl = {
       # enable REISUB: https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html
       "kernel.sysrq" = 1 + 16 + 32 + 64 + 128;

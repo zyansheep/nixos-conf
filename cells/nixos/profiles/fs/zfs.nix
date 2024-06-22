@@ -29,6 +29,8 @@ in
           package = pkgs.zfs_unstable;
         };
         supportedFilesystems = ["zfs"];
+        # kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
+        kernelPackages = pkgs.linuxPackages_latest;
       };
 
       services.zfs = {
@@ -50,22 +52,14 @@ in
       boot.initrd.systemd.enable = lib.mkDefault true;
       boot.initrd.systemd.services.rollback = {
         description = "Rollback ZFS datasets to a pristine state";
-        wantedBy = [
-          "initrd.target"
-        ];
-        after = [
-          "zfs-mount-zpool.service"
-        ];
-        before = [ 
-          "sysroot.mount"
-        ];
-        path = with pkgs; [
-          zfs_unstable
-        ];
+        wantedBy = [ "initrd.target" ];
+        after = [ "zfs-import-zpool.service" ];
+        before = [  "sysroot.mount" ];
+        path = [ config.boot.zfs.package ];
         unitConfig.DefaultDependencies = "no";
         serviceConfig.Type = "oneshot";
         script = ''
-          zfs rollback -r zpool/local/root@blank && echo "rollback complete"
+          zfs rollback -r zpool/local/root@blank || echo "ZFS root dataset Rollback Failed"
         '';
       };
     })
