@@ -23,7 +23,6 @@ with lib; {
   environment.plasma6.excludePackages = [ pkgs.kdePackages.elisa ];
 
   xdg.portal.extraPortals = with pkgs; [
-    xdg-desktop-portal-wlr
-    xdg-desktop-portal-gtk
+    xdg-desktop-portal-kde
   ];
 }

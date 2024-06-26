@@ -18,7 +18,7 @@
   ];
 
   # MDNS
-  services.avahi.enable = true;
+  # services.avahi.enable = true;
 
   # Touchpad
   # services.xserver.libinput = {
@@ -44,15 +44,16 @@
   };
 
   # Use Pipewire for sound
-  security.rtkit.enable = true;
-  services.pipewire = {
+  # security.rtkit.enable = true;
+  /* services.pipewire = {
     enable = true;
     alsa.enable = true;
     alsa.support32Bit = true;
     pulse.enable = true;
     # jack.enable = true;
     # media-session.enable = true;
-  };
+  }; */
+  hardware.pulseaudio.enable = true;
 
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;

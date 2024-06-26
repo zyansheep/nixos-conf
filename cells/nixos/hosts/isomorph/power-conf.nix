@@ -18,14 +18,14 @@
   # Enable module that exposes battery charge limit (TODO: WHY DOESN'T THIS WORK???)
   boot.kernelModules = [ "framework-laptop-kmod" ];
 
-  services.udev.extraRules = ''
+  /* services.udev.extraRules = ''
     SUBSYSTEM=="pci", ATTR{power/control}="auto"
     ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="auto"
-  '';
+  ''; */
 
   powerManagement = {
     enable = true;
     cpuFreqGovernor = lib.mkDefault "powersave";
-    powertop.enable = true;
+    # powertop.enable = true;
   };
 }

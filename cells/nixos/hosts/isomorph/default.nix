@@ -13,7 +13,7 @@ in {
     ./hardware-configuration.nix
     ./power-conf.nix
 
-    inputs.nixos-hardware.nixosModules.framework-13-7040-amd
+    # inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
 
     # creative.common
@@ -21,7 +21,7 @@ in {
     development.common
     development.tools
     development.rust
-    development.arduino
+    # development.arduino
     # development.shell.starship
     # development.android
 
@@ -36,7 +36,7 @@ in {
     gaming.steam
 
     graphics.plasma
-    graphics.drivers.amd
+    # graphics.drivers.amd
     fs.zfs
 
     # devices.xp-pen
@@ -67,9 +67,9 @@ in {
       powerOnBoot = false;
     };
     # Early KMS unnecessarily slows boot
-    amdgpu.loadInInitrd = false;
-    pulseaudio.enable = false; # use pipewire
-    sensor.iio.enable = false;
+    # amdgpu.loadInInitrd = false;
+    # pulseaudio.enable = false; # use pipewire
+    # sensor.iio.enable = false;
   };
 
   # Bootloader
