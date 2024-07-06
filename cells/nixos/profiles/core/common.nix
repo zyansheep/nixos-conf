@@ -50,15 +50,15 @@
 
   # Use Pipewire for sound
   # security.rtkit.enable = true;
-  /* services.pipewire = {
+  services.pipewire = {
     enable = true;
     alsa.enable = true;
-    alsa.support32Bit = true;
+    # alsa.support32Bit = true;
     pulse.enable = true;
     # jack.enable = true;
     # media-session.enable = true;
-  }; */
-  hardware.pulseaudio.enable = true;
+  };
+  # hardware.pulseaudio.enable = true;
 
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;

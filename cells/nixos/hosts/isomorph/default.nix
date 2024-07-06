@@ -23,7 +23,7 @@ in {
     development.rust
     # development.arduino
     # development.shell.starship
-    # development.android
+    development.android
 
     core.minimal
     core.common
@@ -72,6 +72,8 @@ in {
     # sensor.iio.enable = false;
   };
 
+  networking.networkmanager.wifi.backend = "iwd";
+
   # Bootloader
   boot = {
     zfs = {
@@ -83,7 +85,7 @@ in {
       pkiBundle = "/persist/etc/secureboot";
     };
   };
-  
+
   # Root Rollback via "Erase my Darlings" https://grahamc.com/blog/erase-your-darlings/
   zfsConfig.enableSystemdRollback = true; # enable systemd initrd rollback via zfs module
 

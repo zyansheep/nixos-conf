@@ -1,9 +1,10 @@
+{inputs, common}:
 {
   lib,
-  config,
+  # config,
   pkgs,
   ...
-}: {
+}: with lib; {
   # Enable Virtualization for Android Emulator
   boot.kernelModules = ["kvm-amd"];
   virtualisation.libvirtd.enable = true;
@@ -15,10 +16,10 @@
   ];
 
   # Allow Unfree Android Studio
-  nixpkgs.config.allowUnfreePackages = ["android-studio"];
-  nixpkgs.config.allowUnfreePredicate = pkg:
-    builtins.elem (lib.getName pkg) [
-      "android-studio-stable"
-    ];
-  nixpkgs.config.allowUnfree = true;
+  # config.allowUnfreePackages = ["android-studio"];
+  # config.allowUnfreePredicate = pkg:
+  #  builtins.elem (lib.getName pkg) [
+  #    "android-studio-stable"
+  #  ];
+  # config.allowUnfree = true;
 }
