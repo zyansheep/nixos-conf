@@ -13,7 +13,7 @@ in {
     ./hardware-configuration.nix
     ./power-conf.nix
 
-    # inputs.nixos-hardware.nixosModules.framework-13-7040-amd
+    inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
 
     # creative.common
