@@ -68,6 +68,7 @@ in {
   ];
 
   services.flatpak.enable = true;
+  services.mullvad-vpn.enable = true;
 
   # Enable virtualization
   virtualisation.libvirtd.enable = true;
