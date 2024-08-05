@@ -136,6 +136,7 @@ in {
   programs.kdeconnect.enable = true; # kde connect
   programs.nix-ld.enable = true; # run non nix-linked program
   services.flatpak.enable = true; # enable flatpak
+  services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein
   # Nix Helper
   programs.nh = {
