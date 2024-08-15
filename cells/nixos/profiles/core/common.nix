@@ -58,6 +58,16 @@
     # jack.enable = true;
     # media-session.enable = true;
   };
+
+  programs.nix-ld.enable = true; # run non nix-linked program
+  programs.nix-ld.libraries = with pkgs; [
+    xorg.libX11
+    xorg.libXcursor
+    xorg.libxcb
+    xorg.libXi
+    libxkbcommon
+    wayland
+  ];
   # hardware.pulseaudio.enable = true;
 
   # Using NetworkManager because it is easy

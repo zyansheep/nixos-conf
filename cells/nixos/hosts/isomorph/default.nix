@@ -134,7 +134,6 @@ in {
   services.fwupd.enable = true; # firmware update
   services.fprintd.enable = true; # fingerprint
   programs.kdeconnect.enable = true; # kde connect
-  programs.nix-ld.enable = true; # run non nix-linked program
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein
