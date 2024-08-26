@@ -97,7 +97,6 @@ in {
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
     "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
   ];
-  time.timeZone = lib.mkDefault "America/New_York";
 
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)

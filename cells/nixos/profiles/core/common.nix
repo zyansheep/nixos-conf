@@ -18,18 +18,11 @@
   ];
 
   # MDNS
-  # services.avahi.enable = true;
   services.avahi = {
     enable = true;
     nssmdns4 = true;
     openFirewall = true;
   };
-
-  # Touchpad
-  # services.xserver.libinput = {
-  #   enable = true;
-  #   touchpad.naturalScrolling = true;
-  # };
 
   # Fonts
   # Font Declaration
@@ -49,7 +42,7 @@
   };
 
   # Use Pipewire for sound
-  # security.rtkit.enable = true;
+  security.rtkit.enable = true;
   services.pipewire = {
     enable = true;
     alsa.enable = true;
@@ -59,7 +52,8 @@
     # media-session.enable = true;
   };
 
-  programs.nix-ld.enable = true; # run non nix-linked program
+  # run non nix-linked programs
+  programs.nix-ld.enable = true;
   programs.nix-ld.libraries = with pkgs; [
     xorg.libX11
     xorg.libXcursor
@@ -68,8 +62,9 @@
     libxkbcommon
     wayland
   ];
-  # hardware.pulseaudio.enable = true;
 
+  # automatic timezone setting
+  services.automatic-timezoned.enable = true;
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;
 }
