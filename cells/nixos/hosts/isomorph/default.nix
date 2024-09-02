@@ -92,6 +92,7 @@ in {
   environment.etc = {
     "shadow" = {source = "/persist/etc/shadow";}; # persist passwords
     "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";}; # persist NetworkManager
+    "mullvad-vpn" = { source = "/persist/etc/mullvad-vpn"; };
   };
   systemd.tmpfiles.rules = [
     "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
