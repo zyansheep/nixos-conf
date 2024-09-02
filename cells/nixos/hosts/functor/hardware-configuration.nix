@@ -27,6 +27,11 @@
     fsType = "zfs";
   };
 
+  fileSystems."/media/steam" = {
+    device = "zpool/local/steam";
+    fsType = "zfs";
+  };
+
   fileSystems."/home" = {
     device = "zpool/safe/home";
     fsType = "zfs";
