@@ -2,7 +2,6 @@
   inputs,
   suites,
   profiles,
-  lib,
   ...
 }: let
   system = "x86_64-linux";
@@ -72,7 +71,7 @@ in {
     # sensor.iio.enable = false;
   };
 
-  networking.networkmanager.wifi.backend = "iwd";
+  networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   # Bootloader
   boot = {
