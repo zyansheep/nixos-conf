@@ -13,9 +13,8 @@
   ];
 
   # default packages
-  environment.systemPackages = with pkgs; [
-    firefox # Browser
-  ];
+  # environment.systemPackages = with pkgs; [];
+  programs.firefox.enable = true;
 
   # MDNS
   services.avahi = {

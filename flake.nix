@@ -103,6 +103,10 @@
         flake-utils.follows = "flake-utils";
       };
     };
+    firefox = {
+      url = "github:nix-community/flake-firefox-nightly";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     # nix-diff = {
     #   url = "github:Gabriella439/nix-diff";
     #   inputs = {
