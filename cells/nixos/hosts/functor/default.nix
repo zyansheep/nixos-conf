@@ -67,6 +67,9 @@ in {
     }
   ];
 
+  # enable firefox nightly
+  programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
+
   services.flatpak.enable = true;
   services.mullvad-vpn.enable = true;
 
