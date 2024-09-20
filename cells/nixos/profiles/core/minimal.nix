@@ -40,5 +40,6 @@ with lib; {
 
   environment.shellAliases = {
     sudo = "doas";
+    neofetch = "fastfetch";
   };
 }
