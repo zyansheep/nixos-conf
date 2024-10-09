@@ -27,6 +27,7 @@ with lib; {
     fastfetch # for r/unixporn
     dua # Disk Usage Analyzer
     nmap # Network Mapper
+    traceroute # traceroute
     lsof # List open files
     usbutils # USB utilities
     pciutils # PCI utilities
