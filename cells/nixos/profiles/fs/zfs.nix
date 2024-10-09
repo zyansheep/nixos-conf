@@ -26,11 +26,11 @@ in
         kernelParams = ["nohibernate"];
         zfs = {
           forceImportRoot = false;
-          package = pkgs.zfs_unstable;
+          # package = pkgs.zfs_unstable;
         };
         supportedFilesystems = ["zfs"];
-        # kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
-        kernelPackages = pkgs.linuxPackages_latest;
+        kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
+        # kernelPackages = pkgs.linuxPackages_latest;
       };
 
       services.zfs = {
