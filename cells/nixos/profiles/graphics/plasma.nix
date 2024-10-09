@@ -10,9 +10,7 @@
 with lib; {
   environment.systemPackages = with pkgs; [
     # latte-dock
-    qt6.qttools
-    okular
-    ark
+    kdePackages.okular
     aha # firmware security window in KDE info center
     wayland-utils # for info center
     clinfo # opencl info for info center
