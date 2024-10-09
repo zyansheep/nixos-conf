@@ -60,6 +60,7 @@
     xorg.libXi
     libxkbcommon
     wayland
+    SDL
   ];
 
   # automatic timezone setting
