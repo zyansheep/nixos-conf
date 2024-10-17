@@ -72,6 +72,7 @@
     registry = {
       home.flake = inputs.home;
       l.flake = inputs.latest;
+      firefox-nightly.flake = inputs.firefox;
       nixpkgs.flake = inputs.nixos; # stable
       nixos-hardware.flake = inputs.nixos-hardware; #
     };

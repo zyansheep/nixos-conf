@@ -134,7 +134,8 @@ in {
   services.fprintd.enable = true; # fingerprint
   programs.kdeconnect.enable = true; # kde connect
   programs.firejail.enable = true;
-  programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
+  # Firefox Nightly
+  # programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein

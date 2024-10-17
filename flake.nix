@@ -105,7 +105,7 @@
     };
     firefox = {
       url = "github:nix-community/flake-firefox-nightly";
-      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "latest";
     };
     # nix-diff = {
     #   url = "github:Gabriella439/nix-diff";

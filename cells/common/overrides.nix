@@ -9,6 +9,7 @@
 in {
   inherit
     (latest)
+    firefox
     vscodium
     alejandra
     nil

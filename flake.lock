@@ -186,7 +186,7 @@
         "lib-aggregate": "lib-aggregate",
         "mozilla": "mozilla",
         "nixpkgs": [
-          "nixpkgs"
+          "latest"
         ]
       },
       "locked": {
