@@ -25,7 +25,7 @@ in
       boot = {
         kernelParams = ["nohibernate"];
         supportedFilesystems = ["zfs"];
-        kernelPackages = pkgs.linuxPackages_6_10;
+        # kernelPackages = pkgs.linuxPackages_6_10;
       };
 
       services.zfs = {

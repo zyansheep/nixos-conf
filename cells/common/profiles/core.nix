@@ -32,10 +32,10 @@
   };
 
   nix = {
-    package = pkgs.nixFlakes;
-    extraOptions = ''
-      experimental-features = nix-command flakes
-    '';
+    package = pkgs.nixVersions.stable;
+    # extraOptions = ''
+    #   experimental-features = nix-command flakes
+    # '';
     settings = let
       GB = 1024 * 1024 * 1024;
     in {
