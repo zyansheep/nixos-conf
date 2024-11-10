@@ -69,6 +69,7 @@ in {
 
   # enable firefox nightly
   programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
+  networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   services.flatpak.enable = true;
   services.mullvad-vpn.enable = true;
