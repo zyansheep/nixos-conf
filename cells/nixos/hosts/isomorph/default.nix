@@ -35,7 +35,7 @@ in {
     gaming.steam
 
     graphics.plasma
-    # graphics.drivers.amd
+    graphics.drivers.amd # enable graphics drivers for AMD cpu
     fs.zfs
 
     # devices.xp-pen
@@ -133,6 +133,15 @@ in {
   services.fwupd.enable = true; # firmware update
   services.fprintd.enable = true; # fingerprint
   programs.kdeconnect.enable = true; # kde connect
+  # services.paperless.enable = true; # paperless doc ocr
+  # services.paperless.settings = {
+  #   PAPERLESS_ADMIN_USER = "admin";
+  #   PAPERLESS_ADMIN_PASSWORD = "password";
+  #   PAPERLESS_AUTO_LOGIN_USERNAME = "admin";
+  # };
+  programs.firejail.enable = true;
+  # Firefox Nightly
+  # programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein

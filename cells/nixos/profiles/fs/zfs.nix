@@ -24,13 +24,8 @@ in
     {
       boot = {
         kernelParams = ["nohibernate"];
-        zfs = {
-          forceImportRoot = false;
-          package = pkgs.zfs_unstable;
-        };
         supportedFilesystems = ["zfs"];
-        # kernelPackages = config.boot.zfs.package.latestCompatibleLinuxPackages;
-        kernelPackages = pkgs.linuxPackages_latest;
+        # kernelPackages = pkgs.linuxPackages_6_10;
       };
 
       services.zfs = {

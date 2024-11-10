@@ -32,10 +32,10 @@
   };
 
   nix = {
-    package = pkgs.nixFlakes;
-    extraOptions = ''
-      experimental-features = nix-command flakes
-    '';
+    package = pkgs.nixVersions.stable;
+    # extraOptions = ''
+    #   experimental-features = nix-command flakes
+    # '';
     settings = let
       GB = 1024 * 1024 * 1024;
     in {
@@ -72,6 +72,7 @@
     registry = {
       home.flake = inputs.home;
       l.flake = inputs.latest;
+      firefox-nightly.flake = inputs.firefox;
       nixpkgs.flake = inputs.nixos; # stable
       nixos-hardware.flake = inputs.nixos-hardware; #
     };

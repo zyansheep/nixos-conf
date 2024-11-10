@@ -24,9 +24,10 @@ with lib; {
 
     # Analysis Tools
     inxi # System info
-    neofetch # for r/unixporn
+    fastfetch # for r/unixporn
     dua # Disk Usage Analyzer
     nmap # Network Mapper
+    traceroute # traceroute
     lsof # List open files
     usbutils # USB utilities
     pciutils # PCI utilities
