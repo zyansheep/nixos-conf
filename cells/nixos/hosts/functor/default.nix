@@ -13,6 +13,7 @@ in {
     # devices.rtl-sdr
 
     graphics.plasma
+    graphics.drivers.amd
     fs.zfs
 
     core.minimal

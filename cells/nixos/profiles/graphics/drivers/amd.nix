@@ -10,4 +10,5 @@
 with lib; {
   hardware.graphics.enable = true;
   hardware.graphics.enable32Bit = true;
+  hardware.amdgpu.opencl.enable = true;
 }
