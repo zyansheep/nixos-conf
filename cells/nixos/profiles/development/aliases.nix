@@ -17,7 +17,7 @@
     myip = "dig +short myip.opendns.com @208.67.222.222 2>&1";
 
     # nix
-    nrbu = "git add . && doas nixos-rebuild --flake . --use-remote-sudo switch";
+    nrbu = "git add . && nixos-rebuild --flake . --use-remote-sudo switch";
     n = "nix";
     np = "n profile"; # nix profile
     npi = "np install"; # nix profile install
