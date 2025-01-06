@@ -87,8 +87,8 @@ in {
 
   # Root Rollback via "Erase my Darlings" https://grahamc.com/blog/erase-your-darlings/
   zfsConfig.enableSystemdRollback = true; # enable systemd initrd rollback via zfs module
-
   environment.etc = {
+    "machine-id" = {source = "/persist/etc/machine-id";}; # persist journalctl stuff
     "shadow" = {source = "/persist/etc/shadow";}; # persist passwords
     "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";}; # persist NetworkManager
     "mullvad-vpn" = { source = "/persist/etc/mullvad-vpn"; };
