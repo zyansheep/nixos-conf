@@ -24,7 +24,7 @@
     ns = "n search --no-update-lock-file";
     nsl = "ns l"; # search latest nixpkgs
     nf = "n flake";
-    nrb = "git add . && nixos-rebuild --flake --use-remote-sudo switch";
+    nrb = "git add . && nixos-rebuild --flake . --use-remote-sudo switch";
     nrbu = "nf update && nrb";
 
     # sudo

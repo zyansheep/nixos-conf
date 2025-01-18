@@ -64,7 +64,7 @@
   ];
 
   # automatic timezone setting
-  services.automatic-timezoned.enable = true;
+  services.localtime.enable = true;
   # time.timeZone = "America/New_York";
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;
