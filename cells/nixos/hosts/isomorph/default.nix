@@ -1,10 +1,5 @@
-{
-  inputs,
-  suites,
-  profiles,
-  ...
-}: let
-  system = "x86_64-linux";
+{ inputs, suites, profiles, ... }:
+let system = "x86_64-linux";
 in {
   imports = with profiles; [
     suites.base
@@ -75,9 +70,7 @@ in {
 
   # Bootloader
   boot = {
-    zfs = {
-      extraPools = ["zpool"];
-    };
+    zfs = { extraPools = [ "zpool" ]; };
     loader.efi.canTouchEfiVariables = true;
     lanzaboote = {
       enable = true;
@@ -86,11 +79,17 @@ in {
   };
 
   # Root Rollback via "Erase my Darlings" https://grahamc.com/blog/erase-your-darlings/
-  zfsConfig.enableSystemdRollback = true; # enable systemd initrd rollback via zfs module
+  zfsConfig.enableSystemdRollback =
+    true; # enable systemd initrd rollback via zfs module
   environment.etc = {
-    "machine-id" = {source = "/persist/etc/machine-id";}; # persist journalctl stuff
-    "shadow" = {source = "/persist/etc/shadow";}; # persist passwords
-    "NetworkManager/system-connections" = {source = "/persist/etc/NetworkManager/system-connections/";}; # persist NetworkManager
+    "machine-id" = {
+      source = "/persist/etc/machine-id";
+    }; # persist journalctl stuff
+    # "localtime" = { source = "/persist/etc/localtime"; }; # timezone
+    "shadow" = { source = "/persist/etc/shadow"; }; # persist passwords
+    "NetworkManager/system-connections" = {
+      source = "/persist/etc/NetworkManager/system-connections/";
+    }; # persist NetworkManager
     "mullvad-vpn" = { source = "/persist/etc/mullvad-vpn"; };
   };
   systemd.tmpfiles.rules = [
@@ -109,23 +108,22 @@ in {
     options cfg80211 ieee80211_regdom="US" # configure regulatory domain
   '';
 
-  services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
+  services.earlyoom.enable =
+    false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "14df389e";
   networking.hostName = "isomorph";
   networking.firewall.enable = false;
 
   # doas
-  security.doas.extraRules = [
-    {
-      users = ["zyansheep"];
-      keepEnv = true;
-      persist = true;
-    }
-  ];
+  security.doas.extraRules = [{
+    users = [ "zyansheep" ];
+    keepEnv = true;
+    persist = true;
+  }];
 
   # groups
-  users.users.zyansheep.extraGroups = ["adbusers" "uucp"];
+  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
 
   documentation.info.enable = false;
 
@@ -155,21 +153,21 @@ in {
 
   # zfs snapshot service
   services.sanoid = {
-      enable = true;
-      interval = "hourly";
+    enable = true;
+    interval = "hourly";
 
-      datasets = {
-        "zpool/safe" = {
-          hourly = 1;
-          daily = 15;
-          monthly = 12;
-          yearly = 1;
-          autoprune = true;
-          autosnap = true;
-          recursive = true;
-        };
+    datasets = {
+      "zpool/safe" = {
+        hourly = 1;
+        daily = 15;
+        monthly = 12;
+        yearly = 1;
+        autoprune = true;
+        autosnap = true;
+        recursive = true;
       };
     };
+  };
 
   # services.plantuml-server.enable = true;
 

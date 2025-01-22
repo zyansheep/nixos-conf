@@ -1,11 +1,5 @@
-{
-  inputs,
-  common,
-}: {
-  lib,
-  pkgs,
-  ...
-}: {
+{ inputs, common, }:
+{ lib, pkgs, config, ... }: {
   imports = [
     # Include minimal configuration
     # inputs.nixos.nixosProfiles.core.minimal
@@ -13,7 +7,7 @@
   ];
 
   # default packages
-  # environment.systemPackages = with pkgs; [];
+  environment.systemPackages = with pkgs; [ pkg-config ];
   programs.firefox.enable = true;
 
   # MDNS
@@ -35,8 +29,8 @@
       source-code-pro
     ];
     fontconfig.defaultFonts = {
-      monospace = ["DejaVu Sans Mono for Powerline"];
-      sansSerif = ["DejaVu Sans"];
+      monospace = [ "DejaVu Sans Mono for Powerline" ];
+      sansSerif = [ "DejaVu Sans" ];
     };
   };
 
@@ -53,19 +47,78 @@
 
   # run non nix-linked programs
   programs.nix-ld.enable = true;
-  programs.nix-ld.libraries = with pkgs; [
-    xorg.libX11
-    xorg.libXcursor
-    xorg.libxcb
-    xorg.libXi
-    libxkbcommon
-    wayland
-    SDL2
-  ];
+
+  programs.nix-ld.libraries = with pkgs;
+    [
+      curl
+      libxml2
+      xz
+      systemd
+      acl
+      attr
+      bzip2
+      dbus
+      expat
+      fontconfig
+      freetype
+      fuse3
+      icu
+      libnotify
+      libsodium
+      libssh
+      libunwind
+      libusb1
+      libuuid
+      nspr
+      nss
+      stdenv.cc.cc
+      util-linux
+      zlib
+      zstd
+      SDL
+      SDL2
+      openssl
+    ] ++ lib.optionals (config.hardware.graphics.enable) [
+
+      wayland
+      pipewire
+      cups
+      libxkbcommon
+      pango
+      mesa
+      libdrm
+      libglvnd
+      libpulseaudio
+      atk
+      cairo
+      alsa-lib
+      at-spi2-atk
+      at-spi2-core
+      gdk-pixbuf
+      glib
+      gtk3
+      libGL
+      libappindicator-gtk3
+      vulkan-loader
+      xorg.libX11
+      xorg.libXScrnSaver
+      xorg.libXcomposite
+      xorg.libXcursor
+      xorg.libXdamage
+      xorg.libXext
+      xorg.libXfixes
+      xorg.libXi
+      xorg.libXrandr
+      xorg.libXrender
+      xorg.libXtst
+      xorg.libxcb
+      xorg.libxkbfile
+      xorg.libxshmfence
+    ];
 
   # automatic timezone setting
-  services.localtime.enable = true;
-  # time.timeZone = "America/New_York";
+  # services.automatic-timezoned.enable = true; #idk why this doesn't work :/
+  time.timeZone = "America/New_York";
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = true;
 }
