@@ -1,10 +1,5 @@
-{
-  inputs,
-  suites,
-  profiles,
-  ...
-}: let
-  system = "x86_64-linux";
+{ inputs, suites, profiles, ... }:
+let system = "x86_64-linux";
 in {
   imports = with profiles; [
     suites.base
@@ -51,7 +46,7 @@ in {
 
   # Bootloader
   boot = {
-    zfs = {extraPools = ["zpool"];};
+    zfs = { extraPools = [ "zpool" ]; };
     loader.systemd-boot.enable = true;
   };
 
@@ -60,16 +55,15 @@ in {
   networking.hostId = "95196fe2";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [
-    {
-      users = ["zyansheep"];
-      keepEnv = true;
-      persist = true;
-    }
-  ];
+  security.doas.extraRules = [{
+    users = [ "zyansheep" ];
+    keepEnv = true;
+    persist = true;
+  }];
 
   # enable firefox nightly
-  programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
+  programs.firefox.package =
+    inputs.firefox.packages.${system}.firefox-nightly-bin;
   networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   services.flatpak.enable = true;

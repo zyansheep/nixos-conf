@@ -1,14 +1,5 @@
-{
-  inputs,
-  cell,
-  ...
-}: {
-  self,
-  config,
-  lib,
-  pkgs,
-  ...
-}: {
+{ inputs, cell, ... }:
+{ self, config, lib, pkgs, ... }: {
   environment = {
     # Selection of sysadmin tools that can come in handy
     systemPackages = with pkgs; [
@@ -36,19 +27,18 @@
     # extraOptions = ''
     #   experimental-features = nix-command flakes
     # '';
-    settings = let
-      GB = 1024 * 1024 * 1024;
+    settings = let GB = 1024 * 1024 * 1024;
     in {
       # Prevents impurities in builds
       sandbox = lib.mkDefault true;
 
       # Give root user and wheel group special Nix privileges.
-      trusted-users = ["root" "@wheel"];
+      trusted-users = [ "root" "@wheel" ];
 
       keep-outputs = lib.mkDefault true;
       keep-derivations = lib.mkDefault true;
       builders-use-substitutes = true;
-      experimental-features = ["flakes" "nix-command"];
+      experimental-features = [ "flakes" "nix-command" ];
       fallback = true;
       warn-dirty = false;
 
@@ -57,24 +47,20 @@
     };
 
     # Improve nix store disk usage
-    /*
-       gc = {
-      automatic = true;
-      options = "--delete-older-than 7d";
-    };
+    /* gc = {
+         automatic = true;
+         options = "--delete-older-than 7d";
+       };
     */
 
-    nixPath = [
-      "nixpkgs=${pkgs.path}"
-      "home-manager=flake:home"
-    ];
+    nixPath = [ "nixpkgs=${pkgs.path}" "home-manager=flake:home" ];
 
     registry = {
       home.flake = inputs.home;
       l.flake = inputs.latest;
       firefox-nightly.flake = inputs.firefox;
       nixpkgs.flake = inputs.nixos; # stable
-      nixos-hardware.flake = inputs.nixos-hardware; #
+      nixos-hardware.flake = inputs.nixos-hardware;
     };
   };
 }

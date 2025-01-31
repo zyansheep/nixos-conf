@@ -9,6 +9,7 @@ in {
 
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
+    inputs.impermanence.nixosModules.impermanence
 
     # creative.common
     # creative.steno
@@ -79,24 +80,19 @@ in {
   };
 
   # Root Rollback via "Erase my Darlings" https://grahamc.com/blog/erase-your-darlings/
-  zfsConfig.enableSystemdRollback =
-    true; # enable systemd initrd rollback via zfs module
-  environment.etc = {
-    "machine-id" = {
-      source = "/persist/etc/machine-id";
-    }; # persist journalctl stuff
-    # "localtime" = { source = "/persist/etc/localtime"; }; # timezone
-    "shadow" = { source = "/persist/etc/shadow"; }; # persist passwords
-    "NetworkManager/system-connections" = {
-      source = "/persist/etc/NetworkManager/system-connections/";
-    }; # persist NetworkManager
-    "mullvad-vpn" = { source = "/persist/etc/mullvad-vpn"; };
+  environment.persistence."/persist" = {
+    directories = [
+      "/var/log" # for journalctl
+      "/var/lib/bluetooth"
+      "/var/lib/fprint"
+      "/var/lib/systemd/coredump"
+      "/etc/NetworkManager/system-connections"
+      "/etc/mullvad-vpn"
+    ];
+    files = [ "/etc/machine-id" ];
   };
-  systemd.tmpfiles.rules = [
-    "L /var/lib/bluetooth - - - - /persist/var/lib/bluetooth" # persist bluetooth connections
-    "L /var/lib/fprint - - - - /persist/var/lib/fprint" # persist fingerprints
-  ];
-
+  zfsConfig.enableSystemdRollback = true;
+  environment.etc = { "shadow".source = "/persist/etc/shadow"; };
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
