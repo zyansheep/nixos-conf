@@ -39,5 +39,7 @@
     up = ifSudo "doas systemctl start";
     dn = ifSudo "doas systemctl stop";
     jtl = "journalctl";
+
+    sc = "vi ~/.config/sway/config";
   };
 }

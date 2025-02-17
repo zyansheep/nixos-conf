@@ -120,5 +120,5 @@
   # services.automatic-timezoned.enable = true; #idk why this doesn't work :/
   time.timeZone = "America/New_York";
   # Using NetworkManager because it is easy
-  networking.networkmanager.enable = true;
+  networking.networkmanager.enable = lib.mkDefault true;
 }

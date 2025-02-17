@@ -22,11 +22,17 @@ with lib; {
 
   # Commonly used dev packages
   environment.systemPackages = with pkgs; [
+    helix # postmodern text editor
+    # language servers
+    vscode-langservers-extracted
+    # nil
+    nixd
+
     gnumake
     gcc
     python3
     nodejs
     gdb
-    nil # Nix LSP
+    gitui # blazingly fast git ui!
   ];
 }

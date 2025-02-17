@@ -5,7 +5,7 @@ in {
     suites.base
 
     ./hardware-configuration.nix
-    ./power-conf.nix
+    # ./power-conf.nix
 
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
@@ -30,7 +30,8 @@ in {
     gaming.common
     gaming.steam
 
-    graphics.plasma
+    #graphics.plasma
+    graphics.sway
     graphics.drivers.amd # enable graphics drivers for AMD cpu
     fs.zfs
 
@@ -67,7 +68,18 @@ in {
     # sensor.iio.enable = false;
   };
 
-  networking.networkmanager.wifi.backend = "wpa_supplicant";
+  # networking.networkmanager.wifi.backend = "wpa_supplicant";
+  networking.networkmanager.enable = false;
+  networking.wireless.iwd.enable = true;
+  networking.wireless.iwd.settings = {
+    Network = {
+      EnableIPv6 = true;
+      RoutePriorityOffset = 300;
+    };
+    Settings = {
+      AutoConnect = true;
+    };
+  };
 
   # Bootloader
   boot = {
@@ -86,7 +98,8 @@ in {
       "/var/lib/bluetooth"
       "/var/lib/fprint"
       "/var/lib/systemd/coredump"
-      "/etc/NetworkManager/system-connections"
+      "/var/lib/iwd"
+      # "/etc/NetworkManager/system-connections"
       "/etc/mullvad-vpn"
     ];
     files = [ "/etc/machine-id" ];
@@ -126,26 +139,27 @@ in {
   # Services
   services.fwupd.enable = true; # firmware update
   services.fprintd.enable = true; # fingerprint
-  programs.kdeconnect.enable = true; # kde connect
+  # programs.kdeconnect.enable = true; # kde connect
   # services.paperless.enable = true; # paperless doc ocr
   # services.paperless.settings = {
   #   PAPERLESS_ADMIN_USER = "admin";
   #   PAPERLESS_ADMIN_PASSWORD = "password";
   #   PAPERLESS_AUTO_LOGIN_USERNAME = "admin";
   # };
-  programs.firejail.enable = true;
+  # programs.firejail.enable = true;
   # Firefox Nightly
   # programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein
   # Nix Helper
-  programs.nh = {
-    enable = true;
-    clean.enable = true;
-    clean.extraArgs = "--keep-since 4d --keep 3";
-    flake = "/home/zyansheep/nixos-conf";
-  };
+  /* programs.nh = {
+       enable = true;
+       clean.enable = true;
+       clean.extraArgs = "--keep-since 4d --keep 3";
+       flake = "/home/zyansheep/nixos-conf";
+     };
+  */
 
   # zfs snapshot service
   services.sanoid = {
