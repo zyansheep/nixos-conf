@@ -40,6 +40,6 @@
     dn = ifSudo "doas systemctl stop";
     jtl = "journalctl";
 
-    sc = "vi ~/.config/sway/config";
+    sc = "hx ~/.config/sway/config";
   };
 }
