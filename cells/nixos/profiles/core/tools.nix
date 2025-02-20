@@ -12,6 +12,7 @@ with lib; {
     # File Tools
     unzip # Unzip
     zip # Zip
+    unar # general uncompression tool (with subfolder autodetection)
     file # Print File Info
     curl # Clone URL
     # micro # Micro Text Editor
@@ -38,6 +39,7 @@ with lib; {
     lm_sensors # Sensors
     acpi # Power Tools
     powertop # Top Power Consuming Applications
+    powerstat # tool to monitor power usage
     whois # DNS lookup
     dmidecode # Hardware/Firmware info
     drm_info # Display renderer manager info
@@ -68,6 +70,7 @@ with lib; {
     hyperfine # Benchmarking tool
 
     # Extra tools
+    yt-dlp
 
     # appimage
     (appimage-run.override {extraPkgs = pkgs: [libthai];})

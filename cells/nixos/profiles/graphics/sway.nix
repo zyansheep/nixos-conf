@@ -4,12 +4,14 @@
     grim # screenshot functionality
     slurp # rectangle selection for screenshot functionality
     wl-clipboard # wl-copy and wl-paste for copy/paste from stdin / stdout
+    cliphist # clipboard manager
+    rofi-wayland # run menu + clipboard selection
     mako # notification system developed by swaywm maintainer
-    waybar
+    waybar # topbar
     nerd-fonts.symbols-only # symbols for status bar
     font-awesome
     impala # tui wifi manager
-    zathura # pdf viewer
+    zathura # vim pdf viewer
   ];
   services.logind.powerKey = "ignore"; # ignore power key
   services.logind.lidSwitch = "suspend"; # lid switch triggers suspend
