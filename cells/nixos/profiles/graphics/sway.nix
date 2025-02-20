@@ -31,10 +31,6 @@
 
   # Syncthing only enable on AC
   systemd.services.syncthing.unitConfig.ConditionACPower = "true";
-  # services.udev.extraRules = ''
-  #   SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.systemd}/bin/systemctl start syncthing.service"
-  #   SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.systemd}/bin/systemctl stop syncthing.service"
-  # '';
 
   # services.xserver.displayManager.gdm.enable = true;
 

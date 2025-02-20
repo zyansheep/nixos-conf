@@ -7,6 +7,7 @@ _: {
 
   programs.direnv.enableZshIntegration = true;
 
+  # better cd command (use `z`!)
   programs.zoxide.enable = true;
 
   programs.zsh = {
