@@ -7,9 +7,9 @@
   # boot.zfs.package = pkgs.zfs_unstable;
   boot = {
     blacklistedKernelModules = ["hid_sensor_hub"];
-    extraModprobeConfig = ''
-      options snd_hda_intel power_save=1
-    '';
+    # extraModprobeConfig = ''
+    #   options snd_hda_intel power_save=1
+    # '';
     kernel.sysctl = {
       # enable REISUB: https://www.kernel.org/doc/html/latest/admin-guide/sysrq.html
       "kernel.sysrq" = 1 + 16 + 32 + 64 + 128;
@@ -25,7 +25,10 @@
 
   powerManagement = {
     enable = true;
-    cpuFreqGovernor = lib.mkDefault "powersave";
-    # powertop.enable = true;
+    # cpuFreqGovernor = lib.mkDefault "powersave";
+    powertop.enable = true;
   };
+  # services.tlp.enable = lib.mkForce false;
+  # services.power-profiles-daemon.enable = lib.mkForce false;
+  # services.auto-cpufreq.enable = lib.mkForce true;
 }

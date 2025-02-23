@@ -1,12 +1,5 @@
-{
-  inputs,
-  common,
-}: {
-  lib,
-  config,
-  pkgs,
-  ...
-}:
+{ inputs, common, }:
+{ lib, config, pkgs, ... }:
 with lib; {
   imports = [
     # "./aliases.nix"
@@ -24,13 +17,17 @@ with lib; {
   environment.systemPackages = with pkgs; [
     helix # postmodern text editor
     # language servers
-    vscode-langservers-extracted
+    vscode-langservers-extracted # json, jsonc, other servers...
+    ruff # python
     # nil
     nixd
 
     gnumake
     gcc
-    python3
+    (pkgs.writeShellScriptBin "python" ''
+      export LD_LIBRARY_PATH=$NIX_LD_LIBRARY_PATH
+      exec ${pkgs.python3}/bin/python "$@"
+    '')
     nodejs
     gdb
     gitui # blazingly fast git ui!
