@@ -67,6 +67,7 @@ in {
     # pulseaudio.enable = false; # use pipewire
     # sensor.iio.enable = false;
   };
+  zramSwap.enable = true;
 
   # networking.networkmanager.wifi.backend = "wpa_supplicant";
   networking.networkmanager.enable = false;
