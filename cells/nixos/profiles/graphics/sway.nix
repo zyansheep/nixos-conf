@@ -12,6 +12,7 @@
     font-awesome
     impala # tui wifi manager
     zathura # vim pdf viewer
+    swayimg
   ];
   services.logind.powerKey = "ignore"; # ignore power key
   services.logind.lidSwitch = "suspend"; # lid switch triggers suspend
