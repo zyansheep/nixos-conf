@@ -32,6 +32,17 @@
   # Syncthing only enable on AC
   systemd.services.syncthing.unitConfig.ConditionACPower = "true";
 
+  # enable auto-start sway on login
+  services.greetd = {
+    enable = true;
+    settings = {
+      default_session = {
+        command = "${pkgs.greetd.tuigreet}/bin/tuigreet --time --cmd sway";
+        user = "zyansheep";
+      };
+    };
+  };
+
   # services.xserver.displayManager.gdm.enable = true;
 
   # Enable the gnome-keyring secrets vault.
