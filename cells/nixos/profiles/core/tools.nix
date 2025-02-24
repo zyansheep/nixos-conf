@@ -22,6 +22,8 @@ with lib; {
     fd # Alternative to `find`
     ripgrep # Alternative to `grep`
     zellij # Terminal Multiplexer
+    yazi # Terminal gui preview
+    gnome-epub-thumbnailer # epub preview for yazi
 
     # Analysis Tools
     inxi # System info
