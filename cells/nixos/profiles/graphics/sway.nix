@@ -9,7 +9,6 @@
     mako # notification system developed by swaywm maintainer
     waybar # topbar
     nerd-fonts.symbols-only # symbols for status bar
-    font-awesome
     impala # tui wifi manager
     zathura # vim pdf viewer
     swayimg
@@ -60,8 +59,13 @@
     extraPortals = with pkgs;
       [
         xdg-desktop-portal-wlr # wayland roots portal
-        # xdg-desktop-portal-gtk # generic gtk portal
+        xdg-desktop-portal-gtk # generic gtk portal for fallback
+        xdg-desktop-portal-termfilechooser # allow open folders in yazi file viewer
       ];
     wlr.enable = true;
   };
+  # Fix flatpak links not opening browser
+  systemd.user.extraConfig = ''
+    DefaultEnvironment="PATH=/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/nix/var/nix/profiles/default/bin:/run/current-system/sw/bin"
+  '';
 }

@@ -74,7 +74,7 @@ in {
   networking.wireless.iwd.enable = true;
   networking.wireless.iwd.settings = {
     Network = {
-      EnableIPv6 = true;
+      # EnableIPv6 = true;
       RoutePriorityOffset = 300;
     };
     Settings = {

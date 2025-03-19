@@ -92,12 +92,13 @@ in
   # Font Declaration
   fonts = {
     packages = with pkgs; [
-      powerline-fonts
       dejavu_fonts
+      source-code-pro
       font-awesome
       noto-fonts
       noto-fonts-emoji
-      source-code-pro
+      powerline-fonts
+      nerd-fonts.symbols-only
     ];
     fontconfig.defaultFonts = {
       monospace = [ "DejaVu Sans Mono for Powerline" ];
