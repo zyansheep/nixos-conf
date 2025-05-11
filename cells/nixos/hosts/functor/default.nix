@@ -7,14 +7,14 @@ in {
     # devices.webcam-loopback
     # devices.rtl-sdr
 
-    graphics.plasma
+    # graphics.plasma
     graphics.drivers.amd
+    graphics.sway
     fs.zfs
 
     core.minimal
     core.common
     core.tools
-    core.privacy
     core.communications
 
     gaming.common
@@ -23,12 +23,13 @@ in {
 
     development.common
     development.rust
+    development.tools
     # development.android
     # development.shell.zsh
     # development.arduino
 
     services.printing
-    services.ssh
+    # services.ssh
     services.syncthing
     services.containers
   ];
@@ -62,12 +63,29 @@ in {
   }];
 
   # enable firefox nightly
-  programs.firefox.package =
-    inputs.firefox.packages.${system}.firefox-nightly-bin;
+  # programs.firefox.package =
+  # inputs.firefox.packages.${system}.firefox-nightly-bin;
   networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   services.flatpak.enable = true;
   services.mullvad-vpn.enable = true;
+
+  services.sanoid = {
+    enable = true;
+    interval = "hourly";
+
+    datasets = {
+      "zpool/safe" = {
+        hourly = 1;
+        daily = 15;
+        monthly = 12;
+        yearly = 1;
+        autoprune = true;
+        autosnap = true;
+        recursive = true;
+      };
+    };
+  };
 
   # Enable virtualization
   virtualisation.libvirtd.enable = true;
