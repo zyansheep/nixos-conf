@@ -8,7 +8,6 @@
     rofi-wayland # run menu + clipboard selection
     mako # notification system developed by swaywm maintainer
     waybar # topbar
-    nerd-fonts.symbols-only # symbols for status bar
     impala # tui wifi manager
     zathura # vim pdf viewer
     swayimg

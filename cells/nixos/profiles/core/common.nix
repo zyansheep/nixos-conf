@@ -79,7 +79,7 @@ in
 
   # default packages
   environment.systemPackages = with pkgs; [ pkg-config ] ++ commonPackages;
-  programs.firefox.enable = true;
+  programs.firefox.enable = lib.mkDefault true;
 
   # MDNS
   services.avahi = {
@@ -92,13 +92,13 @@ in
   # Font Declaration
   fonts = {
     packages = with pkgs; [
+      font-awesome
+      nerd-fonts.symbols-only
       dejavu_fonts
       source-code-pro
-      font-awesome
       noto-fonts
       noto-fonts-emoji
       powerline-fonts
-      nerd-fonts.symbols-only
     ];
     fontconfig.defaultFonts = {
       monospace = [ "DejaVu Sans Mono for Powerline" ];

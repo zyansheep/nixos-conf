@@ -16,6 +16,7 @@ in {
     development.common
     development.tools
     development.rust
+    development.r-lang
     # development.arduino
     # development.shell.starship
     development.android
@@ -138,6 +139,7 @@ in {
   documentation.info.enable = false;
 
   # Services
+  services.blueman.enable = true;
   services.fwupd.enable = true; # firmware update
   services.fprintd.enable = true; # fingerprint
   # programs.kdeconnect.enable = true; # kde connect
@@ -150,6 +152,7 @@ in {
   # programs.firejail.enable = true;
   # Firefox Nightly
   # programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
+  programs.firefox.enable = false;
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein
