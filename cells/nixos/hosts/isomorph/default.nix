@@ -78,9 +78,7 @@ in {
       # EnableIPv6 = true;
       RoutePriorityOffset = 300;
     };
-    Settings = {
-      AutoConnect = true;
-    };
+    Settings = { AutoConnect = true; };
   };
 
   # Bootloader
@@ -103,6 +101,7 @@ in {
       "/var/lib/iwd"
       # "/etc/NetworkManager/system-connections"
       "/etc/mullvad-vpn"
+      "/var/lib/waydroid" # persist Waydroid data
     ];
     files = [ "/etc/machine-id" ];
   };
@@ -134,7 +133,7 @@ in {
   }];
 
   # groups
-  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
+  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" "waydroid" ];
 
   documentation.info.enable = false;
 
@@ -155,6 +154,9 @@ in {
   programs.firefox.enable = false;
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
+  
+  # Waydroid configuration
+  virtualisation.waydroid.enable = true;
   # services.logmein-hamachi.enable = true; # enable logmein
   # Nix Helper
   /* programs.nh = {
@@ -164,6 +166,12 @@ in {
        flake = "/home/zyansheep/nixos-conf";
      };
   */
+
+  # enable command-not-found
+  environment.etc."programs.sqlite".source =
+    inputs.flake-programs-sqlite.packages.${system}.programs-sqlite;
+  programs.command-not-found.enable = true;
+  programs.command-not-found.dbPath = "/etc/programs.sqlite";
 
   # zfs snapshot service
   services.sanoid = {

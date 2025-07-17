@@ -108,6 +108,10 @@
     #     nixpkgs.follows = "nixpkgs";
     #   };
     # };
+    flake-programs-sqlite = {
+      url = "github:wamserma/flake-programs-sqlite";
+      inputs.nixpkgs.follows = "latest";
+    };
   };
 
   outputs = { self, std, nixpkgs, hive, ... }@inputs:

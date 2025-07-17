@@ -1,10 +1,5 @@
-{
-  lib,
-  config,
-  ...
-}: {
-  environment.shellAliases = let
-    ifSudo = lib.mkIf config.security.sudo.enable;
+{ lib, config, ... }: {
+  environment.shellAliases = let ifSudo = lib.mkIf config.security.sudo.enable;
   in {
     # git
     g = "git";
@@ -24,7 +19,8 @@
     ns = "n search --no-update-lock-file";
     nsl = "ns l"; # search latest nixpkgs
     nf = "n flake";
-    nrb = "git add . && nixos-rebuild --flake . --use-remote-sudo switch";
+    nd = "n develop"; # nix develop
+    nrb = "git add . && nixos-rebuild --flake . --sudo switch";
     nrbu = "nf update && nrb";
 
     # sudo
