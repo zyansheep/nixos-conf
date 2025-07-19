@@ -6,8 +6,6 @@ with lib; {
     vim
     git
     git-lfs
-    # direct replace sudo with doas (so that nixos-rebuild's --sudo works correctly)
-    (pkgs.writeScriptBin "sudo" ''exec doas "$@"'')
   ];
 
   # Enable Flakes and the Nix Command
@@ -25,12 +23,10 @@ with lib; {
 
   # Enable doas instead of sudo
   security.sudo.enable = false;
-  security.doas.enable = true;
-  security.doas.extraRules = [{
-    groups = [ "users" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.sudo-rs.enable = true;
+  /* security.sudo-rs.extraRules = [
+    { groups = [ "users" ]; commands = [ "ALL" ]; }
+  ]; */
 
   environment.shellAliases = { neofetch = "fastfetch"; };
 }

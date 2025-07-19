@@ -1,5 +1,5 @@
 { lib, config, ... }: {
-  environment.shellAliases = let ifSudo = lib.mkIf config.security.sudo.enable;
+  environment.shellAliases = let ifSudo = lib.mkIf config.security.sudo-rs.enable;
   in {
     # git
     g = "git";
@@ -23,17 +23,14 @@
     nrb = "git add . && nixos-rebuild --flake . --sudo switch";
     nrbu = "nf update && nrb";
 
-    # sudo
-    sudo = "doas";
-
     # systemd
     ctl = "systemctl";
-    stl = ifSudo "doas systemctl";
+    stl = ifSudo "sudo systemctl";
     utl = "systemctl --user";
     ut = "systemctl --user start";
     un = "systemctl --user stop";
-    up = ifSudo "doas systemctl start";
-    dn = ifSudo "doas systemctl stop";
+    up = ifSudo "sudo systemctl start";
+    dn = ifSudo "sudo systemctl stop";
     jtl = "journalctl";
 
     sc = "hx ~/.config/sway/config";

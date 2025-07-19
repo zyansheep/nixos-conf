@@ -14,7 +14,7 @@ _: {
     enable = true;
     enableCompletion = true;
 
-    initExtra = ''
+    initContent = ''
       export PATH="$HOME/.npm-packages/bin:$PATH" # node stuff
     '';
 

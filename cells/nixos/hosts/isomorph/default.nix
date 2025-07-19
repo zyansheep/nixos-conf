@@ -125,13 +125,6 @@ in {
   networking.hostName = "isomorph";
   networking.firewall.enable = false;
 
-  # doas
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
-
   # groups
   users.users.zyansheep.extraGroups = [ "adbusers" "uucp" "waydroid" ];
 
@@ -168,10 +161,12 @@ in {
   */
 
   # enable command-not-found
-  environment.etc."programs.sqlite".source =
+  /* environment.etc."programs.sqlite".source =
     inputs.flake-programs-sqlite.packages.${system}.programs-sqlite;
   programs.command-not-found.enable = true;
-  programs.command-not-found.dbPath = "/etc/programs.sqlite";
+  programs.command-not-found.dbPath = "/etc/programs.sqlite"; */
+
+  home-manager.users.zyansheep.programs.command-not-found.enable = true;
 
   # zfs snapshot service
   services.sanoid = {

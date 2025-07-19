@@ -13,7 +13,7 @@ in {
     enable = true;
     package = inputs.cells.common.overrides.vscodium;
     # TODO split extensions based on active modules
-    profiles.default.extensions = with open-vsx; [
+    extensions = with open-vsx; [
       zokugun.sync-settings
       # (just use docker)
       # pkgs.vscode-extensions.jebbs.plantuml # built-in one doesn't integrate with nix
