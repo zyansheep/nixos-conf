@@ -121,6 +121,14 @@ in
   programs.nix-ld.enable = true;
   programs.nix-ld.libraries = commonPackages;
 
+  i18n.inputMethod = {
+    type = "fcitx5";
+    enable = true;
+    fcitx5.addons = with pkgs; [
+      fcitx5-mozc
+      fcitx5-gtk
+    ];
+  };
   
   # automatic timezone setting
   # services.automatic-timezoned.enable = true; #idk why this doesn't work :/

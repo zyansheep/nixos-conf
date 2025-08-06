@@ -29,7 +29,7 @@
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 
   # Syncthing only enable on AC
-  systemd.services.syncthing.unitConfig.ConditionACPower = "true";
+  # systemd.services.syncthing.unitConfig.ConditionACPower = "true";
 
   # enable auto-start sway on login
   services.greetd = {

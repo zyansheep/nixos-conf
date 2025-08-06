@@ -69,6 +69,11 @@
     latest.url = "github:nixos/nixpkgs/nixos-unstable";
     nixos.url = "github:nixos/nixpkgs/nixos-24.11";
     nixpkgs.follows = "nixos";
+    
+    nixpkgs-unfree = {
+      url = "github:numtide/nixpkgs-unfree/nixos-unstable";
+      inputs.nixpkgs.follows = "latest";
+    };
 
     home = {
       url = "github:nix-community/home-manager/release-24.11";

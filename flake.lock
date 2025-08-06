@@ -880,6 +880,27 @@
         "type": "github"
       }
     },
+    "nixpkgs-unfree": {
+      "inputs": {
+        "nixpkgs": [
+          "latest"
+        ]
+      },
+      "locked": {
+        "lastModified": 1754058254,
+        "narHash": "sha256-SqAoJW1z5xde3caMjgpeKxm0aNZORcH+f4mYPy5ZL3I=",
+        "owner": "numtide",
+        "repo": "nixpkgs-unfree",
+        "rev": "618dec43ed1c2b9598d683b88436349526fc68d9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs-unfree",
+        "type": "github"
+      }
+    },
     "nosys": {
       "locked": {
         "lastModified": 1668010795,
@@ -1019,6 +1040,7 @@
         "nixpkgs": [
           "nixos"
         ],
+        "nixpkgs-unfree": "nixpkgs-unfree",
         "nvfetcher": "nvfetcher",
         "std": [
           "hive",
