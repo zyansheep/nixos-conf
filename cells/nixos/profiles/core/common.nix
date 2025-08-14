@@ -69,8 +69,7 @@ let
       xorg.libxkbfile
       xorg.libxshmfence
     ];
-in
-{
+in {
   imports = [
     # Include minimal configuration
     # inputs.nixos.nixosProfiles.core.minimal
@@ -91,15 +90,16 @@ in
   # Fonts
   # Font Declaration
   fonts = {
-    packages = with pkgs; [
-      font-awesome
-      nerd-fonts.symbols-only
-      dejavu_fonts
-      source-code-pro
-      noto-fonts
-      noto-fonts-emoji
-      powerline-fonts
-    ];
+    packages = with pkgs;
+      [
+        font-awesome
+        dejavu_fonts
+        source-code-pro
+        noto-fonts
+        noto-fonts-emoji
+        powerline-fonts
+      ] ++ (builtins.filter lib.attrsets.isDerivation
+        (builtins.attrValues pkgs.nerd-fonts));
     fontconfig.defaultFonts = {
       monospace = [ "DejaVu Sans Mono for Powerline" ];
       sansSerif = [ "DejaVu Sans" ];
@@ -124,12 +124,9 @@ in
   i18n.inputMethod = {
     type = "fcitx5";
     enable = true;
-    fcitx5.addons = with pkgs; [
-      fcitx5-mozc
-      fcitx5-gtk
-    ];
+    fcitx5.addons = with pkgs; [ fcitx5-mozc fcitx5-gtk ];
   };
-  
+
   # automatic timezone setting
   # services.automatic-timezoned.enable = true; #idk why this doesn't work :/
   time.timeZone = "America/New_York";

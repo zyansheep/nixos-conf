@@ -32,7 +32,7 @@ in {
     gaming.steam
 
     #graphics.plasma
-    graphics.sway
+    graphics.niri
     graphics.drivers.amd # enable graphics drivers for AMD cpu
     fs.zfs
 
