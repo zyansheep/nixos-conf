@@ -12,12 +12,13 @@
     swayimg # img viewer
     swaybg # wallpaper
     brightnessctl # brightness control
-    rofi # menu
+    rofi-wayland # menu
     fuzzel # alternative menu
     swaylock # lockscreen
     mako # notif daemon
     polkit
     swayidle # idle manager
+    xwayland-satellite # xwayland support
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
@@ -28,7 +29,7 @@
   # Ensure correct power profile based on plug-in status
   services.udev.extraRules = ''
     # When AC is connected (POWER_SUPPLY_ONLINE=="1"), set performance profile.
-    SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set performance"
+    SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set balanced"
     # When running on battery (POWER_SUPPLY_ONLINE=="0"), set power-saver profile.
     SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set power-saver"
     # Syncthing

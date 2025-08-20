@@ -124,7 +124,13 @@ in {
   i18n.inputMethod = {
     type = "fcitx5";
     enable = true;
-    fcitx5.addons = with pkgs; [ fcitx5-mozc fcitx5-gtk ];
+    fcitx5.addons = with pkgs; [ fcitx5-mozc fcitx5-gtk fcitx5-configtool ];
+    fcitx5.waylandFrontend = true;
+  };
+  # Set necessary environment variables for Wayland
+  environment.sessionVariables = {
+    XMODIFIERS = "@im=fcitx";
+    QT_IM_MODULE = "fcitx";
   };
 
   # automatic timezone setting
