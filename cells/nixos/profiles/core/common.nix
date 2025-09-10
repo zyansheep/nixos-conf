@@ -98,11 +98,16 @@ in {
         noto-fonts
         noto-fonts-emoji
         powerline-fonts
+
+        # nihongo fonts
+        noto-fonts-cjk-sans
+        ipafont
       ] ++ (builtins.filter lib.attrsets.isDerivation
         (builtins.attrValues pkgs.nerd-fonts));
     fontconfig.defaultFonts = {
-      monospace = [ "DejaVu Sans Mono for Powerline" ];
-      sansSerif = [ "DejaVu Sans" ];
+      monospace = [ "DejaVu Sans Mono for Powerline" "IPAGothic" ];
+      sansSerif = [ "DejaVu Sans" "IPAPGothic" ];
+      serif = [ "DejaVu Serif" "IPAPMincho" ];
     };
   };
 
