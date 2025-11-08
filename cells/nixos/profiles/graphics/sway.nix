@@ -5,7 +5,7 @@
     slurp # rectangle selection for screenshot functionality
     wl-clipboard # wl-copy and wl-paste for copy/paste from stdin / stdout
     cliphist # clipboard manager
-    rofi-wayland # run menu + clipboard selection
+    rofi # run menu + clipboard selection
     mako # notification system developed by swaywm maintainer
     waybar # topbar
     impala # tui wifi manager
@@ -55,12 +55,11 @@
   # programs.waybar.enable = true;
   xdg.portal = {
     enable = true;
-    extraPortals = with pkgs;
-      [
-        xdg-desktop-portal-wlr # wayland roots portal
-        xdg-desktop-portal-gtk # generic gtk portal for fallback
-        xdg-desktop-portal-termfilechooser # allow open folders in yazi file viewer
-      ];
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-wlr # wayland roots portal
+      xdg-desktop-portal-gtk # generic gtk portal for fallback
+      xdg-desktop-portal-termfilechooser # allow open folders in yazi file viewer
+    ];
     wlr.enable = true;
   };
   # Fix flatpak links not opening browser

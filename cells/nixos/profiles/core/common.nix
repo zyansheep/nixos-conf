@@ -33,6 +33,7 @@ let
       SDL2
       openssl
       libgcc
+      ffmpeg
     ] ++ lib.optionals (config.hardware.graphics.enable) [
       wayland
       pipewire

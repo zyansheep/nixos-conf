@@ -148,7 +148,7 @@ in {
   services.flatpak.enable = true; # enable flatpak
   services.mullvad-vpn.enable = true;
   # services.connman.enable = true;
-  services.tailscale.enable = true;
+  # services.tailscale.enable = true;
 
   # Waydroid configuration
   virtualisation.waydroid.enable = true;

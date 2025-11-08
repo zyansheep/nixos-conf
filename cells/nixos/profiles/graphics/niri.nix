@@ -12,7 +12,7 @@
     swayimg # img viewer
     swaybg # wallpaper
     brightnessctl # brightness control
-    rofi-wayland # menu
+    rofi # menu
     fuzzel # alternative menu
     swaylock # lockscreen
     mako # notif daemon
@@ -23,8 +23,10 @@
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
 
-  services.logind.powerKey = "ignore"; # ignore power key
-  services.logind.lidSwitch = "suspend"; # lid switch triggers suspend
+  services.logind.settings.Login = {
+    HandlePowerKey = "ignore"; # ignore power key
+    HandleLidSwitch = "suspend"; # lid switch triggers suspend
+  };
 
   # Ensure correct power profile based on plug-in status
   services.udev.extraRules = ''
@@ -33,8 +35,8 @@
     # When running on battery (POWER_SUPPLY_ONLINE=="0"), set power-saver profile.
     SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.power-profiles-daemon}/bin/powerprofilesctl set power-saver"
     # Syncthing
-    SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.systemd}/bin/systemctl start syncthing.service"
-    SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.systemd}/bin/systemctl stop syncthing.service"
+    # SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.systemd}/bin/systemctl start syncthing.service"
+    # SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.systemd}/bin/systemctl stop syncthing.service"
   '';
 
   # Enable wayland-by-default for chromium and electron-based apps
