@@ -33,7 +33,7 @@ let
       SDL2
       openssl
       libgcc
-      ffmpeg
+      ffmpeg-full
     ] ++ lib.optionals (config.hardware.graphics.enable) [
       wayland
       pipewire
@@ -97,7 +97,7 @@ in {
         dejavu_fonts
         source-code-pro
         noto-fonts
-        noto-fonts-emoji
+        noto-fonts-color-emoji
         powerline-fonts
 
         # nihongo fonts
@@ -130,7 +130,11 @@ in {
   i18n.inputMethod = {
     type = "fcitx5";
     enable = true;
-    fcitx5.addons = with pkgs; [ fcitx5-mozc fcitx5-gtk fcitx5-configtool ];
+    fcitx5.addons = with pkgs; [
+      fcitx5-mozc
+      fcitx5-gtk
+      qt6Packages.fcitx5-configtool
+    ];
     fcitx5.waylandFrontend = true;
   };
   # Set necessary environment variables for Wayland

@@ -19,6 +19,7 @@
     polkit
     swayidle # idle manager
     xwayland-satellite # xwayland support
+    nautilus # file picker (for popups)
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
@@ -38,6 +39,28 @@
     # SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="1", RUN+="${pkgs.systemd}/bin/systemctl start syncthing.service"
     # SUBSYSTEM=="power_supply", ENV{POWER_SUPPLY_ONLINE}=="0", RUN+="${pkgs.systemd}/bin/systemctl stop syncthing.service"
   '';
+
+  # Fix file picker
+  xdg.portal = {
+    enable = true;
+    extraPortals = with pkgs; [
+      xdg-desktop-portal-gtk
+      xdg-desktop-portal-gnome
+    ];
+    config = {
+      common = { default = [ "gtk" ]; };
+      niri = {
+        default = [ "gtk" "gnome" ];
+        "org.freedesktop.impl.portal.ScreenCast" = [ "gnome" ];
+        "org.freedesktop.impl.portal.Screenshot" = [ "gnome" ];
+      };
+    };
+  };
+  environment.sessionVariables = {
+    XDG_CURRENT_DESKTOP = "niri";
+    XDG_SESSION_TYPE = "wayland";
+    XDG_SESSION_DESKTOP = "niri";
+  };
 
   # Enable wayland-by-default for chromium and electron-based apps
   environment.sessionVariables.NIXOS_OZONE_WL = "1";

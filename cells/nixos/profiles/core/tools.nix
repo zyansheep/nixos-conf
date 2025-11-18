@@ -1,12 +1,5 @@
-{
-  inputs,
-  common,
-}: {
-  lib,
-  config,
-  pkgs,
-  ...
-}:
+{ inputs, common, }:
+{ lib, config, pkgs, ... }:
 with lib; {
   environment.systemPackages = with pkgs; [
     # File Tools
@@ -45,7 +38,6 @@ with lib; {
     whois # DNS lookup
     dmidecode # Hardware/Firmware info
     drm_info # Display renderer manager info
-    glxinfo # opengl info
     libva-utils # video acceleration info
     sbctl
 
@@ -75,7 +67,7 @@ with lib; {
     yt-dlp
 
     # appimage
-    (appimage-run.override {extraPkgs = pkgs: [libthai];})
+    (appimage-run.override { extraPkgs = pkgs: [ libthai ]; })
   ];
   # Set appimage-run as default interpreter for AppImage executables
   boot.binfmt.registrations.appimage = {
@@ -83,7 +75,7 @@ with lib; {
     interpreter = "${pkgs.appimage-run}/bin/appimage-run";
     recognitionType = "magic";
     offset = 0;
-    mask = ''\xff\xff\xff\xff\x00\x00\x00\x00\xff\xff\xff'';
-    magicOrExtension = ''\x7fELF....AI\x02'';
+    mask = "\\xff\\xff\\xff\\xff\\x00\\x00\\x00\\x00\\xff\\xff\\xff";
+    magicOrExtension = "\\x7fELF....AI\\x02";
   };
 }
