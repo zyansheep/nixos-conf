@@ -53,6 +53,7 @@ let
       glib
       gtk3
       libGL
+      libgbm
       libappindicator-gtk3
       vulkan-loader
       xorg.libX11
