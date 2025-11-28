@@ -23,6 +23,7 @@ with lib; {
     fastfetch # for r/unixporn
     dua # Disk Usage Analyzer
     nmap # Network Mapper
+    wireshark # Packet Analysis
     traceroute # traceroute
     lsof # List open files
     usbutils # USB utilities
@@ -78,4 +79,7 @@ with lib; {
     mask = "\\xff\\xff\\xff\\xff\\x00\\x00\\x00\\x00\\xff\\xff\\xff";
     magicOrExtension = "\\x7fELF....AI\\x02";
   };
+
+  programs.wireshark.enable = true;
+  users.users.zyansheep.extraGroups = [ "wireshark" ];
 }

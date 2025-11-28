@@ -66,17 +66,11 @@
 
   # nixpkgs & home-manager
   inputs = {
-    latest.url = "github:nixos/nixpkgs/nixos-unstable";
-    nixos.url = "github:nixos/nixpkgs/nixos-24.11";
-    nixpkgs.follows = "nixos";
-    
-    nixpkgs-unfree = {
-      url = "github:numtide/nixpkgs-unfree/nixos-unstable";
-      inputs.nixpkgs.follows = "latest";
-    };
+    latest.url = "github:numtide/nixos-unfree/nixos-unstable";
+    stable.url = "github:nixos/nixpkgs/nixos-25.05";
 
     home = {
-      url = "github:nix-community/home-manager/release-24.11";
+      url = "github:nix-community/home-manager/release-25.05";
       inputs.nixpkgs.follows = "nixos";
     };
 
