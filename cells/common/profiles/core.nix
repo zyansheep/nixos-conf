@@ -58,7 +58,7 @@
     registry = {
       home.flake = inputs.home;
       nixpkgs.flake = inputs.latest;
-      stable.flake = inputs.nixos;
+      stable.flake = inputs.stable;
       nixos-hardware.flake = inputs.nixos-hardware;
     };
   };

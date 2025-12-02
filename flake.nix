@@ -58,7 +58,7 @@
 
     lanzaboote = {
       # secure boot
-      url = "github:nix-community/lanzaboote/v0.4.2";
+      url = "github:nix-community/lanzaboote/v0.4.3";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     impermanence.url = "github:nix-community/impermanence";
@@ -66,12 +66,12 @@
 
   # nixpkgs & home-manager
   inputs = {
-    latest.url = "github:numtide/nixos-unfree/nixos-unstable";
-    stable.url = "github:nixos/nixpkgs/nixos-25.05";
+    latest.url = "github:numtide/nixpkgs-unfree/nixos-unstable";
+    stable.url = "github:nixos/nixpkgs/nixos-25.11";
 
     home = {
-      url = "github:nix-community/home-manager/release-25.05";
-      inputs.nixpkgs.follows = "nixos";
+      url = "github:nix-community/home-manager/release-25.11";
+      inputs.nixpkgs.follows = "stable";
     };
 
     home-unstable = {
@@ -83,13 +83,6 @@
 
   # tools
   inputs = {
-    nix-vscode-extensions = {
-      url = "github:nix-community/nix-vscode-extensions";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
-    };
     nvfetcher = {
       url = "github:berberman/nvfetcher";
       inputs = {
