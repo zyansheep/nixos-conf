@@ -33,5 +33,6 @@ with lib; {
     nodejs
     gdb
     gitui # blazingly fast git ui!
+    obsidian # Note Taking Tool
   ];
 }

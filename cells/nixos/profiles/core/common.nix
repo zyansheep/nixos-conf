@@ -142,6 +142,7 @@ in {
   environment.sessionVariables = {
     XMODIFIERS = "@im=fcitx";
     QT_IM_MODULE = "fcitx";
+    # GTK_IM_MODULE = "fcitx"; # Needed for Electron apps like Obsidian
   };
 
   # automatic timezone setting
