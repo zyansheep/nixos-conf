@@ -14,6 +14,14 @@ _: {
     enable = true;
     enableCompletion = true;
 
+    # Instant prompt - must be at very top of .zshrc
+    initExtraFirst = ''
+      # Enable Powerlevel10k instant prompt (shows prompt immediately while rest loads)
+      if [[ -r "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh" ]]; then
+        source "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh"
+      fi
+    '';
+
     initContent = ''
       export PATH="$HOME/.npm-packages/bin:$PATH" # node stuff
     '';

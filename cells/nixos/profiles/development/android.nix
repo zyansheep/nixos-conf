@@ -9,7 +9,6 @@
   boot.kernelModules = ["kvm-amd"];
   virtualisation.libvirtd.enable = true;
 
-  programs.adb.enable = true;
   # users.users.<user>.extraGroups = ["adbusers"]; # Set in users/*/default.nix
   environment.systemPackages = with pkgs; [
     gitRepo

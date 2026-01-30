@@ -36,12 +36,8 @@ in {
     packages = [
       inputs.cells.common.overrides.alejandra
       inputs.nixpkgs.nodePackages.prettier
-      inputs.nixpkgs.nodePackages.prettier-plugin-toml
       inputs.nixpkgs.shfmt
     ];
-    devshell.startup.prettier-plugin-toml = inputs.nixpkgs.lib.stringsWithDeps.noDepEntry ''
-      export NODE_PATH=${inputs.nixpkgs.nodePackages.prettier-plugin-toml}/lib/node_modules:''${NODE_PATH:-}
-    '';
     data = {
       global.excludes = ["cells/*/sources/generated.*"];
       formatter = {
@@ -51,7 +47,6 @@ in {
         };
         prettier = {
           command = "prettier";
-          # options = ["--plugin" "prettier-plugin-toml" "--write"];
           includes = [
             "*.css"
             "*.html"
@@ -63,7 +58,6 @@ in {
             "*.scss"
             "*.ts"
             "*.yaml"
-            # "*.toml"
           ];
         };
         shell = {
