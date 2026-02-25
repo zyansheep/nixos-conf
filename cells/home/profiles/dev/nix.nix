@@ -1,7 +1,4 @@
-{
-  inputs,
-  cell,
-}: {pkgs, ...}: {
+_: {pkgs, ...}: {
   programs.vscode.userSettings = {
     "nix.serverPath" = "nil";
     "nix.serverSettings" = {
@@ -15,8 +12,8 @@
     "[nix]" = {"editor.formatOnSave" = true;};
   };
 
-  home.packages = with inputs.cells.common.overrides; [
-    alejandra
-    nil
+  home.packages = with pkgs; [
+    alejandra # Uses alejandra from overlay (latest)
+    nil # Uses nil from overlay (latest)
   ];
 }

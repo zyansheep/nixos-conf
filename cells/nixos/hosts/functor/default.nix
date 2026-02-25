@@ -1,6 +1,9 @@
-{ inputs, suites, profiles, ... }:
-let system = "x86_64-linux";
-in {
+{
+  inputs,
+  suites,
+  profiles,
+  ...
+}: {
   imports = with profiles; [
     suites.base
     ./hardware-configuration.nix
@@ -34,33 +37,23 @@ in {
     services.containers
   ];
 
-  bee.system = system;
-  bee.home = inputs.home-unstable;
-  bee.pkgs = import inputs.latest {
-    inherit system;
-    config.allowUnfree = true;
-    overlays = with inputs.cells.common.overlays; [
-      common-packages
-      latest-overrides
-    ];
-  };
-
   # Bootloader
   boot = {
-    zfs = { extraPools = [ "zpool" ]; };
+    zfs = {extraPools = ["zpool"];};
     loader.systemd-boot.enable = true;
   };
 
   # Hostname
-  networking.hostName = "functor";
   networking.hostId = "95196fe2";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zyansheep"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   # enable firefox nightly
   # programs.firefox.package =

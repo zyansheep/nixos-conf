@@ -1,9 +1,11 @@
-{
-  inputs,
-  cells,
-}: {config, ...}: {
+# Tailscale VPN configuration
+_: {
+  pkgs,
+  config,
+  ...
+}: {
   services.tailscale = {
     enable = true;
-    package = inputs.cells.common.overrides.tailscale;
+    # Uses pkgs.tailscale from overlay
   };
 }

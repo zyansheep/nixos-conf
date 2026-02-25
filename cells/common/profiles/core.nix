@@ -1,5 +1,10 @@
-{ inputs, cell, ... }:
-{ self, config, lib, pkgs, ... }: {
+# Core system configuration - applied to all hosts
+{inputs, ...}: {
+  config,
+  lib,
+  pkgs,
+  ...
+}: {
   environment = {
     # Selection of sysadmin tools that can come in handy
     systemPackages = with pkgs; [
@@ -24,21 +29,19 @@
 
   nix = {
     package = pkgs.nixVersions.stable;
-    # extraOptions = ''
-    #   experimental-features = nix-command flakes
-    # '';
-    settings = let GB = 1024 * 1024 * 1024;
+    settings = let
+      GB = 1024 * 1024 * 1024;
     in {
       # Prevents impurities in builds
       sandbox = lib.mkDefault true;
 
       # Give root user and wheel group special Nix privileges.
-      trusted-users = [ "root" "@wheel" ];
+      trusted-users = ["root" "@wheel"];
 
       keep-outputs = lib.mkDefault true;
       keep-derivations = lib.mkDefault true;
       builders-use-substitutes = true;
-      experimental-features = [ "flakes" "nix-command" ];
+      experimental-features = ["flakes" "nix-command"];
       fallback = true;
       warn-dirty = false;
 
@@ -46,18 +49,15 @@
       min-free = lib.mkDefault (5 * GB);
     };
 
-    # Improve nix store disk usage
-    /* gc = {
-         automatic = true;
-         options = "--delete-older-than 7d";
-       };
-    */
+    nixPath = ["nixpkgs=${pkgs.path}" "home-manager=flake:home"];
 
-    nixPath = [ "nixpkgs=${pkgs.path}" "home-manager=flake:home" ];
-
+    # Registry setup - use lib.mkForce on to attribute to override NixOS module defaults
     registry = {
       home.flake = inputs.home;
-      nixpkgs.flake = inputs.latest;
+      nixpkgs.to = lib.mkForce {
+        type = "path";
+        path = inputs.latest.outPath;
+      };
       stable.flake = inputs.stable;
       nixos-hardware.flake = inputs.nixos-hardware;
     };

@@ -23,7 +23,10 @@ _: {
     '';
 
     initContent = ''
-      export PATH="$HOME/.npm-packages/bin:$PATH" # node stuff
+      export PATH="$HOME/.local/bin:$HOME/.npm-packages/bin:$PATH"
+
+      # Source local overrides (no rebuild needed)
+      [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
     '';
 
     history = {

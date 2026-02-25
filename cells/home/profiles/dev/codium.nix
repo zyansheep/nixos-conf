@@ -1,12 +1,11 @@
-{ inputs, cell, }:
-{ pkgs, lib, ... }:
-let
-  # exts = inputs.nix-vscode-extensions.extensions;
-  # open-vsx = exts.open-vsx;
-in {
+_: {
+  pkgs,
+  lib,
+  ...
+}: {
   programs.vscode = {
     enable = true;
-    package = inputs.cells.common.overrides.vscodium;
+    package = pkgs.vscodium; # Uses vscodium from overlay (latest)
     # TODO split extensions based on active modules
     /* profiles.default.extensions = with open-vsx;
        [

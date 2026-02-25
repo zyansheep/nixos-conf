@@ -2,11 +2,8 @@
   inputs,
   suites,
   profiles,
-  lib,
   ...
-}: let
-  system = "x86_64-linux";
-in {
+}: {
   imports = with profiles; [
     suites.base
     ./hardware-configuration.nix
@@ -21,17 +18,6 @@ in {
     services.containers
     services.ssh
   ];
-
-  bee.system = system;
-  bee.home = inputs.home-unstable;
-  bee.pkgs = import inputs.latest {
-    inherit system;
-    config.allowUnfree = true;
-    overlays = with inputs.cells.common.overlays; [
-      common-packages
-      latest-overrides
-    ];
-  };
 
   # firmware conf
   hardware.enableAllFirmware = true;
@@ -58,7 +44,6 @@ in {
   services.earlyoom.enable = false; # ZFS does not mark pages as cache and thus will trigger earlyoom even when plenty of memory available.
 
   networking.hostId = "49408a0f";
-  networking.hostName = "hpserver";
   networking.firewall.enable = false;
 
   # doas
@@ -81,7 +66,7 @@ in {
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
-  # on your system were taken. It‘s perfectly fine and recommended to leave
+  # on your system were taken. It's perfectly fine and recommended to leave
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).

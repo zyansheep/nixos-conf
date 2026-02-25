@@ -1,23 +1,6 @@
-{
-  inputs,
-  cell,
-}: _: let
-  hostnames = builtins.attrNames inputs.cells.nixos.colmenaConfigurations;
-in {
-  /*
-     home.file = {
-    ".ssh/config" = {
-      text = ''
-        Include ~/.ssh/config.local
-
-        Host ${builtins.concatStringsSep " " hostnames}
-          User zyansheep
-          ForwardAgent yes
-
-        Host depsos
-          Port 2265
-      '';
-    };
-  };
-  */
+# SSH configuration
+# Note: The dynamic host config from colmena is currently disabled
+_: _: {
+  # Previously generated SSH config from colmena hosts
+  # Currently empty - add SSH config here if needed
 }

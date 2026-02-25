@@ -1,6 +1,9 @@
-{ inputs, suites, profiles, ... }:
-let system = "x86_64-linux";
-in {
+{
+  inputs,
+  suites,
+  profiles,
+  ...
+}: {
   imports = with profiles; [
     suites.base
 
@@ -36,22 +39,11 @@ in {
     services.ssh
   ];
 
-  bee.system = system;
-  bee.home = inputs.home;
-  bee.pkgs = import inputs.stable {
-    inherit system;
-    config.allowUnfree = true;
-    overlays = with inputs.cells.common.overlays; [
-      common-packages
-      latest-overrides
-    ];
-  };
-
   # Bootloader
   boot.loader.systemd-boot.enable = true;
   boot.loader.efi.canTouchEfiVariables = true;
   boot.loader.timeout = 1;
-  boot.kernel.sysctl = { "dev.i915.perf_stream_paranoid" = 0; };
+  boot.kernel.sysctl = {"dev.i915.perf_stream_paranoid" = 0;};
 
   boot.initrd.luks.devices = {
     zyandrive = {
@@ -61,21 +53,22 @@ in {
     };
   };
 
-  networking.hostName = "dev-admin";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [{
-    users = [ "zyansheep" ];
-    keepEnv = true;
-    persist = true;
-  }];
+  security.doas.extraRules = [
+    {
+      users = ["zyansheep"];
+      keepEnv = true;
+      persist = true;
+    }
+  ];
 
   /* services.udev.packages = [
        pkgs.android-udev-rules
      ];
   */
   programs.adb.enable = true;
-  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" ];
+  users.users.zyansheep.extraGroups = ["adbusers" "uucp"];
 
   /* environment.systemPackages = with pkgs; [
        # arduino
@@ -94,7 +87,7 @@ in {
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
-  # on your system were taken. It‘s perfectly fine and recommended to leave
+  # on your system were taken. It's perfectly fine and recommended to leave
   # this value at the release version of the first install of this system.
   # Before changing this value read the documentation for this option
   # (e.g. man configuration.nix or on https://nixos.org/nixos/options.html).
