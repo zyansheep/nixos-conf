@@ -28,7 +28,6 @@ _: {pkgs, ...}: {
 
     # Office / Documents
     calibre
-    libreoffice
     libreoffice-qt
     notesnook
     obsidian
@@ -94,7 +93,7 @@ _: {pkgs, ...}: {
     logmein-hamachi
     opendrop
     openfortivpn
-    osmctools
+    # osmctools  # broken on nixpkgs-unstable (C23 keyword conflict)
     parted
     pbzip2
     qbittorrent

@@ -263,6 +263,7 @@
             inherit pkgs;
             modules = [
               userProfiles.minimal
+              homeProfiles.packages
               {
                 home = {
                   username = "zyansheep";
