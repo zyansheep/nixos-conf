@@ -1,4 +1,5 @@
 _: {
+  config,
   lib,
   pkgs,
   ...
@@ -13,21 +14,22 @@ _: {
   programs.zsh = {
     enable = true;
     enableCompletion = true;
+    dotDir = "${config.xdg.configHome}/zsh";
 
-    # Instant prompt - must be at very top of .zshrc
-    initExtraFirst = ''
-      # Enable Powerlevel10k instant prompt (shows prompt immediately while rest loads)
-      if [[ -r "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh" ]]; then
-        source "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh"
-      fi
-    '';
-
-    initContent = ''
+    initContent = lib.mkMerge [
+      (lib.mkBefore ''
+        # Enable Powerlevel10k instant prompt (shows prompt immediately while rest loads)
+        if [[ -r "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh" ]]; then
+          source "''${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-''${(%):-%n}.zsh"
+        fi
+      '')
+      ''
       export PATH="$HOME/.local/bin:$HOME/.npm-packages/bin:$PATH"
 
       # Source local overrides (no rebuild needed)
       [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
-    '';
+    ''
+    ];
 
     history = {
       extended = true;
