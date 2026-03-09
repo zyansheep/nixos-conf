@@ -1,0 +1,67 @@
+# TEX LANGUAGE SERVER
+[[language]]
+name = "latex"
+language-servers = [ { name = "texlab" } ]
+indent = { tab-width = 4, unit = "\t" }
+
+[language-server.texlab]
+command = "texlab"
+
+[language-server.texlab.config.texlab.build]
+onSave = true
+forwardSearchAfter = true
+executable = "tectonic"
+args = [
+  "-X",
+  "compile",
+  "%f",
+  "--synctex",
+  "--keep-logs",
+  "--keep-intermediates",
+  # "--outdir=build",
+  "-Zshell-escape",
+]
+
+[language-server.texlab.config.texlab.chktex]
+onOpenAndSave = true
+onEdit = true
+
+[language-server.texlab.config.texlab.forwardSearch]
+executable = "zathura"
+args = ["--synctex-forward", "%l:1:%f", "%p"]
+
+# Python
+[[language]]
+name = "python"
+language-servers = ["ruff"]
+formatter = { command = "ruff" }
+auto-format = true
+
+[language-server.ruff]
+command = "ruff"
+args = ["server"]
+
+# Markdown
+[[language]]
+auto-format = true
+language-servers = ["marksman", "mpls"]
+name = "markdown"
+
+[language-server.mpls]
+command = "mpls"
+args = ["--dark-mode", "--enable-emoji"]
+# An example args entry showing how to specify flags with values:
+# args = ["--port", "8080", "--browser", "google-chrome"]
+
+# Typst
+[[language]]
+name = "typst"
+
+auto-format = true
+formatter.command = "typstyle"
+
+[language-server.tinymist]
+command = "tinymist"
+config.preview.background.enabled = true
+config.preview.background.args = [
+  "--data-plane-host=127.0.0.1:0", "--invert-colors=never", "--open"]

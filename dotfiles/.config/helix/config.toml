@@ -1,0 +1,12 @@
+# Theme
+theme = "jellybeans"
+
+# Cursor
+[editor.cursor-shape]
+insert = "bar"
+normal = "block"
+select = "underline"
+
+# Wrapping
+[editor.soft-wrap]
+enable = true

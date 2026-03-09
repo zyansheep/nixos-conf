@@ -141,17 +141,13 @@
             shell.nvim
             home-manager-base
             ssh
+            packages
+            dotfiles
           ];
           develop = [dev.nix];
         };
       in {
-        workstation = {...}: {
-          imports = with suites; l.flatten [base develop];
-        };
         minimal = {...}: {imports = suites.base;};
-        server-dev = {...}: {
-          imports = with suites; l.flatten [develop];
-        };
       };
 
       # ============================================================
@@ -263,7 +259,6 @@
             inherit pkgs;
             modules = [
               userProfiles.minimal
-              homeProfiles.packages
               {
                 home = {
                   username = "zyansheep";
