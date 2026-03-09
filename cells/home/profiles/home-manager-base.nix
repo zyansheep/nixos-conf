@@ -18,6 +18,7 @@ _:
       "x-scheme-handler/tonsite" = "org.telegram.desktop.desktop";
     };
     defaultApplications = {
+      "application/epub+zip" = "org.pwmt.zathura-pdf-mupdf.desktop";
       "application/pdf" = "org.pwmt.zathura-pdf-mupdf.desktop";
       "audio/mp4" = "mpv.desktop";
       "inode/directory" = "org.kde.dolphin.desktop";

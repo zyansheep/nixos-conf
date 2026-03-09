@@ -138,12 +138,6 @@ in {
     ];
     fcitx5.waylandFrontend = true;
   };
-  # Set necessary environment variables for Wayland
-  environment.sessionVariables = {
-    XMODIFIERS = "@im=fcitx";
-    QT_IM_MODULE = "fcitx";
-    # GTK_IM_MODULE = "fcitx"; # Needed for Electron apps like Obsidian
-  };
 
   # automatic timezone setting
   # services.automatic-timezoned.enable = true; #idk why this doesn't work :/

@@ -1,9 +1,4 @@
-{
-  inputs,
-  suites,
-  profiles,
-  ...
-}: {
+{ inputs, suites, profiles, ... }: {
   imports = with profiles; [
     suites.base
 
@@ -64,18 +59,20 @@
 
   # networking.networkmanager.wifi.backend = "wpa_supplicant";
   networking.networkmanager.enable = false;
+  networking.useDHCP = true;
   networking.wireless.iwd.enable = true;
   networking.wireless.iwd.settings = {
     Network = {
       # EnableIPv6 = true;
       RoutePriorityOffset = 300;
     };
-    Settings = {AutoConnect = true;};
+    Settings = { AutoConnect = true; };
+    General = { EnableNetworkConfiguration = true; };
   };
 
   # Bootloader
   boot = {
-    zfs = {extraPools = ["zpool"];};
+    zfs = { extraPools = [ "zpool" ]; };
     loader.efi.canTouchEfiVariables = true;
     lanzaboote = {
       enable = true;
@@ -95,10 +92,10 @@
       "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
     ];
-    files = ["/etc/machine-id"];
+    files = [ "/etc/machine-id" ];
   };
   zfsConfig.enableSystemdRollback = true;
-  environment.etc = {"shadow".source = "/persist/etc/shadow";};
+  environment.etc = { "shadow".source = "/persist/etc/shadow"; };
   boot.kernelParams = [
     "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
@@ -117,7 +114,7 @@
   networking.firewall.enable = false;
 
   # groups
-  users.users.zyansheep.extraGroups = ["adbusers" "uucp" "waydroid"];
+  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" "waydroid" ];
 
   documentation.info.enable = false;
 

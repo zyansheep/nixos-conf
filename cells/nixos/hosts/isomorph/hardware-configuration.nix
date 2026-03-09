@@ -18,6 +18,7 @@
   fileSystems."/boot" = {
     device = "/dev/disk/by-uuid/9261-7E39";
     fsType = "vfat";
+    options = [ "fmask=0077" "dmask=0077" ];
   };
 
   fileSystems."/nix" = {
