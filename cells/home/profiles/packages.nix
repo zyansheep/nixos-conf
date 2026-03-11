@@ -27,6 +27,7 @@ _: {pkgs, ...}: {
     vital
 
     # Office / Documents
+    anki
     calibre
     libreoffice-qt
     notesnook
