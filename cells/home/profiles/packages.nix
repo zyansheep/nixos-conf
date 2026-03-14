@@ -59,7 +59,7 @@ _: {pkgs, ...}: {
     google-cloud-sdk
     micromamba
     nasm
-    nixfmt-classic
+    nixfmt
     nix-search-cli
     ollama
     pijul

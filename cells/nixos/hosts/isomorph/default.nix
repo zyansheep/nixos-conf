@@ -86,6 +86,7 @@
       "/var/log" # for journalctl
       "/var/lib/bluetooth"
       "/var/lib/fprint"
+      "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/lib/iwd"
       # "/etc/NetworkManager/system-connections"
