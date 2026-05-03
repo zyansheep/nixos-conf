@@ -1,4 +1,5 @@
-#!/usr/bin/env bash
+#!/bin/sh
+PATH="/run/current-system/sw/bin:$PATH"
 
 if pgrep wf-recorder > /dev/null; then
   # If wf-recorder is running, output JSON with the recording indicator

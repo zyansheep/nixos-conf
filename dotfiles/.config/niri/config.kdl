@@ -415,15 +415,15 @@ binds {
     // Clipboard and utility bindings from sway
     Mod+C { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }
     Mod+Shift+C { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
-    Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
+    // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
     Mod+Semicolon { spawn "rofimoji"; }
     Mod+Shift+W { spawn "iwmenu" "-m" "rofi"; }
     
     // Recording and screenshot bindings from sway
-    // Mod+Shift+S { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
-    // Mod+Shift+R { spawn "bash" "-c" "wf-recorder -g \"$(slurp)\" -f ~/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
-    // Mod+Shift+F { spawn "bash" "-c" "wf-recorder -f ~/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
-    // Mod+Shift+E { spawn "killall" "-s" "SIGINT" "wf-recorder"; }
+    Mod+Shift+S { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
+    Mod+Shift+G { spawn "bash" "-c" "wf-recorder -g \"$(slurp)\" -f ~/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
+    Mod+Shift+F { spawn "bash" "-c" "wf-recorder -f ~/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
+    Mod+Shift+E { spawn "killall" "-s" "SIGINT" "wf-recorder"; }
     
     // Suspend keybind
     Ctrl+Mod+S { spawn "systemctl" "suspend"; }

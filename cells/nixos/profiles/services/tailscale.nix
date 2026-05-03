@@ -1,0 +1,11 @@
+{
+  inputs,
+  common,
+}: {
+  lib,
+  config,
+  pkgs,
+  ...
+}: {
+  services.tailscale.enable = true;
+}

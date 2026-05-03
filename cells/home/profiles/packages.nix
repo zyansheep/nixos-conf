@@ -11,6 +11,7 @@ _: {pkgs, ...}: {
     element-desktop
     slack
     telegram-desktop
+    thelounge
     vesktop
 
     # Media

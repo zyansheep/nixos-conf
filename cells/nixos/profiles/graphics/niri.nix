@@ -50,13 +50,14 @@
   # Enable wayland-by-default for chromium and electron-based apps
   environment.sessionVariables.NIXOS_OZONE_WL = "1";
 
-  # Enable auto-start niri on login using greetd
+  # Enable auto-start niri on login using greetd; launches niri via uwsm so
+  # spawned apps land in their own systemd scopes (OOM-isolated from the compositor).
   services.greetd = {
     enable = true;
     settings = {
       default_session = {
         command =
-          "${pkgs.tuigreet}/bin/tuigreet --time --cmd niri-session";
+          "${pkgs.tuigreet}/bin/tuigreet --time --cmd '${pkgs.uwsm}/bin/uwsm start -F -- /run/current-system/sw/bin/niri --session'";
         user = "zyansheep";
       };
     };
@@ -68,4 +69,13 @@
 
   # Enable Niri window manager
   programs.niri.enable = true;
+
+  # Manage niri as a uwsm-wrapped Wayland session.
+  programs.uwsm.enable = true;
+  programs.uwsm.waylandCompositors.niri = {
+    prettyName = "Niri";
+    comment = "A scrollable-tiling Wayland compositor (UWSM)";
+    binPath = "/run/current-system/sw/bin/niri";
+    extraArgs = [ "--session" ];
+  };
 }

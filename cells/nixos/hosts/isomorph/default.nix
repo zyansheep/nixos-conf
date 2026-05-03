@@ -3,7 +3,7 @@
     suites.base
 
     ./hardware-configuration.nix
-    # ./power-conf.nix
+    ./power-conf.nix
 
     inputs.nixos-hardware.nixosModules.framework-13-7040-amd
     inputs.lanzaboote.nixosModules.lanzaboote
@@ -40,6 +40,8 @@
     services.printing
     services.syncthing
     services.containers
+    services.immich
+    services.tailscale
     # services.ssh
   ];
 
@@ -92,13 +94,17 @@
       # "/etc/NetworkManager/system-connections"
       "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
+      "/var/lib/immich" # immich media + state
+      "/var/lib/postgresql" # immich database
+      "/var/lib/redis-immich" # immich redis
     ];
     files = [ "/etc/machine-id" ];
   };
   zfsConfig.enableSystemdRollback = true;
   environment.etc = { "shadow".source = "/persist/etc/shadow"; };
   boot.kernelParams = [
-    "zfs.zfs_arc_max=12884901888" # Set Adaptive Replacement Cache size to max 12gb. (machine-specific)
+    "zfs.zfs_arc_max=4294967296" # Set Adaptive Replacement Cache size to max 4gb. (machine-specific)
+    "pcie_aspm=off" # https://github.com/NixOS/nixos-hardware/issues/1348
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
     # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     # "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
