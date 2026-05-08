@@ -325,7 +325,6 @@ layout {
 }
 
 // Startup applications from sway config
-spawn-at-startup "aw-server"  // Activity Watcher
 spawn-at-startup "fcitx5" "-d"  // Input method
 
 // Wallpaper from sway config (using swaybg for wayland compatibility)

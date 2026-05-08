@@ -57,4 +57,20 @@
     };
     */
   };
+
+  # Allow wheel users to start/stop syncthing without a password,
+  # so the waybar services dropdown can toggle it.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" &&
+          subject.isInGroup("wheel")) {
+        var unit = action.lookup("unit");
+        var verb = action.lookup("verb");
+        var verbs = ["start", "stop", "restart", "reload", "try-restart", "reload-or-restart"];
+        if (unit == "syncthing.service" && verbs.indexOf(verb) >= 0) {
+          return polkit.Result.YES;
+        }
+      }
+    });
+  '';
 }

@@ -35,5 +35,6 @@ in {
     mkConfigSymlinks "niri" (dotfilesPath + "/niri")
     // mkConfigSymlinks "waybar" (dotfilesPath + "/waybar")
     // mkConfigSymlinks "swaync" (dotfilesPath + "/swaync")
-    // mkConfigSymlinks "helix" (dotfilesPath + "/helix");
+    // mkConfigSymlinks "helix" (dotfilesPath + "/helix")
+    // mkConfigSymlinks "eww" (dotfilesPath + "/eww");
 }

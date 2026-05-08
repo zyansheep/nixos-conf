@@ -7,6 +7,7 @@
     cliphist # clipboard manager
     mako # notification system developed by swaywm maintainer
     waybar # topbar
+    eww # interactive popup widgets (services dropdown)
     impala # tui wifi manager
     zathura # vim pdf viewer
     swayimg # img viewer
@@ -23,6 +24,13 @@
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
+
+  # Make system-wide binaries available to waybar's exec scripts (jq, bash,
+  # systemctl, notify-send, etc.). The default unit PATH is intentionally
+  # minimal; this widens it to the system profile so custom modules can be
+  # iterated on without absolute-pathing every binary.
+  systemd.user.services.waybar.environment.PATH =
+    lib.mkForce "/run/current-system/sw/bin";
 
   services.logind.settings.Login = {
     HandlePowerKey = "ignore"; # ignore power key

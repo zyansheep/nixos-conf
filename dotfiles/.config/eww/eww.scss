@@ -1,0 +1,90 @@
+// Catppuccin-ish dark popup for the waybar services widget.
+
+$bg: #2a2d34;
+$bg-elevated: #3a3d44;
+$fg: #e6e8eb;
+$muted: #888c94;
+$accent: #6cc04a;
+$accent-dim: #4a8f3a;
+$danger: #d05a5a;
+
+* { all: unset; font-family: "Roboto", "Sans", sans-serif; font-size: 13px; }
+
+.popup {
+  background-color: $bg;
+  color: $fg;
+  border: 1px solid #444;
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+
+.popup-title {
+  font-weight: bold;
+  font-size: 14px;
+  color: $fg;
+  margin-bottom: 4px;
+}
+
+.row { padding: 4px 0; }
+.service-name { color: $fg; }
+
+// --- Switch ---------------------------------------------------------------
+// Track is 40px wide, thumb is 18px, padding 2px on each side. The thumb's
+// margin-left maps to systemd state:
+//   inactive / unknown / failed   → 0   (full off)
+//   deactivating                  → 6   (about to turn off, ~30%)
+//   activating                    → 12  (about to turn on, ~70%)
+//   active                        → 18  (full on)
+
+.switch {
+  padding: 0;
+  margin: 0;
+
+  .switch-track {
+    min-width: 40px;
+    min-height: 22px;
+    border-radius: 11px;
+    padding: 2px;
+    background-color: $bg-elevated;
+    transition: background-color 250ms ease;
+  }
+
+  .switch-thumb {
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 9px;
+    background-color: white;
+    margin-left: 0;
+    transition: margin-left 250ms ease, background-color 250ms ease;
+  }
+
+  // Off / unknown
+  &.inactive, &.unknown {
+    .switch-track { background-color: $bg-elevated; }
+    .switch-thumb { margin-left: 0; }
+  }
+
+  // Almost-off (stopping in progress)
+  &.deactivating {
+    .switch-track { background-color: $accent-dim; }
+    .switch-thumb { margin-left: 6px; }
+  }
+
+  // Almost-on (starting in progress)
+  &.activating {
+    .switch-track { background-color: $accent-dim; }
+    .switch-thumb { margin-left: 12px; }
+  }
+
+  // On
+  &.active {
+    .switch-track { background-color: $accent; }
+    .switch-thumb { margin-left: 18px; }
+  }
+
+  // Failed — red track, thumb left
+  &.failed {
+    .switch-track { background-color: $danger; }
+    .switch-thumb { margin-left: 0; }
+  }
+}

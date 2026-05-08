@@ -24,6 +24,7 @@
     "memory",
     "temperature",
     // "backlight",
+    "custom/services",
     "battery",
     "custom/notification",
     "power-profiles-daemon",
@@ -31,6 +32,13 @@
     "pulseaudio",
     "custom/power"
   ],
+  "custom/services": {
+    "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
+    "return-type": "json",
+    "interval": 5,
+    "tooltip": true,
+    "on-click": "eww open --toggle services-popup"
+  },
   "custom/notification": {
     "tooltip": true,
     "format": "{icon}",

@@ -37,4 +37,25 @@ with lib; {
       "x-systemd.requires-mounts-for=/home/zyansheep"
     ];
   };
+
+  # Allow wheel users to start/stop immich units without a password,
+  # so the waybar services dropdown can toggle them.
+  security.polkit.extraConfig = ''
+    polkit.addRule(function(action, subject) {
+      if (action.id == "org.freedesktop.systemd1.manage-units" &&
+          subject.isInGroup("wheel")) {
+        var unit = action.lookup("unit");
+        var verb = action.lookup("verb");
+        var units = [
+          "immich-server.service",
+          "immich-machine-learning.service",
+          "redis-immich.service"
+        ];
+        var verbs = ["start", "stop", "restart", "reload", "try-restart", "reload-or-restart"];
+        if (units.indexOf(unit) >= 0 && verbs.indexOf(verb) >= 0) {
+          return polkit.Result.YES;
+        }
+      }
+    });
+  '';
 }

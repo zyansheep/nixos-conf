@@ -194,6 +194,20 @@ label:focus {
   font-size: 15px;
 }
 
+#custom-services {
+  padding: 0 2px;
+  margin: 0;
+}
+#custom-services.none {
+  color: #888;
+}
+#custom-services.some {
+  color: #e0c060;
+}
+#custom-services.all {
+  color: #8fdf8f;
+}
+
 #temperature {}
 
 #temperature.critical {}

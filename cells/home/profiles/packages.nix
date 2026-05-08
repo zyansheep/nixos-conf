@@ -130,4 +130,21 @@ _: {pkgs, ...}: {
     # Sideloading
     sidequest
   ];
+
+  # ActivityWatch storage backend as a proper user service so it can be
+  # toggled from the waybar/eww services dropdown. Replaces the niri
+  # spawn-at-startup entry.
+  systemd.user.services.aw-server = {
+    Unit = {
+      Description = "ActivityWatch storage backend";
+      After = [ "graphical-session.target" ];
+      PartOf = [ "graphical-session.target" ];
+    };
+    Install.WantedBy = [ "graphical-session.target" ];
+    Service = {
+      ExecStart = "${pkgs.activitywatch}/bin/aw-server";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+  };
 }

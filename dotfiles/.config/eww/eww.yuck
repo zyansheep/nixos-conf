@@ -1,0 +1,58 @@
+; --- service state polls ----------------------------------------------------
+; Poll twice a second so transitions (activating / deactivating) are visible
+; in near-real-time. systemctl is-active is a cheap dbus call.
+
+(defpoll immich_state :interval "500ms" :initial "unknown"
+  "systemctl is-active immich-server.service 2>/dev/null || true")
+
+(defpoll syncthing_state :interval "500ms" :initial "unknown"
+  "systemctl is-active syncthing.service 2>/dev/null || true")
+
+(defpoll activitywatch_state :interval "500ms" :initial "unknown"
+  "systemctl --user is-active aw-server.service 2>/dev/null || true")
+
+; --- switch widget -----------------------------------------------------------
+; The visual state is derived purely from systemctl's report. Possible values:
+;   active inactive activating deactivating failed unknown
+; Each is a CSS class on the button — see eww.scss for thumb positions.
+; The switch is ALWAYS clickable; clicking sends a start or stop based on
+; current direction (active/activating → stop, else start).
+
+(defwidget service_row [name state onclick]
+  (box :class "row" :orientation "h" :space-evenly false :spacing 12
+    (label :class "service-name" :text name :hexpand true :halign "start")
+    (button :class "switch ${state}" :onclick onclick
+      (box :class "switch-track" :space-evenly false
+        (box :class "switch-thumb")))))
+
+; --- popup window ------------------------------------------------------------
+; Fullscreen overlay split into dismiss zones around the popup. Buttons inside
+; the popup consume their own clicks; the popup card itself has no event
+; handler, so clicks on its non-button area do nothing (popup stays open).
+
+(defwindow services-popup
+  :monitor 0
+  :geometry (geometry :width "100%" :height "100%")
+  :stacking "fg"
+  :focusable true
+  (box :orientation "v" :space-evenly false
+    (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
+              :style "min-height: 30px;")
+    (box :orientation "h" :space-evenly false :vexpand false
+      (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
+                :hexpand true)
+      (box :class "popup" :orientation "v" :space-evenly false :spacing 10
+        (label :class "popup-title" :text "Services" :halign "start")
+        (service_row :name "Immich"
+                     :state immich_state
+                     :onclick "~/.config/eww/scripts/toggle.sh immich")
+        (service_row :name "Syncthing"
+                     :state syncthing_state
+                     :onclick "~/.config/eww/scripts/toggle.sh syncthing")
+        (service_row :name "ActivityWatch"
+                     :state activitywatch_state
+                     :onclick "~/.config/eww/scripts/toggle.sh activitywatch"))
+      (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
+                :style "min-width: 8px;"))
+    (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
+              :vexpand true)))
