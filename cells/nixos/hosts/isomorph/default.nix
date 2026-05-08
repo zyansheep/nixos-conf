@@ -34,8 +34,6 @@
     graphics.drivers.amd # enable graphics drivers for AMD cpu
     fs.zfs
 
-    # devices.xp-pen
-    # devices.realtek-wifi-adapter
 
     services.printing
     services.syncthing

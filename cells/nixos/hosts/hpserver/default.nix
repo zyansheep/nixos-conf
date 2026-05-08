@@ -12,8 +12,6 @@
     # core.common
     # core.tools
 
-    # devices.xp-pen
-    # devices.realtek-wifi-adapter
     services.syncthing
     services.containers
     services.ssh

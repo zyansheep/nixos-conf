@@ -7,8 +7,6 @@
   imports = with profiles; [
     suites.base
     ./hardware-configuration.nix
-    # devices.webcam-loopback
-    # devices.rtl-sdr
 
     # graphics.plasma
     graphics.drivers.amd

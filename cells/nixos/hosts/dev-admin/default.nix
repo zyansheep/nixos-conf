@@ -30,9 +30,6 @@
     graphics.plasma
     graphics.drivers.intel
 
-    # devices.xp-pen
-    # devices.realtek-wifi-adapter
-
     services.printing
     services.syncthing
     services.containers
