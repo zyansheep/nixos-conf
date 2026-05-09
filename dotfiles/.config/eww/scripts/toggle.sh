@@ -15,6 +15,7 @@ case "$group" in
   immich)        scope=system; primary="immich-server.service" ;;
   syncthing)     scope=system; primary="syncthing.service"      ;;
   activitywatch) scope=user;   primary="aw-server.service"      ;;
+  tailscale)     scope=system; primary="tailscaled.service"     ;;
   *) echo "unknown group: $group" >&2; exit 1 ;;
 esac
 

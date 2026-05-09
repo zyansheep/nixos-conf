@@ -8,6 +8,7 @@ services=(
   "Immich|system|immich-server.service"
   "Syncthing|system|syncthing.service"
   "ActivityWatch|user|aw-server.service"
+  "Tailscale|system|tailscaled.service"
 )
 
 state_of() {

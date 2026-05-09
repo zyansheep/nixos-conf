@@ -11,6 +11,9 @@
 (defpoll activitywatch_state :interval "500ms" :initial "unknown"
   "systemctl --user is-active aw-server.service 2>/dev/null || true")
 
+(defpoll tailscale_state :interval "500ms" :initial "unknown"
+  "systemctl is-active tailscaled.service 2>/dev/null || true")
+
 ; --- switch widget -----------------------------------------------------------
 ; The visual state is derived purely from systemctl's report. Possible values:
 ;   active inactive activating deactivating failed unknown
@@ -51,7 +54,10 @@
                      :onclick "~/.config/eww/scripts/toggle.sh syncthing")
         (service_row :name "ActivityWatch"
                      :state activitywatch_state
-                     :onclick "~/.config/eww/scripts/toggle.sh activitywatch"))
+                     :onclick "~/.config/eww/scripts/toggle.sh activitywatch")
+        (service_row :name "Tailscale"
+                     :state tailscale_state
+                     :onclick "~/.config/eww/scripts/toggle.sh tailscale"))
       (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
                 :style "min-width: 8px;"))
     (eventbox :class "dismiss-zone" :onclick "eww close services-popup"

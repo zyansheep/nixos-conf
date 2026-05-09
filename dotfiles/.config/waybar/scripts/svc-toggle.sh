@@ -2,7 +2,7 @@
 # Toggle a managed service group on/off via systemctl, with notify-send feedback.
 # Usage: svc-toggle.sh <action> <group>
 #   action: toggle | start | stop | status
-#   group:  immich | syncthing | activitywatch
+#   group:  immich | syncthing | activitywatch | tailscale
 set -euo pipefail
 
 action="${1:-toggle}"
@@ -28,6 +28,12 @@ case "$group" in
     scope=user
     units=(aw-server.service app-aw-qt@autostart.service)
     primary="aw-server.service"
+    ;;
+  tailscale)
+    label="Tailscale"
+    scope=system
+    units=(tailscaled.service)
+    primary="tailscaled.service"
     ;;
   *)
     notify-send -u critical "svc-toggle" "Unknown group: $group"
