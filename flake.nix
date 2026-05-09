@@ -38,12 +38,6 @@
 
     nvfetcher.url = "github:berberman/nvfetcher";
     nvfetcher.inputs.nixpkgs.follows = "stable";
-
-    firefox.url = "github:nix-community/flake-firefox-nightly";
-    firefox.inputs.nixpkgs.follows = "latest";
-
-    flake-programs-sqlite.url = "github:wamserma/flake-programs-sqlite";
-    flake-programs-sqlite.inputs.nixpkgs.follows = "latest";
   };
 
   outputs = inputs @ {

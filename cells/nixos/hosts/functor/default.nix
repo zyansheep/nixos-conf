@@ -33,6 +33,9 @@
     # services.ssh
     services.syncthing
     services.containers
+    services.zfs-snapshots
+
+    security.doas-wheel
   ];
 
   # Bootloader
@@ -45,38 +48,10 @@
   networking.hostId = "95196fe2";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [
-    {
-      users = ["zyansheep"];
-      keepEnv = true;
-      persist = true;
-    }
-  ];
-
-  # enable firefox nightly
-  # programs.firefox.package =
-  # inputs.firefox.packages.${system}.firefox-nightly-bin;
   networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   services.flatpak.enable = true;
   services.mullvad-vpn.enable = true;
-
-  services.sanoid = {
-    enable = true;
-    interval = "hourly";
-
-    datasets = {
-      "zpool/safe" = {
-        hourly = 1;
-        daily = 15;
-        monthly = 12;
-        yearly = 1;
-        autoprune = true;
-        autosnap = true;
-        recursive = true;
-      };
-    };
-  };
 
   # Enable virtualization
   virtualisation.libvirtd.enable = true;

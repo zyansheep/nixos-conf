@@ -40,6 +40,7 @@
     services.containers
     services.immich
     services.tailscale
+    services.zfs-snapshots
     # services.ssh
   ];
 
@@ -163,28 +164,7 @@
 
   home-manager.users.zyansheep.programs.command-not-found.enable = true;
 
-  # zfs snapshot service
-  services.sanoid = {
-    enable = true;
-    interval = "hourly";
-
-    datasets = {
-      "zpool/safe" = {
-        hourly = 1;
-        daily = 15;
-        monthly = 12;
-        yearly = 1;
-        autoprune = true;
-        autosnap = true;
-        recursive = true;
-      };
-    };
-  };
-
   # services.plantuml-server.enable = true;
-
-  # nix.sandboxPaths = [ "/bin/sh=${pkgs.bash}/bin/sh" ];
-  # nix.useSandbox = false;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

@@ -34,6 +34,8 @@
     services.syncthing
     services.containers
     services.ssh
+
+    security.doas-wheel
   ];
 
   # Bootloader
@@ -51,14 +53,6 @@
   };
 
   networking.firewall.enable = false;
-
-  security.doas.extraRules = [
-    {
-      users = ["zyansheep"];
-      keepEnv = true;
-      persist = true;
-    }
-  ];
 
   /* services.udev.packages = [
        pkgs.android-udev-rules
