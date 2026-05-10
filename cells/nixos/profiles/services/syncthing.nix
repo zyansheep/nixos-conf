@@ -58,6 +58,10 @@
     */
   };
 
+  # Don't auto-start syncthing at boot — toggled on demand via the waybar
+  # services dropdown.
+  systemd.services.syncthing.wantedBy = lib.mkForce [];
+
   # Allow wheel users to start/stop syncthing without a password,
   # so the waybar services dropdown can toggle it.
   security.polkit.extraConfig = ''

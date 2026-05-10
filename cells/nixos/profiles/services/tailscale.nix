@@ -7,7 +7,13 @@
   pkgs,
   ...
 }: {
-  services.tailscale.enable = true;
+  services.tailscale = {
+    enable = true;
+    # Persist the headscale login-server in tailscaled state so a bare
+    # `tailscale up` (e.g. via the waybar toggle on a fresh login) doesn't
+    # silently fall back to login.tailscale.com.
+    extraSetFlags = ["--login-server=https://headscale.zyancraft.net"];
+  };
 
   # Allow wheel users to start/stop tailscaled without a password,
   # so the waybar services dropdown can connect/disconnect from the tailnet.

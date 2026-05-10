@@ -11,7 +11,10 @@ with lib; {
   services.immich = {
     enable = true;
     port = 2283;
-    host = "127.0.0.1";
+    # Bind on the tailscale interface IP so sguru's Caddy can proxy to us
+    # over the tailnet. Update if this machine ever re-registers and the
+    # IP changes (see `tailscale ip`).
+    host = "100.64.0.3";
     mediaLocation = "/var/lib/immich";
     accelerationDevices = null;
     environment.IMMICH_LOG_LEVEL = "warn";
@@ -37,6 +40,12 @@ with lib; {
       "x-systemd.requires-mounts-for=/home/zyansheep"
     ];
   };
+
+  # Don't auto-start immich at boot — toggled on demand via the waybar
+  # services dropdown. The toggle starts all three units explicitly.
+  systemd.services.immich-server.wantedBy = lib.mkForce [];
+  systemd.services.immich-machine-learning.wantedBy = lib.mkForce [];
+  systemd.services.redis-immich.wantedBy = lib.mkForce [];
 
   # Allow wheel users to start/stop immich units without a password,
   # so the waybar services dropdown can toggle them.
