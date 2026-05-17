@@ -11,7 +11,8 @@
     impala # tui wifi manager
     zathura # vim pdf viewer
     swayimg # img viewer
-    swaybg # wallpaper
+    swaybg # wallpaper (legacy / fallback)
+    awww # wallpaper daemon (LGFae/awww — successor to swww)
     brightnessctl # brightness control
     rofi # menu
     fuzzel # alternative menu

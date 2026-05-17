@@ -97,7 +97,7 @@ input {
         accel-speed 0.2  // pointer_accel from sway
         accel-profile "adaptive"  // accel_profile from sway
         scroll-factor 1.0  // Speed up scrolling (including 3-finger)
-        // scroll-method "two-finger"
+        scroll-method "two-finger"
         // disabled-on-external-mouse
         middle-emulation  // middle_emulation from sway
     }
@@ -327,8 +327,10 @@ layout {
 // Startup applications from sway config
 spawn-at-startup "fcitx5" "-d"  // Input method
 
-// Wallpaper from sway config (using swaybg for wayland compatibility)
-spawn-at-startup "swaybg" "-i" "/home/zyansheep/kurzgesagt_black_hole_wallpaper_pack/Wallpaper_Set_YT_Black_Hole_Universe_d_03.png" "-m" "fill"
+// Wallpaper: awww daemon + rotation loop.
+// Cycles through images in ~/Pictures/Backgrounds/Active every 5 minutes.
+spawn-at-startup "awww-daemon"
+spawn-at-startup "bash" "-c" "sleep 2; while :; do f=$(find ~/Pictures/Backgrounds/Active -type f | shuf -n1); [ -n \"$f\" ] && awww img \"$f\" --transition-type fade; sleep 300; done"
 
 // Clipboard history watcher from sway config
 spawn-at-startup "bash" "-c" "killall wl-paste; wl-paste --watch cliphist store"
