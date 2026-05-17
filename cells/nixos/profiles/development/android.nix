@@ -1,7 +1,6 @@
 {inputs, common}:
 {
   lib,
-  # config,
   pkgs,
   ...
 }: with lib; {
@@ -9,16 +8,10 @@
   boot.kernelModules = ["kvm-amd"];
   virtualisation.libvirtd.enable = true;
 
-  # users.users.<user>.extraGroups = ["adbusers"]; # Set in users/*/default.nix
+  # systemd 258+ handles uaccess automatically — adbusers group is no longer
+  # needed. Just install android-tools to get adb/fastboot.
   environment.systemPackages = with pkgs; [
-    gitRepo
+    git-repo
+    android-tools
   ];
-
-  # Allow Unfree Android Studio
-  # config.allowUnfreePackages = ["android-studio"];
-  # config.allowUnfreePredicate = pkg:
-  #  builtins.elem (lib.getName pkg) [
-  #    "android-studio-stable"
-  #  ];
-  # config.allowUnfree = true;
 }

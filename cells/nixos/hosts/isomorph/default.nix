@@ -121,7 +121,7 @@
   networking.firewall.enable = false;
 
   # groups
-  users.users.zyansheep.extraGroups = [ "adbusers" "uucp" "waydroid" ];
+  users.users.zyansheep.extraGroups = [ "uucp" "waydroid" ];
 
   documentation.info.enable = false;
 

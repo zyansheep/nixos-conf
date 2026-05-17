@@ -58,13 +58,11 @@
        pkgs.android-udev-rules
      ];
   */
-  programs.adb.enable = true;
-  users.users.zyansheep.extraGroups = ["adbusers" "uucp"];
+  users.users.zyansheep.extraGroups = ["uucp"];
 
-  /* environment.systemPackages = with pkgs; [
-       # arduino
-     ];
-  */
+  environment.systemPackages = with pkgs; [
+    android-tools # adb, fastboot — systemd 258+ handles uaccess automatically
+  ];
 
   hardware.enableAllFirmware = true;
 
