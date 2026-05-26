@@ -299,5 +299,20 @@ label:focus {
 
 #custom-notification {
   padding: 0 7px;
+  color: #ffffff;
+}
+
+#custom-notification.notification,
+#custom-notification.inhibited-notification,
+#custom-notification.dnd-notification,
+#custom-notification.dnd-inhibited-notification {
+  color: #e0c060;
+}
+
+#custom-notification.dnd-none,
+#custom-notification.dnd-notification,
+#custom-notification.dnd-inhibited-none,
+#custom-notification.dnd-inhibited-notification {
+  color: #888;
 }
 

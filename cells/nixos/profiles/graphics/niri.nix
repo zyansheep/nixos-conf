@@ -5,7 +5,7 @@
     slurp # rectangle selection for screenshot functionality
     wl-clipboard # wl-copy and wl-paste for copy/paste from stdin / stdout
     cliphist # clipboard manager
-    mako # notification system developed by swaywm maintainer
+    swaynotificationcenter # notification daemon + control center
     waybar # topbar
     eww # interactive popup widgets (services dropdown)
     impala # tui wifi manager
@@ -17,7 +17,6 @@
     rofi # menu
     fuzzel # alternative menu
     swaylock # lockscreen
-    mako # notif daemon
     polkit
     swayidle # idle manager
     xwayland-satellite # xwayland support
