@@ -91,6 +91,7 @@
       "/var/lib/systemd/coredump"
       "/var/lib/iwd"
       "/var/lib/tailscale" # tailscaled state — machine/node keys, login-server, peer cache. Without this, reboot = re-register.
+      "/etc/openfortivpn" # VPN configs (host/cert details kept out of the public flake)
       # "/etc/NetworkManager/system-connections"
       "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
