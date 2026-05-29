@@ -29,7 +29,7 @@ spawn-at-startup "signal-desktop"
 
 // Window rules to assign applications to workspaces
 window-rule {
-    match title="Ablaze Floorp"
+    match app-id="floorp"
     open-on-workspace "web"
     open-maximized false
 }
@@ -42,7 +42,7 @@ window-rule {
 }
 window-rule {
     match at-startup=true
-    match app-id="anki"
+    match app-id="t3code"
     open-on-workspace "notes"
 }
 
@@ -407,27 +407,27 @@ binds {
     Mod+Shift+Slash { show-hotkey-overlay; }
 
     // Suggested binds for running programs: terminal, app launcher, screen locker.
-    Mod+Return hotkey-overlay-title="Open a Terminal: foot" { spawn "foot"; }
-    Mod+Z hotkey-overlay-title="File Manager: foot yazi" { spawn "foot" "yazi"; }
-    Mod+D hotkey-overlay-title="Run an Application: rofi" { spawn "rofi" "-run-use-desktop-cache" "-show" "run"; }
-    Mod+Shift+D hotkey-overlay-title="Install an Application: npmenu.py" { spawn "/home/zyansheep/Projects/npmenu/npmenu.py" "-l" "rofi"; }
-    Super+Alt+L hotkey-overlay-title="Lock the Screen: swaylock" { spawn "swaylock"; }
-    
+    Mod+Return hotkey-overlay-title="💻 Open a Terminal: foot" { spawn "foot"; }
+    Mod+Z hotkey-overlay-title="📁 File Manager: foot yazi" { spawn "foot" "yazi"; }
+    Mod+D hotkey-overlay-title="🚀 Run an Application: rofi" { spawn "rofi" "-run-use-desktop-cache" "-show" "run"; }
+    Mod+Shift+D hotkey-overlay-title="📦 Install an Application: npmenu.py" { spawn "/home/zyansheep/Projects/npmenu/npmenu.py" "-l" "rofi"; }
+    Super+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock"; }
+
     // Clipboard and utility bindings from sway
-    Mod+C { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }
-    Mod+Shift+C { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
+    Mod+C hotkey-overlay-title="📋 Clipboard History: rofi" { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }
+    Mod+Shift+C hotkey-overlay-title="🖼️ Show Last Clipboard Image" { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
     // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
-    Mod+Semicolon { spawn "rofimoji"; }
-    Mod+Shift+W { spawn "iwmenu" "-m" "rofi"; }
-    
+    Mod+Semicolon hotkey-overlay-title="😀 Emoji Picker: rofimoji" { spawn "rofimoji"; }
+    Mod+Shift+W hotkey-overlay-title="📶 Wi-Fi Menu: iwmenu" { spawn "iwmenu" "-m" "rofi"; }
+
     // Recording and screenshot bindings from sway
-    Mod+Shift+S { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
-    Mod+Shift+G { spawn "bash" "-c" "wf-recorder -g \"$(slurp)\" -f ~/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
-    Mod+Shift+F { spawn "bash" "-c" "wf-recorder -f ~/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S.mp4\")"; }
-    Mod+Shift+E { spawn "killall" "-s" "SIGINT" "wf-recorder"; }
-    
+    Mod+Shift+S hotkey-overlay-title="📸 Screenshot Region to Clipboard" { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
+    Mod+Shift+G hotkey-overlay-title="🎥 Record Screen Region: wf-recorder" { spawn "bash" "-c" "f=~/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4; wf-recorder -g \"$(slurp)\" -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
+    Mod+Shift+F hotkey-overlay-title="🎬 Record Full Screen: wf-recorder" { spawn "bash" "-c" "f=~/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4; wf-recorder -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
+    Mod+Shift+E hotkey-overlay-title="⏹️ Stop Screen Recording" { spawn "killall" "-s" "SIGINT" "wf-recorder"; }
+
     // Suspend keybind
-    Ctrl+Mod+S { spawn "systemctl" "suspend"; }
+    Ctrl+Mod+S hotkey-overlay-title="💤 Suspend System" { spawn "systemctl" "suspend"; }
 
     // You can also use a shell. Do this if you need pipes, multiple commands, etc.
     // Note: the entire command goes as a single argument in the end.
@@ -435,14 +435,14 @@ binds {
 
     // Example volume keys mappings for PipeWire & WirePlumber.
     // The allow-when-locked=true property makes them work even when the session is locked.
-    XF86AudioRaiseVolume allow-when-locked=true { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.05+"; }
-    XF86AudioLowerVolume allow-when-locked=true { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.05-"; }
-    XF86AudioMute        allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SINK@" "toggle"; }
-    XF86AudioMicMute     allow-when-locked=true { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
-    
+    XF86AudioRaiseVolume allow-when-locked=true hotkey-overlay-title=null { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.05+"; }
+    XF86AudioLowerVolume allow-when-locked=true hotkey-overlay-title=null { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.05-"; }
+    XF86AudioMute        allow-when-locked=true hotkey-overlay-title=null { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SINK@" "toggle"; }
+    XF86AudioMicMute     allow-when-locked=true hotkey-overlay-title=null { spawn "wpctl" "set-mute" "@DEFAULT_AUDIO_SOURCE@" "toggle"; }
+
     // Brightness controls from sway config
-    XF86MonBrightnessDown allow-when-locked=true { spawn "brightnessctl" "set" "5%-"; }
-    XF86MonBrightnessUp   allow-when-locked=true { spawn "brightnessctl" "set" "5%+"; }
+    XF86MonBrightnessDown allow-when-locked=true hotkey-overlay-title=null { spawn "brightnessctl" "set" "5%-"; }
+    XF86MonBrightnessUp   allow-when-locked=true hotkey-overlay-title=null { spawn "brightnessctl" "set" "5%+"; }
 
     // Open/close the Overview: a zoomed-out view of workspaces and windows.
     // You can also move the mouse into the top-left hot corner,
@@ -450,17 +450,17 @@ binds {
     Mod+O repeat=false { toggle-overview; }
 
     // Toggle notification panel
-    Mod+N { spawn "swaync-client" "-t" "-sw"; }
+    Mod+N hotkey-overlay-title="🔔 Toggle Notifications Panel" { spawn "swaync-client" "-t" "-sw"; }
 
     // Reload waybar and other user services
-    Mod+Shift+R { spawn "sh" "-c" "systemctl --user restart waybar; pkill swaync; swaync &"; }
+    Mod+Shift+R hotkey-overlay-title="🔄 Restart Waybar & Notifications" { spawn "sh" "-c" "systemctl --user restart waybar; pkill swaync; swaync &"; }
 
     Mod+Shift+Q { close-window; }
 
-    Mod+Left  { focus-column-left; }
+    Mod+Left  hotkey-overlay-title=null { focus-column-left; }
     Mod+Down  { focus-workspace-down; }
     Mod+Up    { focus-workspace-up; }
-    Mod+Right { focus-column-right; }
+    Mod+Right hotkey-overlay-title=null { focus-column-right; }
     Mod+H     { focus-column-left; }
     Mod+J     { focus-window-up; }
     Mod+K     { focus-window-down; }

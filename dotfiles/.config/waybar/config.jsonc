@@ -17,7 +17,7 @@
   "modules-right": [
     "custom/recording",
     "mpd",
-    "tray",
+    "group/tray-group",
     "idle_inhibitor",
     "network",
     "cpu",
@@ -32,6 +32,20 @@
     "pulseaudio",
     "custom/power"
   ],
+  "group/tray-group": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 300,
+      "children-class": "tray-drawer-child",
+      "transition-left-to-right": false
+    },
+    "modules": [ "custom/tray-toggle", "tray" ]
+  },
+  "custom/tray-toggle": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "System tray (hover to expand)"
+  },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
     "return-type": "json",
@@ -54,7 +68,8 @@
     },
     "return-type": "json",
     "exec-if": "which swaync-client",
-    "exec": "swaync-client -swb",
+    // Blank the count while DND is active so only the bell icon shows.
+    "exec": "swaync-client -swb | jq --unbuffered -c 'if (.class // \"\" | test(\"dnd\")) then .text=\"\" else . end'",
     "on-click": "swaync-client -t -sw",
     "on-click-right": "swaync-client -d -sw",
     "escape": true
@@ -116,7 +131,9 @@
     "format-icons": {
       "activated": "",
       "deactivated": ""
-    }
+    },
+    "tooltip-format-activated": "Idle inhibitor: ON (screen wont sleep)",
+    "tooltip-format-deactivated": "Idle inhibitor: OFF (click to keep screen awake)"
   },
   "tray": {
     // "icon-size": 21,

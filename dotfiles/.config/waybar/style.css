@@ -298,15 +298,35 @@ label:focus {
 }
 
 #custom-notification {
-  padding: 0 7px;
+  padding: 0 3px;
   color: #ffffff;
 }
 
-#custom-notification.notification,
-#custom-notification.inhibited-notification,
-#custom-notification.dnd-notification,
-#custom-notification.dnd-inhibited-notification {
-  color: #e0c060;
+/* Tight padding for the right-side metrics cluster */
+#cpu,
+#memory,
+#temperature {
+  padding: 0 3px;
+}
+
+/* Tighten two specific gaps without affecting neighbors: reduce only the left
+   padding facing the smaller neighbor.
+   #battery left  -> custom/services ↔ battery gap
+   #power-profiles-daemon left -> notification (bell) ↔ power-profiles gap */
+#battery {
+  padding-left: 3px;
+}
+#power-profiles-daemon {
+  padding-left: 3px;
+}
+
+/* Tray drawer: chevron trigger + hover-revealed tray icons */
+#custom-tray-toggle {
+  padding: 0 4px;
+  color: #ffffff;
+}
+.tray-drawer-child {
+  padding: 0 2px;
 }
 
 #custom-notification.dnd-none,
