@@ -141,7 +141,7 @@ in {
 
   # automatic timezone setting
   # services.automatic-timezoned.enable = true; #idk why this doesn't work :/
-  time.timeZone = "America/New_York";
+  time.timeZone = "America/Los_Angeles";
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = lib.mkDefault true;
 }
