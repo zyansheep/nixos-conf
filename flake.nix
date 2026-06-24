@@ -28,7 +28,7 @@
     nixos-hardware.url = "github:nixos/nixos-hardware";
 
     # Tools
-    lanzaboote.url = "github:nix-community/lanzaboote/v0.4.3";
+    lanzaboote.url = "github:nix-community/lanzaboote/v1.1.0";
     lanzaboote.inputs.nixpkgs.follows = "stable";
 
     impermanence.url = "github:nix-community/impermanence";

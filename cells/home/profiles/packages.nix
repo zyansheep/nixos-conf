@@ -4,7 +4,6 @@ _: {pkgs, ...}: {
     brave
     chromium
     floorp-bin
-    librewolf
     tor-browser
 
     # Communication
