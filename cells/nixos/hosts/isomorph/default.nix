@@ -40,6 +40,7 @@
     services.containers
     services.immich
     services.tailscale
+    services."hampshire-vpn"
     services.zfs-snapshots
     # services.ssh
   ];

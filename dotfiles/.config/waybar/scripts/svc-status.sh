@@ -9,10 +9,16 @@ services=(
   "Syncthing|system|syncthing.service"
   "ActivityWatch|user|aw-server.service"
   "Tailscale|system|tailscaled.service"
+  "Hampshire VPN|proc|openfortivpn"
 )
 
 state_of() {
   local scope="$1" unit="$2"
+  # proc scope: not a systemd unit, just a running process (e.g. openfortivpn).
+  if [ "$scope" = proc ]; then
+    if pgrep -x "$unit" >/dev/null 2>&1; then echo on; else echo off; fi
+    return
+  fi
   local sctl=(systemctl)
   [ "$scope" = user ] && sctl=(systemctl --user)
   if "${sctl[@]}" is-active --quiet "$unit"; then echo on; else echo off; fi

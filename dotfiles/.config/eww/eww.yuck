@@ -14,6 +14,12 @@
 (defpoll tailscale_state :interval "500ms" :initial "unknown"
   "systemctl is-active tailscaled.service 2>/dev/null || true")
 
+; Hampshire VPN isn't a systemd unit — it's openfortivpn launched on demand
+; (SAML needs a browser, so it can't be a headless always-on service). The
+; script reports active/inactive, which map onto the same switch CSS classes.
+(defpoll hampshire_state :interval "1s" :initial "inactive"
+  "~/.config/eww/scripts/hampshire-vpn.sh status 2>/dev/null || echo inactive")
+
 ; --- switch widget -----------------------------------------------------------
 ; The visual state is derived purely from systemctl's report. Possible values:
 ;   active inactive activating deactivating failed unknown
@@ -57,7 +63,10 @@
                      :onclick "~/.config/eww/scripts/toggle.sh activitywatch")
         (service_row :name "Tailscale"
                      :state tailscale_state
-                     :onclick "~/.config/eww/scripts/toggle.sh tailscale"))
+                     :onclick "~/.config/eww/scripts/toggle.sh tailscale")
+        (service_row :name "Hampshire VPN"
+                     :state hampshire_state
+                     :onclick "~/.config/eww/scripts/hampshire-vpn.sh toggle"))
       (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
                 :style "min-width: 8px;"))
     (eventbox :class "dismiss-zone" :onclick "eww close services-popup"
