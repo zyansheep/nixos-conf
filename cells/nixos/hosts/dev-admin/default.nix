@@ -34,8 +34,6 @@
     services.syncthing
     services.containers
     services.ssh
-
-    security.doas-wheel
   ];
 
   # Bootloader

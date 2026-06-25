@@ -44,14 +44,6 @@
   networking.hostId = "49408a0f";
   networking.firewall.enable = false;
 
-  # doas
-  security.doas.extraRules = [
-    {
-      keepEnv = true;
-      persist = true;
-    }
-  ];
-
   # groups
 
   documentation.info.enable = false;

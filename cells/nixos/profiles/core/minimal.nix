@@ -21,7 +21,6 @@ with lib; {
   services.earlyoom.enable = lib.mkDefault true;
   services.earlyoom.enableNotifications = true;
 
-  # Enable doas instead of sudo
   security.sudo.enable = false;
   security.sudo-rs.enable = true;
   /* security.sudo-rs.extraRules = [

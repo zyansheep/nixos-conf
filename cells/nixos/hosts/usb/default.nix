@@ -21,14 +21,6 @@
   networking.hostName = lib.mkForce "live";
   networking.firewall.enable = false;
 
-  security.doas.extraRules = [
-    {
-      users = ["zyansheep"];
-      keepEnv = true;
-      persist = true;
-    }
-  ];
-
   hardware.enableAllFirmware = true;
 
   documentation.info.enable = false;

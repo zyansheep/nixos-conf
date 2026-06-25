@@ -34,8 +34,6 @@
     services.syncthing
     services.containers
     services.zfs-snapshots
-
-    security.doas-wheel
   ];
 
   # Bootloader
