@@ -21,7 +21,7 @@ workspace "monitors" {
 // Startup applications for workspaces
 spawn-at-startup "floorp"
 spawn-at-startup "obsidian"
-spawn-at-startup "anki"
+// spawn-at-startup "anki"
 spawn-at-startup "codium"
 spawn-at-startup "vesktop"
 spawn-at-startup "flatpak" "run" "dev.vencord.Vesktop"
