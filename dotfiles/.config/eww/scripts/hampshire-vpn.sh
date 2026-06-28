@@ -13,7 +13,18 @@
 # toggle -> stop if up, otherwise connect (default action for the popup button)
 set -uo pipefail
 
+# eww spawns this from waybar's restricted systemd env, so PATH is just
+# /run/current-system/sw/bin. That stripped PATH breaks two things, so repair it:
+#  - bare `sudo` resolves to the NON-setuid sudo-rs copy ("sudo must be owned by
+#    uid 0…"); we also call the setuid wrapper by absolute path ($SUDO) to be safe.
+#  - xdg-open validates a handler's Exec is runnable, so it SKIPS floorp
+#    (`Exec=floorp`, a bare command not on this PATH) and falls back to brave
+#    (`Exec=/nix/store/…/brave`, absolute) — that's why SAML opened in Brave.
+#    Restoring the per-user profile bin lets xdg-open resolve the real default.
+export PATH="/run/wrappers/bin:/etc/profiles/per-user/$(id -un)/bin:$HOME/.nix-profile/bin:$PATH"
+
 LOG="${XDG_RUNTIME_DIR:-/tmp}/hampshire-vpn.log"
+SUDO=/run/wrappers/bin/sudo
 
 is_up() { pgrep -x openfortivpn >/dev/null 2>&1; }
 
@@ -22,7 +33,7 @@ connect() {
   : >"$LOG"
   # Detach the tunnel; root writes into the fd we (the user) opened, so the log
   # stays user-readable. setsid frees it from eww's process group.
-  setsid sudo hampshire-vpn up >"$LOG" 2>&1 &
+  setsid "$SUDO" hampshire-vpn up >"$LOG" 2>&1 &
   disown
   # Watch for the gateway SAML URL and open it in the browser.
   setsid bash -c '
@@ -47,8 +58,8 @@ connect() {
 
 case "${1:-toggle}" in
   status) is_up && echo active || echo inactive ;;
-  down)   sudo hampshire-vpn down ;;
+  down)   "$SUDO" hampshire-vpn down ;;
   up)     connect ;;
-  toggle) if is_up; then sudo hampshire-vpn down; else connect; fi ;;
+  toggle) if is_up; then "$SUDO" hampshire-vpn down; else connect; fi ;;
   *)      echo "usage: hampshire-vpn.sh {status|up|down|toggle}" >&2; exit 1 ;;
 esac
