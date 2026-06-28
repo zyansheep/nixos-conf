@@ -74,7 +74,14 @@
 
   # Bootloader
   boot = {
-    zfs = { extraPools = [ "zpool" ]; };
+    zfs = {
+      extraPools = [ "zpool" ];
+      # Don't force `-f` on root-pool import (ZFS best practice). Safe here:
+      # networking.hostId is stable + enforced, so clean and crash reboots still
+      # import via hostid match; only a genuine mismatch blocks boot. Recovery
+      # if ever needed: boot once with the `zfs_force=1` kernel param.
+      forceImportRoot = false;
+    };
     loader.efi.canTouchEfiVariables = true;
     lanzaboote = {
       enable = true;
