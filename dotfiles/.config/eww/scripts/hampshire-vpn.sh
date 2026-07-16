@@ -1,65 +1,100 @@
 #!/usr/bin/env bash
 # Toggle the Hampshire (Fortinet/SAML) VPN from the eww services popup.
 #
-# Why this isn't just `sudo openfortivpn`: openfortivpn must run as root (tun +
-# routes), but a root process can't reach your Wayland/DBus session to open
-# Firefox for the SAML login. So we split it: `sudo hampshire-vpn up` runs the
-# tunnel as root (nopass, scoped — see profiles/services/hampshire-vpn.nix) and
-# logs to a file; this user-session script tails that log for the SAML URL and
-# opens it in your browser itself.
+# How it connects: this gateway won't do openfortivpn's SAML->localhost
+# redirect, so we reuse your *portal* login. svpncookie.js pulls the (HttpOnly,
+# session) SVPNCOOKIE out of floorp's sessionstore; the root `hampshire-vpn
+# connect` wrapper stashes it in a root-only /run file and (re)starts
+# hampshire-vpn.service, which reads it via StandardInput=file:.
 #
-# status -> active|inactive (consumed by the eww defpoll switch)
-# down   -> stop the tunnel
-# toggle -> stop if up, otherwise connect (default action for the popup button)
+# Two hard-won rules shape this script:
+#  1. eww KILLS onclick commands at :timeout (default 200ms!) — handlers must
+#     never do slow work inline. `toggle` only picks a direction; the slow
+#     parts (node over a 4MB sessionstore, sudo, systemctl) run in a detached
+#     worker (setsid -f).
+#  2. No hand-rolled state. The slider maps 1:1 onto `systemctl is-active`
+#     (inactive/activating/active/deactivating/failed), same as the Tailscale
+#     row. Attempt history: journalctl -u hampshire-vpn.
 set -uo pipefail
 
-# eww spawns this from waybar's restricted systemd env, so PATH is just
-# /run/current-system/sw/bin. That stripped PATH breaks two things, so repair it:
-#  - bare `sudo` resolves to the NON-setuid sudo-rs copy ("sudo must be owned by
-#    uid 0…"); we also call the setuid wrapper by absolute path ($SUDO) to be safe.
-#  - xdg-open validates a handler's Exec is runnable, so it SKIPS floorp
-#    (`Exec=floorp`, a bare command not on this PATH) and falls back to brave
-#    (`Exec=/nix/store/…/brave`, absolute) — that's why SAML opened in Brave.
-#    Restoring the per-user profile bin lets xdg-open resolve the real default.
+# eww spawns this with a stripped PATH (/run/current-system/sw/bin only);
+# restore the setuid sudo wrapper + per-user profile (node, xdg-open, ...).
 export PATH="/run/wrappers/bin:/etc/profiles/per-user/$(id -un)/bin:$HOME/.nix-profile/bin:$PATH"
 
-LOG="${XDG_RUNTIME_DIR:-/tmp}/hampshire-vpn.log"
 SUDO=/run/wrappers/bin/sudo
+UNIT=hampshire-vpn.service
+PORTAL="https://vpn.hampshire.edu:10443"
+COOKIEJS="$HOME/.config/eww/scripts/svpncookie.js"
+FAILMARK="${XDG_RUNTIME_DIR:-/tmp}/hampshire-vpn.notified" # notified-once guard
 
-is_up() { pgrep -x openfortivpn >/dev/null 2>&1; }
+unit_state() { systemctl is-active "$UNIT" 2>/dev/null || true; }
+notify()     { command -v notify-send >/dev/null 2>&1 && notify-send "$@" || true; }
 
-connect() {
-  is_up && return 0
-  : >"$LOG"
-  # Detach the tunnel; root writes into the fd we (the user) opened, so the log
-  # stays user-readable. setsid frees it from eww's process group.
-  setsid "$SUDO" hampshire-vpn up >"$LOG" 2>&1 &
-  disown
-  # Watch for the gateway SAML URL and open it in the browser.
-  setsid bash -c '
-    log="'"$LOG"'"
-    for _ in $(seq 1 60); do
-      url=$(grep -oE "https://[^[:space:]]+" "$log" 2>/dev/null \
-              | grep -m1 -i saml \
-            || grep -oE "https://[^[:space:]]+" "$log" 2>/dev/null | head -n1)
-      if [ -n "$url" ]; then
-        xdg-open "$url" >/dev/null 2>&1
-        command -v notify-send >/dev/null 2>&1 \
-          && notify-send "Hampshire VPN" "Opening SAML login in your browser…"
-        exit 0
+# Point the user at the portal to refresh the login (SVPNCOOKIE is minted at
+# portal sign-in). Names the Firefox container holding the old cookie, since
+# xdg-open lands in the default container, not that one.
+open_portal() {
+  local why="$1" ctr
+  ctr=$(node "$COOKIEJS" container 2>/dev/null || true)
+  xdg-open "$PORTAL/remote/logout" >/dev/null 2>&1 &
+  notify -u critical "Hampshire VPN" \
+    "$why — sign out & back in${ctr:+ (your $ctr container)}, then toggle again."
+}
+
+status() {
+  local s
+  s=$(unit_state)
+  case "$s" in
+    active) rm -f "$FAILMARK" ;;
+    failed)
+      # Unit-level failure (cookie rejected, tunnel died, ...): notify once
+      # per episode. The slider honestly stays red until the next attempt.
+      if [ ! -f "$FAILMARK" ]; then
+        touch "$FAILMARK"
+        setsid -f "$0" notify-failure >/dev/null 2>&1 </dev/null
       fi
-      sleep 1
-    done
-    command -v notify-send >/dev/null 2>&1 \
-      && notify-send -u critical "Hampshire VPN" "No SAML URL appeared — check $log"
-  ' >/dev/null 2>&1 &
-  disown
+      ;;
+  esac
+  echo "${s:-inactive}"
+}
+
+disconnect() {
+  "$SUDO" -n hampshire-vpn down \
+    || notify -u critical "Hampshire VPN" "Couldn't stop tunnel (sudo error)"
+}
+
+# The slow path — only ever runs detached from an eww handler (or in a
+# terminal, via `up`).
+worker() {
+  local cookie out
+  cookie=$(node "$COOKIEJS" 2>/dev/null || true)
+  if [ -z "$cookie" ]; then
+    open_portal "No portal session found in floorp"
+    return 0
+  fi
+  if out=$(printf '%s\n' "$cookie" | "$SUDO" -n hampshire-vpn connect 2>&1); then
+    rm -f "$FAILMARK" # fresh attempt underway: re-arm the failure notice
+  else
+    # The unit never took over (sudo denied, systemctl error, ...) — the
+    # status poll can't see this kind of failure, so report it directly.
+    notify -u critical "Hampshire VPN" "Couldn't start tunnel: ${out:-unknown sudo error}"
+  fi
 }
 
 case "${1:-toggle}" in
-  status) is_up && echo active || echo inactive ;;
-  down)   "$SUDO" hampshire-vpn down ;;
-  up)     connect ;;
-  toggle) if is_up; then "$SUDO" hampshire-vpn down; else connect; fi ;;
-  *)      echo "usage: hampshire-vpn.sh {status|up|down|toggle}" >&2; exit 1 ;;
+  status) status ;;
+  down)   disconnect ;;
+  up)     worker ;; # foreground: nice for terminal debugging
+  toggle)
+    # Same semantics as toggle.sh: treat in-flight transitions as their
+    # target, so a click during `activating` cancels and a click during
+    # `deactivating` reconnects.
+    case "$(unit_state)" in
+      active|activating) disconnect ;;
+      *)                 setsid -f "$0" worker >/dev/null 2>&1 </dev/null ;;
+    esac
+    ;;
+  worker)         worker ;; # internal: detached connect
+  notify-failure) open_portal "VPN connect failed (details: journalctl -u hampshire-vpn)" ;;
+  *) echo "usage: hampshire-vpn.sh {status|up|down|toggle}" >&2; exit 1 ;;
 esac

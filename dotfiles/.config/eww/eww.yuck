@@ -14,9 +14,10 @@
 (defpoll tailscale_state :interval "500ms" :initial "unknown"
   "systemctl is-active tailscaled.service 2>/dev/null || true")
 
-; Hampshire VPN isn't a systemd unit — it's openfortivpn launched on demand
-; (SAML needs a browser, so it can't be a headless always-on service). The
-; script reports active/inactive, which map onto the same switch CSS classes.
+; Hampshire VPN is an on-demand unit (hampshire-vpn.service, openfortivpn with
+; portal-cookie auth — see the script header). The script wraps `systemctl
+; is-active` plus a notify-on-failure hook, so it emits the same state names
+; as the systemd rows above.
 (defpoll hampshire_state :interval "1s" :initial "inactive"
   "~/.config/eww/scripts/hampshire-vpn.sh status 2>/dev/null || echo inactive")
 
@@ -30,7 +31,10 @@
 (defwidget service_row [name state onclick]
   (box :class "row" :orientation "h" :space-evenly false :spacing 12
     (label :class "service-name" :text name :hexpand true :halign "start")
-    (button :class "switch ${state}" :onclick onclick
+    ; :timeout — eww KILLS the onclick command when it expires (default is a
+    ; brutal 200ms). The toggle scripts are fire-and-forget, but a sudo PAM
+    ; round-trip alone can blow 200ms, so give them real headroom.
+    (button :class "switch ${state}" :timeout "3s" :onclick onclick
       (box :class "switch-track" :space-evenly false
         (box :class "switch-thumb")))))
 
