@@ -54,3 +54,97 @@
 <Multi_key> <g> <q> <p> : "ψ"    U03C8    # GREEK SMALL LETTER PSI
 <Multi_key> <g> <q> <s> : "ς"    U03C2    # GREEK SMALL LETTER FINAL SIGMA
 <Multi_key> <g> <q> <x> : "ξ"    U03BE    # GREEK SMALL LETTER XI
+# ─── Emoji (Slack-style :name:) ──────────────────────────────────────────────
+# Type the compose key (Caps), then :name: — e.g.  Caps : f i r e :  ->  🔥
+# Self-delimiting (trailing colon), so these never collide with the sequences
+# above or in the default/kragen tables. Add your own; keep both colons.
+# ─────────────────────────────────────────────────────────────────────────────
+<Multi_key> <colon> <s> <m> <i> <l> <e> <colon>	: "😄"	# :smile:
+<Multi_key> <colon> <g> <r> <i> <n> <colon>	: "😁"	# :grin:
+<Multi_key> <colon> <j> <o> <y> <colon>	: "😂"	# :joy:
+<Multi_key> <colon> <r> <o> <f> <l> <colon>	: "🤣"	# :rofl:
+<Multi_key> <colon> <w> <i> <n> <k> <colon>	: "😉"	# :wink:
+<Multi_key> <colon> <b> <l> <u> <s> <h> <colon>	: "😊"	# :blush:
+<Multi_key> <colon> <h> <e> <a> <r> <t> <underscore> <e> <y> <e> <s> <colon>	: "😍"	# :heart_eyes:
+<Multi_key> <colon> <c> <o> <o> <l> <colon>	: "😎"	# :cool:
+<Multi_key> <colon> <t> <h> <i> <n> <k> <colon>	: "🤔"	# :think:
+<Multi_key> <colon> <c> <r> <y> <colon>	: "😢"	# :cry:
+<Multi_key> <colon> <s> <o> <b> <colon>	: "😭"	# :sob:
+<Multi_key> <colon> <a> <n> <g> <r> <y> <colon>	: "😠"	# :angry:
+<Multi_key> <colon> <r> <a> <g> <e> <colon>	: "😡"	# :rage:
+<Multi_key> <colon> <s> <c> <r> <e> <a> <m> <colon>	: "😱"	# :scream:
+<Multi_key> <colon> <y> <u> <m> <colon>	: "😋"	# :yum:
+<Multi_key> <colon> <s> <w> <e> <a> <t> <colon>	: "😅"	# :sweat:
+<Multi_key> <colon> <u> <p> <s> <i> <d> <e> <underscore> <d> <o> <w> <n> <colon>	: "🙃"	# :upside_down:
+<Multi_key> <colon> <n> <e> <r> <d> <colon>	: "🤓"	# :nerd:
+<Multi_key> <colon> <p> <a> <r> <t> <y> <colon>	: "🥳"	# :party:
+<Multi_key> <colon> <h> <u> <g> <colon>	: "🤗"	# :hug:
+<Multi_key> <colon> <s> <h> <u> <s> <h> <colon>	: "🤫"	# :shush:
+<Multi_key> <colon> <r> <o> <l> <l> <underscore> <e> <y> <e> <s> <colon>	: "🙄"	# :roll_eyes:
+<Multi_key> <colon> <s> <m> <i> <r> <k> <colon>	: "😏"	# :smirk:
+<Multi_key> <colon> <s> <l> <e> <e> <p> <y> <colon>	: "😴"	# :sleepy:
+<Multi_key> <colon> <s> <i> <c> <k> <colon>	: "🤢"	# :sick:
+<Multi_key> <colon> <d> <i> <z> <z> <y> <colon>	: "😵"	# :dizzy:
+<Multi_key> <colon> <s> <t> <a> <r> <underscore> <s> <t> <r> <u> <c> <k> <colon>	: "🤩"	# :star_struck:
+<Multi_key> <colon> <p> <l> <e> <a> <d> <i> <n> <g> <colon>	: "🥺"	# :pleading:
+<Multi_key> <colon> <t> <h> <u> <m> <b> <s> <u> <p> <colon>	: "👍"	# :thumbsup:
+<Multi_key> <colon> <t> <h> <u> <m> <b> <s> <d> <o> <w> <n> <colon>	: "👎"	# :thumbsdown:
+<Multi_key> <colon> <o> <k> <colon>	: "👌"	# :ok:
+<Multi_key> <colon> <c> <l> <a> <p> <colon>	: "👏"	# :clap:
+<Multi_key> <colon> <w> <a> <v> <e> <colon>	: "👋"	# :wave:
+<Multi_key> <colon> <p> <r> <a> <y> <colon>	: "🙏"	# :pray:
+<Multi_key> <colon> <m> <u> <s> <c> <l> <e> <colon>	: "💪"	# :muscle:
+<Multi_key> <colon> <p> <o> <i> <n> <t> <underscore> <r> <i> <g> <h> <t> <colon>	: "👉"	# :point_right:
+<Multi_key> <colon> <p> <o> <i> <n> <t> <underscore> <l> <e> <f> <t> <colon>	: "👈"	# :point_left:
+<Multi_key> <colon> <r> <a> <i> <s> <e> <d> <underscore> <h> <a> <n> <d> <s> <colon>	: "🙌"	# :raised_hands:
+<Multi_key> <colon> <f> <i> <s> <t> <colon>	: "✊"	# :fist:
+<Multi_key> <colon> <h> <a> <n> <d> <s> <h> <a> <k> <e> <colon>	: "🤝"	# :handshake:
+<Multi_key> <colon> <v> <u> <l> <c> <a> <n> <colon>	: "🖖"	# :vulcan:
+<Multi_key> <colon> <h> <e> <a> <r> <t> <colon>	: "❤️"	# :heart:
+<Multi_key> <colon> <b> <r> <o> <k> <e> <n> <underscore> <h> <e> <a> <r> <t> <colon>	: "💔"	# :broken_heart:
+<Multi_key> <colon> <s> <p> <a> <r> <k> <l> <i> <n> <g> <underscore> <h> <e> <a> <r> <t> <colon>	: "💖"	# :sparkling_heart:
+<Multi_key> <colon> <f> <i> <r> <e> <colon>	: "🔥"	# :fire:
+<Multi_key> <colon> <s> <t> <a> <r> <colon>	: "⭐"	# :star:
+<Multi_key> <colon> <s> <p> <a> <r> <k> <l> <e> <s> <colon>	: "✨"	# :sparkles:
+<Multi_key> <colon> <z> <a> <p> <colon>	: "⚡"	# :zap:
+<Multi_key> <colon> <b> <o> <o> <m> <colon>	: "💥"	# :boom:
+<Multi_key> <colon> <h> <u> <n> <d> <r> <e> <d> <colon>	: "💯"	# :hundred:
+<Multi_key> <colon> <t> <a> <d> <a> <colon>	: "🎉"	# :tada:
+<Multi_key> <colon> <r> <o> <c> <k> <e> <t> <colon>	: "🚀"	# :rocket:
+<Multi_key> <colon> <e> <y> <e> <s> <colon>	: "👀"	# :eyes:
+<Multi_key> <colon> <s> <k> <u> <l> <l> <colon>	: "💀"	# :skull:
+<Multi_key> <colon> <p> <o> <o> <p> <colon>	: "💩"	# :poop:
+<Multi_key> <colon> <g> <h> <o> <s> <t> <colon>	: "👻"	# :ghost:
+<Multi_key> <colon> <a> <l> <i> <e> <n> <colon>	: "👽"	# :alien:
+<Multi_key> <colon> <r> <o> <b> <o> <t> <colon>	: "🤖"	# :robot:
+<Multi_key> <colon> <c> <h> <e> <c> <k> <colon>	: "✅"	# :check:
+<Multi_key> <colon> <c> <r> <o> <s> <s> <colon>	: "❌"	# :cross:
+<Multi_key> <colon> <w> <a> <r> <n> <i> <n> <g> <colon>	: "⚠️"	# :warning:
+<Multi_key> <colon> <q> <u> <e> <s> <t> <i> <o> <n> <colon>	: "❓"	# :question:
+<Multi_key> <colon> <b> <a> <n> <g> <colon>	: "❗"	# :bang:
+<Multi_key> <colon> <b> <u> <l> <b> <colon>	: "💡"	# :bulb:
+<Multi_key> <colon> <b> <u> <g> <colon>	: "🐛"	# :bug:
+<Multi_key> <colon> <g> <i> <f> <t> <colon>	: "🎁"	# :gift:
+<Multi_key> <colon> <b> <e> <l> <l> <colon>	: "🔔"	# :bell:
+<Multi_key> <colon> <l> <o> <c> <k> <colon>	: "🔒"	# :lock:
+<Multi_key> <colon> <k> <e> <y> <colon>	: "🔑"	# :key:
+<Multi_key> <colon> <m> <o> <n> <e> <y> <b> <a> <g> <colon>	: "💰"	# :moneybag:
+<Multi_key> <colon> <h> <a> <m> <m> <e> <r> <colon>	: "🔨"	# :hammer:
+<Multi_key> <colon> <w> <r> <e> <n> <c> <h> <colon>	: "🔧"	# :wrench:
+<Multi_key> <colon> <g> <e> <a> <r> <colon>	: "⚙️"	# :gear:
+<Multi_key> <colon> <m> <e> <m> <o> <colon>	: "📝"	# :memo:
+<Multi_key> <colon> <p> <u> <s> <h> <p> <i> <n> <colon>	: "📌"	# :pushpin:
+<Multi_key> <colon> <c> <o> <m> <p> <u> <t> <e> <r> <colon>	: "💻"	# :computer:
+<Multi_key> <colon> <p> <h> <o> <n> <e> <colon>	: "📱"	# :phone:
+<Multi_key> <colon> <c> <o> <f> <f> <e> <e> <colon>	: "☕"	# :coffee:
+<Multi_key> <colon> <b> <e> <e> <r> <colon>	: "🍺"	# :beer:
+<Multi_key> <colon> <p> <i> <z> <z> <a> <colon>	: "🍕"	# :pizza:
+<Multi_key> <colon> <c> <a> <k> <e> <colon>	: "🎂"	# :cake:
+<Multi_key> <colon> <d> <o> <g> <colon>	: "🐶"	# :dog:
+<Multi_key> <colon> <c> <a> <t> <colon>	: "🐱"	# :cat:
+<Multi_key> <colon> <u> <n> <i> <c> <o> <r> <n> <colon>	: "🦄"	# :unicorn:
+<Multi_key> <colon> <r> <a> <i> <n> <b> <o> <w> <colon>	: "🌈"	# :rainbow:
+<Multi_key> <colon> <s> <u> <n> <colon>	: "☀️"	# :sun:
+<Multi_key> <colon> <m> <o> <o> <n> <colon>	: "🌙"	# :moon:
+<Multi_key> <colon> <s> <n> <o> <w> <colon>	: "❄️"	# :snow:
+<Multi_key> <colon> <s> <n> <o> <w> <m> <a> <n> <colon>	: "⛄"	# :snowman:

@@ -86,7 +86,23 @@ _:
   xdg.configFile."mimeapps.list".force = true;
   xdg.dataFile."applications/mimeapps.list".force = true;
 
-  home.file = { ".XCompose" = { source = ./_files/XCompose; }; };
+  # Compose key. niri maps Caps -> Multi_key (xkb `compose:caps`); this builds
+  # the ~/.XCompose that every client (foot, fcitx5, GTK, Qt) loads via
+  # libxkbcommon. Order matters — later entries win exact-duplicate sequences:
+  #   1. the FULL default table (é ñ ç → © ½ « » …). NixOS ships no
+  #      /usr/share/X11/locale, so the usual `include "%L"` can't resolve;
+  #      point straight at libX11's copy in the store (Nix keeps it current).
+  #   2. kragen/xcompose (vendored) — comprehensive math, arrows, sub/super-
+  #      scripts, double-struck, IPA, typography.
+  #   3. our local block last — Greek (Caps g a -> α) + Slack-style :emoji:
+  #      (Caps : f i r e : -> 🔥) — so it overrides on any clash.
+  home.file.".XCompose".text =
+    ''
+      include "${pkgs.xorg.libX11}/share/X11/locale/en_US.UTF-8/Compose"
+    ''
+    + builtins.readFile ./_files/XCompose.kragen
+    + "\n"
+    + builtins.readFile ./_files/XCompose;
 
   home.pointerCursor = {
     name = "Adwaita";
