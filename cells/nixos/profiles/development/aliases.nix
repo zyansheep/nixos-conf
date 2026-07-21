@@ -5,6 +5,9 @@
       # git
       g = "git";
 
+      # kimi — sandboxed CLI; -y (yolo) auto-approves, safe since it's confined to cwd + /tmp
+      k = "kimi -y";
+
       # grep
       grep = "rg";
       gi = "grep -i";
