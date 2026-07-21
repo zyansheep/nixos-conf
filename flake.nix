@@ -136,6 +136,7 @@
             home-manager-base
             ssh
             packages
+            kimi
             dotfiles
           ];
           develop = [dev.nix];
