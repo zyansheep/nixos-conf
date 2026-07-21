@@ -21,7 +21,7 @@
       nsl = "ns l"; # search latest nixpkgs
       nf = "n flake";
       nd = "n develop"; # nix develop
-      nrb = "git add . && nixos-rebuild --flake . --sudo switch";
+      nrb = "git add . && sudo rebuild"; # passwordless via core.rebuild wrapper
       nrbu = "nf update && nrb";
 
       # systemd

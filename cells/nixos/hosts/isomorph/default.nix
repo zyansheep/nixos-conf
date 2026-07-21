@@ -22,6 +22,7 @@
     core.minimal
     core.common
     core.tools
+    core.rebuild
     # core.laptop-tlp
     # core.hacking-tools
     # core.privacy
