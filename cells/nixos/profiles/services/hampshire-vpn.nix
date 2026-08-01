@@ -85,7 +85,10 @@ in
     restartIfChanged = false;
     serviceConfig = {
       Type = "exec";
-      ExecStart = "${pkgs.openfortivpn}/bin/openfortivpn -c ${conf} --cookie-on-stdin";
+      # -v = DEBUG: logs each HTTP exchange + status codes to the journal
+      # (needed to see WHY the gateway rejects a cookie; without it the error
+      # is just "Could not get VPN configuration (HTTP status code)").
+      ExecStart = "${pkgs.openfortivpn}/bin/openfortivpn -c ${conf} --cookie-on-stdin -v";
       StandardInput = "file:${cookieFile}";
       ExecStartPost = "${waitForTunnel}";
       ExecStopPost = "${pkgs.coreutils}/bin/rm -f ${cookieFile}";
