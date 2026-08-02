@@ -99,6 +99,11 @@
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/lib/iwd"
+      # LVFS metadata + pending.db. Without this, every reboot wipes the
+      # firmware catalog, so `fwupdmgr update` reports "No updatable devices"
+      # unless you `refresh` first in the same boot — and a staged capsule
+      # loses its pending record, so the result is never reported back.
+      "/var/lib/fwupd"
       "/var/lib/tailscale" # tailscaled state — machine/node keys, login-server, peer cache. Without this, reboot = re-register.
       "/etc/openfortivpn" # VPN configs (host/cert details kept out of the public flake)
       # "/etc/NetworkManager/system-connections"
