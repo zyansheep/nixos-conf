@@ -120,6 +120,13 @@
   boot.kernelParams = [
     "zfs.zfs_arc_max=4294967296" # Set Adaptive Replacement Cache size to max 4gb. (machine-specific)
     "pcie_aspm=off" # https://github.com/NixOS/nixos-hardware/issues/1348
+    # DIAGNOSTIC (added 2026-08-03, remove once the s2idle deaths are solved):
+    # take PCIe port services from the firmware so AER is actually enabled.
+    # The BIOS masks correctable errors (RxErr/BadTLP), which is why a death in
+    # s2idle leaves nothing in the journal. With this, errors that precede a
+    # crash become visible: journalctl -k | grep -iE 'AER|corrected error'
+    # https://community.frame.work/t/fw13-amd-ai-300-hx-370-48-data-fabric-sync-flood-crashes-in-2-months-comprehensive-data/80338
+    "pcie_ports=native"
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
     # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     # "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
