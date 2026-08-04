@@ -119,7 +119,15 @@
   environment.etc = { "shadow".source = "/persist/etc/shadow"; };
   boot.kernelParams = [
     "zfs.zfs_arc_max=4294967296" # Set Adaptive Replacement Cache size to max 4gb. (machine-specific)
-    "pcie_aspm=off" # https://github.com/NixOS/nixos-hardware/issues/1348
+    # Disable ASPM (https://github.com/NixOS/nixos-hardware/issues/1348 — the
+    # same s2idle crash/reboot symptom we're chasing) WITHOUT using
+    # `pcie_aspm=off`. That flag makes the kernel skip the ACPI _OSC
+    # negotiation entirely ("not requesting OS control"), so the OS never owns
+    # the root complex and AER stays masked on the internal ports — including
+    # 00:02.4, where the NVMe lives. `policy=performance` still takes _OSC
+    # control but disables L0s/L1, and is arguably a stronger disable: `off`
+    # only means "leave ASPM however the BIOS set it".
+    "pcie_aspm.policy=performance"
     # DIAGNOSTIC (added 2026-08-03, remove once the s2idle deaths are solved):
     # take PCIe port services from the firmware so AER is actually enabled.
     # The BIOS masks correctable errors (RxErr/BadTLP), which is why a death in
