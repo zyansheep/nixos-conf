@@ -128,13 +128,22 @@
     # control but disables L0s/L1, and is arguably a stronger disable: `off`
     # only means "leave ASPM however the BIOS set it".
     "pcie_aspm.policy=performance"
-    # DIAGNOSTIC (added 2026-08-03, remove once the s2idle deaths are solved):
-    # take PCIe port services from the firmware so AER is actually enabled.
-    # The BIOS masks correctable errors (RxErr/BadTLP), which is why a death in
-    # s2idle leaves nothing in the journal. With this, errors that precede a
-    # crash become visible: journalctl -k | grep -iE 'AER|corrected error'
-    # https://community.frame.work/t/fw13-amd-ai-300-hx-370-48-data-fabric-sync-flood-crashes-in-2-months-comprehensive-data/80338
+    # Kept for the USB4 ports, but note this can NEVER expose AER on the
+    # internal hierarchy (NVMe/wifi/GPU): the firmware answers _OSC with
+    # "platform does not support [AER]", so the OS is never granted it.
     "pcie_ports=native"
+
+    # Disable the NVMe Host Memory Buffer (drive DMA into system RAM).
+    # Prime suspect for the [0x08000800] data fabric sync floods that kill this
+    # machine at `PM: suspend entry (s2idle)`: on suspend the host tears down
+    # that memory while the drive may still DMA into it, and a write to a
+    # now-invalid address is exactly an uncorrected fabric error. Fits the
+    # evidence — it only ever dies entering s2idle, never in normal use — and
+    # HMB firmware bugs on WD drives are what the Framework thread pinned these
+    # crashes on. The SN850X has its own DRAM, so losing HMB should cost
+    # nothing measurable.
+    # https://community.frame.work/t/fw13-amd-ai-300-hx-370-48-data-fabric-sync-flood-crashes-in-2-months-comprehensive-data/80338
+    "nvme.max_host_mem_size_mb=0"
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
     # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     # "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
