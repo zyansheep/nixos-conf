@@ -137,6 +137,7 @@
             ssh
             packages
             kimi
+            emoji
             dotfiles
           ];
           develop = [dev.nix];

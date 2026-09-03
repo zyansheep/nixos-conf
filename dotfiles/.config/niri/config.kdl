@@ -425,10 +425,12 @@ binds {
     Mod+C hotkey-overlay-title="📋 Clipboard History: rofi" { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }
     Mod+Shift+C hotkey-overlay-title="🖼️ Show Last Clipboard Image" { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
     // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
-    // rofimoji --files takes glob stems: "emojis" matches all emojis_*.csv (the
-    // default set), "kaomoji" adds the bundled 1562 text emoticons like
-    // (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯. Both lists merge into one searchable picker.
-    Mod+Semicolon hotkey-overlay-title="😀 Emoji & Emoticon Picker: rofimoji" { spawn "rofimoji" "--files" "emojis" "kaomoji"; }
+    // emoji-picker wraps rofimoji with the same "emojis" + "kaomoji" file set
+    // (glob stems: "emojis" matches all emojis_*.csv, "kaomoji" adds the 1562
+    // bundled emoticons like (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯), but inserts via the
+    // clipboard — plain `rofimoji` types with wtype, which Electron/Firefox
+    // drop or garble. See cells/home/profiles/_files/emoji-picker.sh.
+    Mod+Semicolon hotkey-overlay-title="😀 Emoji & Emoticon Picker: rofimoji" { spawn "emoji-picker"; }
     Mod+Shift+W hotkey-overlay-title="📶 Wi-Fi Menu: iwmenu" { spawn "iwmenu" "-m" "rofi"; }
 
     // Recording and screenshot bindings from sway
