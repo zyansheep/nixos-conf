@@ -13,12 +13,12 @@
     haumea.url = "github:nix-community/haumea";
 
     # Nixpkgs
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-25.11"; # Required by flake-parts
+    nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05"; # Required by flake-parts
     latest.url = "github:numtide/nixpkgs-unfree/nixos-unstable";
     stable.follows = "nixpkgs";
 
     # Home Manager
-    home.url = "github:nix-community/home-manager/release-25.11";
+    home.url = "github:nix-community/home-manager/release-26.05";
     home.inputs.nixpkgs.follows = "stable";
 
     home-unstable.url = "github:nix-community/home-manager";

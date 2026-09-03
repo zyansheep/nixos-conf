@@ -91,20 +91,21 @@ _:
   # libxkbcommon. Order matters — later entries win exact-duplicate sequences:
   #   1. the FULL default table (é ñ ç → © ½ « » …). NixOS ships no
   #      /usr/share/X11/locale, so the usual `include "%L"` can't resolve;
-  #      point straight at libX11's copy in the store (Nix keeps it current).
+  #      point straight at libx11's copy in the store (Nix keeps it current).
   #   2. kragen/xcompose (vendored) — comprehensive math, arrows, sub/super-
   #      scripts, double-struck, IPA, typography.
   #   3. our local block last — Greek (Caps g a -> α) + Slack-style :emoji:
   #      (Caps : f i r e : -> 🔥) — so it overrides on any clash.
   home.file.".XCompose".text =
     ''
-      include "${pkgs.xorg.libX11}/share/X11/locale/en_US.UTF-8/Compose"
+      include "${pkgs.libx11}/share/X11/locale/en_US.UTF-8/Compose"
     ''
     + builtins.readFile ./_files/XCompose.kragen
     + "\n"
     + builtins.readFile ./_files/XCompose;
 
   home.pointerCursor = {
+    enable = true;
     name = "Adwaita";
     package = pkgs.adwaita-icon-theme;
     size = 24;

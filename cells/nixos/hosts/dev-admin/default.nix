@@ -2,6 +2,7 @@
   inputs,
   suites,
   profiles,
+  pkgs,
   ...
 }: {
   imports = with profiles; [

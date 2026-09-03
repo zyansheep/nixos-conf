@@ -92,12 +92,13 @@ _: {pkgs, ...}: {
     jre
     localsend
     logmein-hamachi
-    opendrop
+    # opendrop  # removed from nixpkgs 2026-08 (unmaintained upstream); localsend covers this
     openfortivpn
-    # osmctools  # broken on nixpkgs-unstable (C23 keyword conflict)
+    osmctools
     parted
     pbzip2
     qbittorrent
+    seahorse
     swappy
     syncthing
     sysbench
