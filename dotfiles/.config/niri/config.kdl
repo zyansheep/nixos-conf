@@ -26,6 +26,7 @@ spawn-at-startup "codium"
 spawn-at-startup "vesktop"
 spawn-at-startup "flatpak" "run" "dev.vencord.Vesktop"
 spawn-at-startup "signal-desktop"
+spawn-at-startup "t3code"
 
 // Window rules to assign applications to workspaces
 window-rule {
@@ -43,6 +44,10 @@ window-rule {
 window-rule {
     match app-id="obsidian"
     open-on-workspace "notes"
+}
+window-rule {
+  match app-id="t3code"
+  open-on-workspace "notes"
 }
 // ...and only maximize it when it's part of the startup batch.
 window-rule {
