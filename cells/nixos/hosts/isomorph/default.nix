@@ -23,6 +23,7 @@
     core.common
     core.tools
     core.rebuild
+    core.power-lab # root helper for power experiments (see profile)
     # core.laptop-tlp
     # core.hacking-tools
     # core.privacy
