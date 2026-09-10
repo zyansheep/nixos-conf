@@ -24,6 +24,7 @@
     "memory",
     "temperature",
     // "backlight",
+    "custom/protonvpn",
     "custom/services",
     "battery",
     "custom/notification",
@@ -45,6 +46,21 @@
     "format": "",
     "tooltip": true,
     "tooltip-format": "System tray (hover to expand)"
+  },
+  "custom/protonvpn": {
+    "exec": "$HOME/.config/waybar/scripts/protonvpn-status.sh",
+    "return-type": "json",
+    "interval": 5,
+    // RTMIN+1: the toggle/picker scripts pkill -RTMIN+1 waybar so the module
+    // appears/disappears the moment you act, instead of up to `interval` later.
+    "signal": 1,
+    // Required, not cosmetic: `format` carries a static glyph, so without this
+    // waybar would keep drawing the icon when the script emits empty text.
+    "hide-empty-text": true,
+    "format": " {}",
+    "tooltip": true,
+    "on-click": "$HOME/.config/waybar/scripts/protonvpn-picker.sh",
+    "on-click-right": "$HOME/.config/eww/scripts/protonvpn.sh down"
   },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",

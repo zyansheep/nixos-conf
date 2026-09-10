@@ -43,6 +43,7 @@
     services.immich
     services.tailscale
     services."hampshire-vpn"
+    services.protonvpn
     services.zfs-snapshots
     # services.ssh
   ];
@@ -61,8 +62,9 @@
   };
   zramSwap.enable = true;
 
-  # networking.networkmanager.wifi.backend = "wpa_supplicant";
-  networking.networkmanager.enable = false;
+  # NetworkManager is enabled by profiles/services/protonvpn.nix -- it is the
+  # Proton client's only connection backend. It is scoped to VPN interfaces
+  # only (unmanaged = wlan*/tailscale0/ppp0), so iwd below still owns wifi.
   networking.useDHCP = true;
   networking.wireless.iwd.enable = true;
   networking.wireless.iwd.settings = {
@@ -97,6 +99,7 @@
       "/var/log" # for journalctl
       "/var/lib/bluetooth"
       "/var/lib/fprint"
+      "/var/lib/flatpak" # system-wide apps and runtimes must survive root rollback
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/lib/iwd"
@@ -107,7 +110,7 @@
       "/var/lib/fwupd"
       "/var/lib/tailscale" # tailscaled state — machine/node keys, login-server, peer cache. Without this, reboot = re-register.
       "/etc/openfortivpn" # VPN configs (host/cert details kept out of the public flake)
-      # "/etc/NetworkManager/system-connections"
+      "/etc/NetworkManager/system-connections" # Proton VPN connection profiles created by the client
       "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
       "/var/lib/immich" # immich media + state

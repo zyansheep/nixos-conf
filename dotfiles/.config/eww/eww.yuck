@@ -21,6 +21,12 @@
 (defpoll hampshire_state :interval "1s" :initial "inactive"
   "~/.config/eww/scripts/hampshire-vpn.sh status 2>/dev/null || echo inactive")
 
+; ProtonVPN goes through the official client, which drives NetworkManager.
+; The script reports NM's active-connection state, so an expired Proton
+; certificate drops the row to grey on its own -- no hand-rolled liveness.
+(defpoll protonvpn_state :interval "1s" :initial "inactive"
+  "~/.config/eww/scripts/protonvpn.sh status 2>/dev/null || echo inactive")
+
 ; --- switch widget -----------------------------------------------------------
 ; The visual state is derived purely from systemctl's report. Possible values:
 ;   active inactive activating deactivating failed unknown
@@ -68,6 +74,9 @@
         (service_row :name "Tailscale"
                      :state tailscale_state
                      :onclick "~/.config/eww/scripts/toggle.sh tailscale")
+        (service_row :name "ProtonVPN"
+                     :state protonvpn_state
+                     :onclick "~/.config/eww/scripts/protonvpn.sh toggle")
         (service_row :name "Hampshire VPN"
                      :state hampshire_state
                      :onclick "~/.config/eww/scripts/hampshire-vpn.sh toggle"))

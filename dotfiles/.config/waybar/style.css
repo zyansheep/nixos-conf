@@ -208,6 +208,25 @@ label:focus {
   color: #8fdf8f;
 }
 
+
+/* ProtonVPN. The module hides itself when disconnected (hide-empty-text +
+   empty text from protonvpn-status.sh), so `.off` should never actually be
+   painted -- it is kept as a visible fallback in case a waybar upgrade ever
+   changes that behaviour, so the state fails loud rather than invisible. */
+#custom-protonvpn {
+  padding: 0 6px;
+  margin: 0;
+}
+#custom-protonvpn.connected {
+  color: #8fdf8f;
+}
+#custom-protonvpn.connecting {
+  color: #e0c060;
+}
+#custom-protonvpn.off {
+  color: #888;
+}
+
 #temperature {}
 
 #temperature.critical {}
