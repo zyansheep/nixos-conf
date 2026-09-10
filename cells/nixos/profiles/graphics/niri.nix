@@ -25,6 +25,26 @@
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
 
+  # Installing swaylock alone does not create its PAM authentication service.
+  # Use password authentication without waiting for the fingerprint reader.
+  security.pam.services.swaylock = {
+    fprintAuth = false;
+  };
+
+  # Handle loginctl lock-session and lock before suspend/lid-close. With -w
+  # and swaylock -f, swayidle holds the sleep inhibitor until locking finishes.
+  systemd.user.services.swayidle = {
+    description = "Lock the Niri session on request and before sleep";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.swayidle}/bin/swayidle -w lock '${pkgs.swaylock}/bin/swaylock -f' before-sleep '${pkgs.swaylock}/bin/swaylock -f'";
+      Restart = "on-failure";
+    };
+  };
+
   # Make system-wide binaries available to waybar's exec scripts (jq, bash,
   # systemctl, notify-send, etc.). The default unit PATH is intentionally
   # minimal; this widens it to the system profile so custom modules can be
