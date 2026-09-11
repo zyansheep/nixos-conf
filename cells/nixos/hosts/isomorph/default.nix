@@ -67,6 +67,7 @@
   networking.networkmanager = {
     enable = true;
     wifi.backend = "iwd";
+    wifi.macAddress = "stable-ssid";
     dns = "systemd-resolved";
     # These two tunnels have their own services. Proton's tunnel and dummy
     # kill-switch devices must remain managed by NetworkManager.
@@ -74,7 +75,12 @@
   };
   networking.useDHCP = false;
   networking.dhcpcd.enable = false;
-  networking.wireless.iwd.settings.General.EnableNetworkConfiguration = false;
+  networking.wireless.iwd.settings.General = {
+    EnableNetworkConfiguration = false;
+    # NM's iwd backend delegates MAC changes to iwd. Its per-network
+    # randomization and explicit address overrides require this setting.
+    AddressRandomization = "network";
+  };
   services.resolved.enable = true;
   programs.nm-applet.enable = false; # nm-sidebar opens from Waybar / Alt+Shift+W
 

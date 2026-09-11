@@ -1,5 +1,11 @@
 { inputs, common, }:
-{ config, pkgs, lib, ... }: {
+{ config, pkgs, lib, ... }:
+let
+  networkSidebar = pkgs.nm-sidebar.override {
+    defaultWifiMacAddress = config.networking.networkmanager.wifi.macAddress;
+    wifiBackend = config.networking.networkmanager.wifi.backend;
+  };
+in {
   environment.systemPackages = with pkgs; [
     grim # screenshot functionality
     slurp # rectangle selection for screenshot functionality
@@ -7,7 +13,7 @@
     cliphist # clipboard manager
     swaynotificationcenter # notification daemon + control center
     waybar # topbar
-    nm-sidebar # Wi-Fi popup; uses NetworkManager for connections and storage
+    networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
     swayimg # img viewer
@@ -66,8 +72,8 @@
     after = [ "graphical-session.target" ];
     requisite = [ "graphical-session.target" ];
     serviceConfig = {
-      ExecStartPre = "-${pkgs.nm-sidebar}/bin/nm-sidebar --quit";
-      ExecStart = "${pkgs.nm-sidebar}/libexec/nm-sidebar/nm-sidebar-gui background";
+      ExecStartPre = "-${networkSidebar}/bin/nm-sidebar --quit";
+      ExecStart = "${networkSidebar}/libexec/nm-sidebar/nm-sidebar-gui background";
       Restart = "on-failure";
     };
   };

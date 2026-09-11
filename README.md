@@ -17,16 +17,28 @@ interfaces remain under their respective services.
 - Click Waybar's Wi-Fi text or press Alt+Shift+W to toggle the interactive
   [Network Manager Sidebar](https://github.com/Relz/network-manager-sidebar).
   It scans, connects to networks, prompts for Wi-Fi passwords, and toggles Wi-Fi.
-  Clicking the connected network opens its details; its separate disconnect
-  button disconnects without forgetting the password. The details page has
-  Disconnect/Connect, Forget (with confirmation), and Edit controls.
-  Edit and Add Wi-Fi open native pages inside the sidebar. They support profile
-  and network names, passwords, autoconnect, metered status, hidden networks,
+  Clicking the connected network opens a compact combined details/settings page;
+  its separate disconnect button disconnects without forgetting the password.
+  Auto-connect sits beside Connect/Disconnect. Edited fields show an undo button;
+  a bottom bar offers Save changes and Revert all only while there are changes.
+  Saving stays on the page; Back discards unsaved edits. Forget has confirmation.
+  Settings support profile and network names, passwords, autoconnect, metered
+  status, hidden networks, MAC policies,
   IPv4/IPv6 methods, addresses, gateways and DNS. New enterprise profiles support
   PEAP/MSCHAPv2 and TTLS/PAP with server-domain and CA-certificate validation;
   existing enterprise EAP/certificate settings are retained while identity,
   password and server-domain fields can be edited. Other unedited settings are
-  preserved. Save writes to persistent storage; reconnect to apply the changes.
+  preserved. IPv4/IPv6 settings expand from compact method/DNS summaries. Live
+  addresses, gateways and DNS are selectable text below, with radio, device,
+  routing and profile diagnostics in a further expander. Live updates never
+  replace an unsaved draft. Save writes to persistent storage; reconnect to apply
+  the changes.
+  Wi-Fi defaults to a stable MAC per network (`stable-ssid`). The MAC dropdown
+  shows the policy name directly; profiles with an explicit override keep it.
+  iwd uses `AddressRandomization=network` to implement this; NetworkManager's
+  setting alone is insufficient for this backend. The picker offers stable per
+  network, random, device address, and any saved custom address. Device address
+  saves the adapter's literal MAC because iwd ignores the `permanent` keyword.
   Waybar still shows signal, frequency, address, gateway and traffic rates on
   hover. There is no separate network tray applet.
 - Open Proton VPN from the application launcher or the Services popup. Use its

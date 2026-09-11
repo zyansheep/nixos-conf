@@ -14,6 +14,8 @@
   networkmanagerapplet,
   adwaita-icon-theme,
   kdePackages,
+  defaultWifiMacAddress ? "stable-ssid",
+  wifiBackend ? "iwd",
   sources ? null,
 }:
 stdenv.mkDerivation {
@@ -33,7 +35,11 @@ stdenv.mkDerivation {
     cp ${../patches/nm-sidebar/profile-model.h} src/actions/profile-model.h
     cp ${../patches/nm-sidebar/profile-save.c} src/actions/profile-save.c
     cp ${../patches/nm-sidebar/connection-settings.c} src/sections/connection-settings.c
+    substituteInPlace src/sections/connection-settings.c \
+      --replace-fail '@defaultWifiMacAddress@' ${lib.escapeShellArg defaultWifiMacAddress} \
+      --replace-fail '@usesIwd@' ${if wifiBackend == "iwd" then "1" else "0"}
     cp ${../patches/nm-sidebar/connection-settings.h} src/sections/connection-settings.h
+    cat ${../patches/nm-sidebar/settings.css} >> nm-sidebar.css
   '';
 
   nativeBuildInputs = [ meson ninja pkg-config wrapGAppsHook4 ];
