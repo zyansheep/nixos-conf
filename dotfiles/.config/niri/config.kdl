@@ -77,6 +77,14 @@ window-rule {
     open-on-workspace "chat"
 }
 
+// Advanced network settings open from the sidebar's edit/add controls.
+window-rule {
+    match app-id="nm-connection-editor"
+    open-floating true
+    default-column-width { fixed 800; }
+    default-window-height { fixed 650; }
+}
+
 // Input device configuration.
 // Find the full list of options on the wiki:
 // https://github.com/YaLTeR/niri/wiki/Configuration:-Input
@@ -438,7 +446,7 @@ binds {
     // clipboard — plain `rofimoji` types with wtype, which Electron/Firefox
     // drop or garble. See cells/home/profiles/_files/emoji-picker.sh.
     Mod+Semicolon hotkey-overlay-title="😀 Emoji & Emoticon Picker: rofimoji" { spawn "emoji-picker"; }
-    Mod+Shift+W hotkey-overlay-title="📶 Wi-Fi Menu: iwmenu" { spawn "iwmenu" "-m" "rofi"; }
+    Mod+Shift+W hotkey-overlay-title="📶 Network Sidebar" { spawn "nm-sidebar" "--toggle"; }
 
     // Recording and screenshot bindings from sway
     Mod+Shift+S hotkey-overlay-title="📸 Screenshot Region to Clipboard" { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }

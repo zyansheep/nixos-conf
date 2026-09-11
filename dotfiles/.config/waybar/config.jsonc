@@ -17,14 +17,13 @@
   "modules-right": [
     "custom/recording",
     "mpd",
-    "group/tray-group",
+    "tray",
     "idle_inhibitor",
     "network",
     "cpu",
     "memory",
     "temperature",
     // "backlight",
-    "custom/protonvpn",
     "custom/services",
     "battery",
     "custom/notification",
@@ -33,35 +32,6 @@
     "pulseaudio",
     "custom/power"
   ],
-  "group/tray-group": {
-    "orientation": "horizontal",
-    "drawer": {
-      "transition-duration": 300,
-      "children-class": "tray-drawer-child",
-      "transition-left-to-right": false
-    },
-    "modules": [ "custom/tray-toggle", "tray" ]
-  },
-  "custom/tray-toggle": {
-    "format": "",
-    "tooltip": true,
-    "tooltip-format": "System tray (hover to expand)"
-  },
-  "custom/protonvpn": {
-    "exec": "$HOME/.config/waybar/scripts/protonvpn-status.sh",
-    "return-type": "json",
-    "interval": 5,
-    // RTMIN+1: the toggle/picker scripts pkill -RTMIN+1 waybar so the module
-    // appears/disappears the moment you act, instead of up to `interval` later.
-    "signal": 1,
-    // Required, not cosmetic: `format` carries a static glyph, so without this
-    // waybar would keep drawing the icon when the script emits empty text.
-    "hide-empty-text": true,
-    "format": " {}",
-    "tooltip": true,
-    "on-click": "$HOME/.config/waybar/scripts/protonvpn-picker.sh",
-    "on-click-right": "$HOME/.config/eww/scripts/protonvpn.sh down"
-  },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
     "return-type": "json",
@@ -251,13 +221,19 @@
     }
   },
   "network": {
-    // "interface": "wlp2*", // (Optional) To force the use of this interface
+    // Follow Wi-Fi even while a VPN owns the default route.
+    "interface": "wl*",
+    "interval": 5,
     "format-wifi": "{essid} ({signalStrength}%) ",
     "format-ethernet": "{ipaddr}/{cidr} ",
-    "tooltip-format": "{ifname} via {gwaddr} ",
+    "tooltip-format": "{ifname}\nAddress: {ipaddr}/{cidr}\nGateway: {gwaddr}",
+    "tooltip-format-wifi": "{essid}\nSignal: {signalStrength}% ({signaldBm} dBm) · {frequency} GHz\nInterface: {ifname}\nAddress: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓ {bandwidthDownBits}  ↑ {bandwidthUpBits}\nClick to connect or configure networks",
+    "tooltip-format-disconnected": "Wi-Fi disconnected · Click to connect",
+    "tooltip-format-disabled": "Wi-Fi disabled · Click to enable Wi-Fi",
     "format-linked": "{ifname} (No IP) ",
-    "format-disconnected": "Disconnected ⚠",
-    "format-alt": "{ifname}: {ipaddr}/{cidr}"
+    "format-disconnected": "Wi-Fi disconnected ⚠",
+    "format-disabled": "Wi-Fi off",
+    "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
   },
   "pulseaudio": {
     // "scroll-step": 1, // %, can be a float

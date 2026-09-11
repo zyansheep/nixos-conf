@@ -62,19 +62,21 @@
   };
   zramSwap.enable = true;
 
-  # NetworkManager is enabled by profiles/services/protonvpn.nix -- it is the
-  # Proton client's only connection backend. It is scoped to VPN interfaces
-  # only (unmanaged = wlan*/tailscale0/ppp0), so iwd below still owns wifi.
-  networking.useDHCP = true;
-  networking.wireless.iwd.enable = true;
-  networking.wireless.iwd.settings = {
-    Network = {
-      # EnableIPv6 = true;
-      RoutePriorityOffset = 300;
-    };
-    Settings = { AutoConnect = true; };
-    General = { EnableNetworkConfiguration = true; };
+  # One owner for physical connections, DHCP and VPN routing. Retain iwd as
+  # the Wi-Fi authenticator: NM mirrors its existing KnownNetwork profiles.
+  networking.networkmanager = {
+    enable = true;
+    wifi.backend = "iwd";
+    dns = "systemd-resolved";
+    # These two tunnels have their own services. Proton's tunnel and dummy
+    # kill-switch devices must remain managed by NetworkManager.
+    unmanaged = [ "interface-name:tailscale0" "interface-name:ppp*" ];
   };
+  networking.useDHCP = false;
+  networking.dhcpcd.enable = false;
+  networking.wireless.iwd.settings.General.EnableNetworkConfiguration = false;
+  services.resolved.enable = true;
+  programs.nm-applet.enable = false; # nm-sidebar opens from Waybar / Alt+Shift+W
 
   # Bootloader
   boot = {
@@ -103,6 +105,7 @@
       "/var/lib/nixos"
       "/var/lib/systemd/coredump"
       "/var/lib/iwd"
+      "/var/lib/NetworkManager"
       # LVFS metadata + pending.db. Without this, every reboot wipes the
       # firmware catalog, so `fwupdmgr update` reports "No updatable devices"
       # unless you `refresh` first in the same boot — and a staged capsule
@@ -110,7 +113,7 @@
       "/var/lib/fwupd"
       "/var/lib/tailscale" # tailscaled state — machine/node keys, login-server, peer cache. Without this, reboot = re-register.
       "/etc/openfortivpn" # VPN configs (host/cert details kept out of the public flake)
-      "/etc/NetworkManager/system-connections" # Proton VPN connection profiles created by the client
+      "/etc/NetworkManager/system-connections" # saved Wi-Fi, wired and VPN profiles
       "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
       "/var/lib/immich" # immich media + state
@@ -164,7 +167,7 @@
   networking.firewall.enable = false;
 
   # groups
-  users.users.zyansheep.extraGroups = [ "uucp" "waydroid" ];
+  users.users.zyansheep.extraGroups = [ "uucp" "waydroid" "networkmanager" ];
 
   documentation.info.enable = false;
 

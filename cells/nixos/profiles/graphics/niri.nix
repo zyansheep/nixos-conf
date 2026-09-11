@@ -7,8 +7,8 @@
     cliphist # clipboard manager
     swaynotificationcenter # notification daemon + control center
     waybar # topbar
+    nm-sidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
-    impala # tui wifi manager
     zathura # vim pdf viewer
     swayimg # img viewer
     swaybg # wallpaper (legacy / fallback)
@@ -51,6 +51,26 @@
   # iterated on without absolute-pathing every binary.
   systemd.user.services.waybar.environment.PATH =
     lib.mkForce "/run/current-system/sw/bin";
+  # Out-of-store dotfile symlinks keep the same target across rebuilds, so
+  # explicitly restart Waybar when its click commands/configuration change.
+  systemd.user.services.waybar.restartTriggers = [
+    ../../../../dotfiles/.config/waybar/config.jsonc
+  ];
+
+  # Keep the long-lived sidebar attached to the session and replace it on
+  # upgrades; otherwise a new CLI keeps talking to an old background GUI.
+  systemd.user.services.nm-sidebar = {
+    description = "Interactive network sidebar";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStartPre = "-${pkgs.nm-sidebar}/bin/nm-sidebar --quit";
+      ExecStart = "${pkgs.nm-sidebar}/libexec/nm-sidebar/nm-sidebar-gui background";
+      Restart = "on-failure";
+    };
+  };
 
   services.logind.settings.Login = {
     HandlePowerKey = "ignore"; # ignore power key

@@ -11,7 +11,6 @@
 let
   conf = "/etc/openfortivpn/hampshire.conf";
   cookieFile = "/run/hampshire-vpn.cookie";
-
   # Runs as ExecStartPost, so the unit reports `activating` (slider animates)
   # until the tunnel is actually usable, and a start that never produces a
   # working ppp0 ends up `failed` (red slider) instead of silently half-up.

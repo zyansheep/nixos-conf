@@ -209,24 +209,6 @@ label:focus {
 }
 
 
-/* ProtonVPN. The module hides itself when disconnected (hide-empty-text +
-   empty text from protonvpn-status.sh), so `.off` should never actually be
-   painted -- it is kept as a visible fallback in case a waybar upgrade ever
-   changes that behaviour, so the state fails loud rather than invisible. */
-#custom-protonvpn {
-  padding: 0 6px;
-  margin: 0;
-}
-#custom-protonvpn.connected {
-  color: #8fdf8f;
-}
-#custom-protonvpn.connecting {
-  color: #e0c060;
-}
-#custom-protonvpn.off {
-  color: #888;
-}
-
 #temperature {}
 
 #temperature.critical {}
@@ -339,19 +321,9 @@ label:focus {
   padding-left: 3px;
 }
 
-/* Tray drawer: chevron trigger + hover-revealed tray icons */
-#custom-tray-toggle {
-  padding: 0 4px;
-  color: #ffffff;
-}
-.tray-drawer-child {
-  padding: 0 2px;
-}
-
 #custom-notification.dnd-none,
 #custom-notification.dnd-notification,
 #custom-notification.dnd-inhibited-none,
 #custom-notification.dnd-inhibited-notification {
   color: #888;
 }
-

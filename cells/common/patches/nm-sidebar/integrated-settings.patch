@@ -1,0 +1,192 @@
+--- a/meson.build
++++ b/meson.build
+@@ -44,0 +45,2 @@
++  'src/actions/profile-model.c',
++  'src/actions/profile-save.c',
+@@ -48,0 +51 @@
++  'src/sections/connection-settings.c',
+--- a/src/actions/network_actions.h
++++ b/src/actions/network_actions.h
+@@ -50,0 +51,9 @@
++void network_sidebar_actions_set_navigation(NetworkSidebarActions *actions, AdwNavigationView *view);
++NMClient *network_sidebar_actions_get_client(NetworkSidebarActions *actions);
++void network_sidebar_actions_notify(NetworkSidebarActions *actions, const char *message);
++void network_sidebar_actions_show_connection(NetworkSidebarActions *actions, NMRemoteConnection *profile, NMActiveConnection *active);
++void network_sidebar_actions_save_profile(NetworkSidebarActions *actions, NMRemoteConnection *remote,
++                                        NMConnection *draft, guint64 version,
++                                        GAsyncReadyCallback callback, gpointer user_data);
++gboolean network_sidebar_actions_save_profile_finish(GAsyncResult *result, GError **error);
++
+--- a/src/actions/network_actions.c
++++ b/src/actions/network_actions.c
+@@ -4,0 +5 @@
++#include "sections/connection-settings.h"
+@@ -19,0 +21 @@
++  AdwNavigationView *navigation;
+@@ -1346 +1348 @@
+-    network_sidebar_actions_open_editor(actions, editor_args);
++    network_sidebar_edit_profile(actions, actions->client, actions->navigation, NULL, ssid, TRUE);
+@@ -1636,0 +1639,17 @@
++  gboolean wifi = args == NULL;
++  const char *edit_uuid = NULL;
++  for (guint i = 0; args && args[i]; i++) {
++    if (g_str_equal(args[i], "--type=802-11-wireless")) wifi = TRUE;
++    if (g_str_has_prefix(args[i], "--edit=")) edit_uuid = args[i] + strlen("--edit=");
++  }
++  if (edit_uuid) {
++    NMRemoteConnection *profile = nm_client_get_connection_by_uuid(actions->client, edit_uuid);
++    if (profile && nm_connection_get_setting_wireless(NM_CONNECTION(profile))) {
++      network_sidebar_actions_edit_connection(actions, profile);
++      return;
++    }
++  }
++  if (wifi && actions->navigation) {
++    network_sidebar_edit_profile(actions, actions->client, actions->navigation, NULL, NULL, FALSE);
++    return;
++  }
+@@ -1659,0 +1679,4 @@
++  if (actions->navigation && nm_connection_get_setting_wireless(NM_CONNECTION(connection))) {
++    network_sidebar_edit_profile(actions, actions->client, actions->navigation, connection, NULL, FALSE);
++    return;
++  }
+@@ -1668,0 +1692,26 @@
++}
++
++void
++network_sidebar_actions_set_navigation(NetworkSidebarActions *actions, AdwNavigationView *view)
++{
++  actions->navigation = view;
++}
++
++NMClient *
++network_sidebar_actions_get_client(NetworkSidebarActions *actions)
++{
++  return actions->client;
++}
++
++void
++network_sidebar_actions_notify(NetworkSidebarActions *actions, const char *message)
++{
++  toast(actions, message);
++}
++
++void
++network_sidebar_actions_show_connection(NetworkSidebarActions *actions, NMRemoteConnection *profile, NMActiveConnection *active)
++{
++  if (!profile && active) profile = nm_active_connection_get_connection(active);
++  if (actions->navigation)
++    network_sidebar_show_profile(actions, actions->client, actions->navigation, profile, active);
+--- a/src/gui/app.c
++++ b/src/gui/app.c
+@@ -37,0 +38 @@
++  AdwNavigationView *navigation;
+@@ -600,0 +602,5 @@
++    AdwNavigationPage *visible = self->navigation ? adw_navigation_view_get_visible_page(self->navigation) : NULL;
++    if (visible && adw_navigation_view_get_previous_page(self->navigation, visible)) {
++      if (adw_navigation_page_get_can_pop(visible)) adw_navigation_view_pop(self->navigation);
++      return TRUE;
++    }
+@@ -732,0 +739,8 @@
++static void
++on_scroll_adjustment_notify(GObject *adjustment, GParamSpec *pspec, gpointer user_data)
++{
++  (void) adjustment;
++  (void) pspec;
++  update_scroll_fades(user_data);
++}
++
+@@ -877 +891,4 @@
+-  adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(self->toast_overlay), panel_content);
++  self->navigation = ADW_NAVIGATION_VIEW(adw_navigation_view_new());
++  adw_navigation_view_add(self->navigation, adw_navigation_page_new(panel_content, "Networks"));
++  adw_toast_overlay_set_child(ADW_TOAST_OVERLAY(self->toast_overlay), GTK_WIDGET(self->navigation));
++  network_sidebar_actions_set_navigation(self->actions, self->navigation);
+@@ -928,3 +945,3 @@
+-    g_signal_connect(adjustment, "notify::lower", G_CALLBACK(on_scroll_adjustment_changed), self);
+-    g_signal_connect(adjustment, "notify::upper", G_CALLBACK(on_scroll_adjustment_changed), self);
+-    g_signal_connect(adjustment, "notify::page-size", G_CALLBACK(on_scroll_adjustment_changed), self);
++    g_signal_connect(adjustment, "notify::lower", G_CALLBACK(on_scroll_adjustment_notify), self);
++    g_signal_connect(adjustment, "notify::upper", G_CALLBACK(on_scroll_adjustment_notify), self);
++    g_signal_connect(adjustment, "notify::page-size", G_CALLBACK(on_scroll_adjustment_notify), self);
+--- a/src/sections/wifi.c
++++ b/src/sections/wifi.c
+@@ -617 +617 @@
+-    network_sidebar_actions_deactivate(data->actions, data->active);
++    network_sidebar_actions_show_connection(data->actions, data->saved, data->active);
+@@ -627 +627 @@
+-on_wifi_edit_clicked(GtkButton *button, gpointer user_data)
++on_wifi_details_clicked(GtkButton *button, gpointer user_data)
+@@ -631,2 +631 @@
+-  if (data->saved != NULL)
+-    network_sidebar_actions_edit_connection(data->actions, data->saved);
++  network_sidebar_actions_show_connection(data->actions, data->saved, data->active);
+@@ -636 +635 @@
+-on_wifi_remove_clicked(GtkButton *button, gpointer user_data)
++on_wifi_disconnect_clicked(GtkButton *button, gpointer user_data)
+@@ -640,2 +639,16 @@
+-  if (data->saved != NULL)
+-    network_sidebar_actions_confirm_delete_connection(data->actions, data->saved, "Wi-Fi");
++  if (data->active) network_sidebar_actions_deactivate(data->actions, data->active);
++}
++
++static void
++add_wifi_row_controls(GtkWidget *row, WifiRowAction *data)
++{
++  GtkWidget *button;
++  if (data->active) {
++    button = network_sidebar_flat_button("network-disconnect-symbolic", "Disconnect");
++    g_signal_connect(button, "clicked", G_CALLBACK(on_wifi_disconnect_clicked), data);
++    gtk_widget_set_tooltip_text(row, "Open network details and settings");
++  } else {
++    button = network_sidebar_flat_button("emblem-system-symbolic", "Network details and settings");
++    g_signal_connect(button, "clicked", G_CALLBACK(on_wifi_details_clicked), data);
++  }
++  adw_action_row_add_suffix(ADW_ACTION_ROW(row), button);
+@@ -701,2 +713,0 @@
+-  GtkWidget *edit_button;
+-  GtkWidget *remove_button;
+@@ -710,7 +721 @@
+-  edit_button = network_sidebar_flat_button("document-edit-symbolic", "Edit");
+-  g_signal_connect(edit_button, "clicked", G_CALLBACK(on_wifi_edit_clicked), row_action);
+-  adw_action_row_add_suffix(ADW_ACTION_ROW(row), edit_button);
+-
+-  remove_button = network_sidebar_flat_button("user-trash-symbolic", "Remove");
+-  g_signal_connect(remove_button, "clicked", G_CALLBACK(on_wifi_remove_clicked), row_action);
+-  adw_action_row_add_suffix(ADW_ACTION_ROW(row), remove_button);
++  add_wifi_row_controls(row, row_action);
+@@ -719,0 +725 @@
++  gtk_widget_set_focusable(row, TRUE);
+@@ -840,11 +846 @@
+-  if (row_action->saved != NULL) {
+-    GtkWidget *edit_button = network_sidebar_flat_button("document-edit-symbolic", "Edit");
+-    GtkWidget *remove_button;
+-
+-    g_signal_connect(edit_button, "clicked", G_CALLBACK(on_wifi_edit_clicked), row_action);
+-    adw_action_row_add_suffix(ADW_ACTION_ROW(row), edit_button);
+-
+-    remove_button = network_sidebar_flat_button("user-trash-symbolic", "Remove");
+-    g_signal_connect(remove_button, "clicked", G_CALLBACK(on_wifi_remove_clicked), row_action);
+-    adw_action_row_add_suffix(ADW_ACTION_ROW(row), remove_button);
+-  }
++  if (row_action->saved || row_action->active) add_wifi_row_controls(row, row_action);
+@@ -851,0 +848 @@
++  gtk_widget_set_focusable(row, TRUE);
+--- a/src/sections/connection_info.h
++++ b/src/sections/connection_info.h
+@@ -8,0 +9,2 @@
++void network_sidebar_add_active_connection_info_content(GtkBox *content, NMClient *client, NMActiveConnection *selected);
++
+--- a/src/sections/connection_info.c
++++ b/src/sections/connection_info.c
+@@ -266 +266 @@
+-network_sidebar_add_connection_info_content(GtkBox *content, NMClient *client)
++network_sidebar_add_active_connection_info_content(GtkBox *content, NMClient *client, NMActiveConnection *selected)
+@@ -272,0 +273 @@
++    if (selected && active != selected) continue;
+@@ -352,0 +354,6 @@
++}
++
++void
++network_sidebar_add_connection_info_content(GtkBox *content, NMClient *client)
++{
++  network_sidebar_add_active_connection_info_content(content, client, NULL);
