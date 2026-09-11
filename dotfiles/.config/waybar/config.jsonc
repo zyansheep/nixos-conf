@@ -1,5 +1,7 @@
 // -*- mode: jsonc -*-
 {
+  // Use "gauges-arc" for open dials; "gauges-ring" for full circles.
+  "name": "gauges-ring",
   // "layer": "top", // Waybar at top layer
   // "position": "bottom", // Waybar position (top|bottom|left|right)
   "height": 20, // Waybar height (to be removed for auto height)
@@ -17,7 +19,7 @@
   "modules-right": [
     "custom/recording",
     "mpd",
-    "tray",
+    "group/tray-group",
     "idle_inhibitor",
     "network",
     "cpu",
@@ -32,6 +34,20 @@
     "pulseaudio",
     "custom/power"
   ],
+  "group/tray-group": {
+    "orientation": "horizontal",
+    "drawer": {
+      "transition-duration": 300,
+      "children-class": "tray-drawer-child",
+      "transition-left-to-right": false
+    },
+    "modules": [ "custom/tray-toggle", "tray" ]
+  },
+  "custom/tray-toggle": {
+    "format": "",
+    "tooltip": true,
+    "tooltip-format": "System tray (hover to expand)"
+  },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
     "return-type": "json",
@@ -153,12 +169,35 @@
     }
   },
   "cpu": {
-    "format": "{usage:02}% ",
+    "format": "",
+    "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{usage}</span>",
+    "format-alt-click": 1,
     "tooltip": true,
-    "interval": 2
+    "interval": 2,
+    // Native usage states select the generated SVG background.
+    "states": {
+      "gauge0": 0, "gauge5": 5, "gauge10": 10, "gauge15": 15,
+      "gauge20": 20, "gauge25": 25, "gauge30": 30, "gauge35": 35,
+      "gauge40": 40, "gauge45": 45, "gauge50": 50, "gauge55": 55,
+      "gauge60": 60, "gauge65": 65, "gauge70": 70, "gauge75": 75,
+      "gauge80": 80, "gauge85": 85, "gauge90": 90, "gauge95": 95,
+      "gauge100": 100
+    }
   },
   "memory": {
-    "format": "{}% "
+    "format": "",
+    "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{percentage}</span>",
+    "format-alt-click": 1,
+    "interval": 2,
+    "tooltip-format": "Memory: {percentage}%\n{used:.1f} / {total:.1f} GiB used\n{avail:.1f} GiB available\nSwap: {swapUsed:.1f} / {swapTotal:.1f} GiB\nClick to toggle icon / usage",
+    "states": {
+      "gauge0": 0, "gauge5": 5, "gauge10": 10, "gauge15": 15,
+      "gauge20": 20, "gauge25": 25, "gauge30": 30, "gauge35": 35,
+      "gauge40": 40, "gauge45": 45, "gauge50": 50, "gauge55": 55,
+      "gauge60": 60, "gauge65": 65, "gauge70": 70, "gauge75": 75,
+      "gauge80": 80, "gauge85": 85, "gauge90": 90, "gauge95": 95,
+      "gauge100": 100
+    }
   },
   "temperature": {
     // "thermal-zone": 2,
@@ -188,25 +227,19 @@
     ]
   },
   "battery": {
+    // Battery states select the first threshold >= capacity (unlike CPU).
+    // Each ten-percent bucket uses a matching fill; only 100% looks full.
     "states": {
-      // "good": 95,
-      "warning": 30,
-      "critical": 15
+      "level0": 9, "level10": 19, "level20": 29, "level30": 39,
+      "level40": 49, "level50": 59, "level60": 69, "level70": 79,
+      "level80": 89, "level90": 99, "level100": 100
     },
-    "format": "{capacity}% {icon} {power:4.2f}W",
-    "format-full": "{capacity}% {icon}",
-    "format-charging": "{capacity}% ",
-    "format-plugged": "{capacity}% ",
-    "format-alt": "{time} {icon}",
-    // "format-good": "", // An empty format will hide the module
-    // "format-full": "",
-    "format-icons": [
-      "",
-      "",
-      "",
-      "",
-      ""
-    ],
+    "format": "{capacity}%",
+    "format-charging": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
+    "format-plugged": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
+    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
+    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
+    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
     "interval": 3
   },
   "power-profiles-daemon": {

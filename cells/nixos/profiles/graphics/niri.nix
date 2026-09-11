@@ -58,9 +58,11 @@ in {
   systemd.user.services.waybar.environment.PATH =
     lib.mkForce "/run/current-system/sw/bin";
   # Out-of-store dotfile symlinks keep the same target across rebuilds, so
-  # explicitly restart Waybar when its click commands/configuration change.
+  # explicitly restart Waybar when its configuration or artwork changes.
   systemd.user.services.waybar.restartTriggers = [
     ../../../../dotfiles/.config/waybar/config.jsonc
+    ../../../../dotfiles/.config/waybar/style.css
+    ../../../../dotfiles/.config/waybar/gauges
   ];
 
   # Keep the long-lived sidebar attached to the session and replace it on
