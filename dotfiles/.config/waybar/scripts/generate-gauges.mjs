@@ -103,41 +103,57 @@ for (const [name, color] of Object.entries({
   normal: '#dce1e7', low: '#ef8585', charging: '#8fdf8f',
 })) {
   fs.writeFileSync(new URL(`battery-${name}.svg`, assets),
-    `<svg xmlns="http://www.w3.org/2000/svg" width="44" height="18" viewBox="0 0 44 18" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="1" y="1" width="38" height="16" rx="3"/>
-  <path d="M42 6v6"/>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="18" viewBox="0 0 64 18" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="1" y="1" width="58" height="16" rx="3"/>
+  <path d="M62 6v6"/>
 </svg>
 `);
 }
 css += `
-/* Keep the number centered in the body, excluding the terminal on the right.
-   The second background is a translucent fill inside the battery outline. */
+/* Both native labels sit inside one outline. Mirrored battery states let the
+   group retain capacity fill and charging/low colors across the whole body. */
+#power {
+  min-width: 64px;
+  min-height: 22px;
+  margin: 0 3px;
+  padding: 0;
+  background-image: url("gauges/battery-normal.svg"), linear-gradient(rgba(220, 225, 231, 0.25), rgba(220, 225, 231, 0.25));
+  background-size: 64px 18px, 0 12px;
+  background-position: center, 3px center;
+  background-repeat: no-repeat;
+}
 #battery {
   min-width: 40px;
   min-height: 22px;
-  margin: 0 3px;
-  padding: 0 4px 0 0;
+  margin: 0 0 0 3px;
+  padding: 0;
   font-family: "DejaVu Sans", sans-serif;
   font-size: 10px;
   font-weight: 600;
   color: #eeeeee;
   animation: none;
-  background-image: url("gauges/battery-normal.svg"), linear-gradient(rgba(220, 225, 231, 0.25), rgba(220, 225, 231, 0.25));
-  background-size: 44px 18px, 0 12px;
-  background-position: center, 3px center;
-  background-repeat: no-repeat;
+  background: none;
 }
-#battery.level0, #battery.level10 {
-  color: #ef8585;
+#power.battery-level0, #power.battery-level10 {
   background-image: url("gauges/battery-low.svg"), linear-gradient(rgba(239, 133, 133, 0.3), rgba(239, 133, 133, 0.3));
 }
-#battery.charging {
-  color: #8fdf8f;
+#power.battery-charging {
   background-image: url("gauges/battery-charging.svg"), linear-gradient(rgba(143, 223, 143, 0.25), rgba(143, 223, 143, 0.25));
+}
+#battery.level0, #battery.level10 { color: #ef8585; }
+#battery.charging { color: #8fdf8f; }
+#power-profiles-daemon {
+  min-width: 14px;
+  min-height: 22px;
+  margin: 0 7px 0 0;
+  padding: 0;
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  font-size: 10px;
 }
 `;
 for (let capacity = 0; capacity <= 100; capacity += 10) {
-  css += `#battery.level${capacity} { background-size: 44px 18px, ${35 * capacity / 100}px 12px; }\n`;
+  css += `#power.battery-level${capacity} { background-size: 64px 18px, ${54 * capacity / 100}px 12px; }\n`;
 }
 css += endMarker;
 const stylesheet = new URL('style.css', root);

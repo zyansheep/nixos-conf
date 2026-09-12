@@ -27,8 +27,7 @@
     "temperature",
     // "backlight",
     "custom/services",
-    "battery",
-    "power-profiles-daemon",
+    "group/power",
     "custom/notification",
     // "battery#bat2",
     "pulseaudio",
@@ -51,6 +50,10 @@
   "group/network": {
     "orientation": "horizontal",
     "modules": [ "network", "network#signal" ]
+  },
+  "group/power": {
+    "orientation": "horizontal",
+    "modules": [ "battery", "power-profiles-daemon" ]
   },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
@@ -231,6 +234,7 @@
     ]
   },
   "battery": {
+    "group-state": true,
     // Battery states select the first threshold >= capacity (unlike CPU).
     // Each ten-percent bucket uses a matching fill; only 100% looks full.
     "states": {
@@ -241,10 +245,11 @@
     "format": "{capacity}%",
     "format-charging": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
     "format-plugged": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
-    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
-    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
+    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
+    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
+    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
     "menu": "on-click",
+    "menu-anchor": "group-bottom",
     "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
     "menu-actions": {
       "power-saver": "powerprofilesctl set power-saver",
@@ -254,10 +259,12 @@
     "interval": 3
   },
   "power-profiles-daemon": {
+    "group-state": true,
     "format": "{icon}",
-    "tooltip-format": "Power profile: {profile}\nPress and drag to choose a profile",
+    "tooltip-format": "Power profile: {profile}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
     "tooltip": true,
     "menu": "on-click",
+    "menu-anchor": "group-bottom",
     "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
     "menu-actions": {
       "power-saver": "powerprofilesctl set power-saver",
@@ -266,7 +273,7 @@
     },
     "format-icons": {
       "default": "",
-      "performance": "",
+      "performance": "",
       "balanced": "",
       "power-saver": ""
     }

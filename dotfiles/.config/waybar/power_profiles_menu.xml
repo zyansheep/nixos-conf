@@ -4,25 +4,88 @@
     <property name="name">power-profiles-menu</property>
     <property name="reserve-toggle-size">False</property>
     <child>
-      <object class="GtkMenuItem" id="heading">
-        <property name="label">Power profile</property>
-        <property name="sensitive">False</property>
-      </object>
-    </child>
-    <child>
       <object class="GtkMenuItem" id="power-saver">
-        <property name="label">Power saver</property>
+        <property name="name">profile-saver</property>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">5</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="label"></property>
+                <style><class name="profile-icon"/></style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label">Power saver</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">1</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
     </child>
     <child>
       <object class="GtkMenuItem" id="balanced">
-        <property name="label">Balanced</property>
+        <property name="name">profile-balanced</property>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">5</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="label"></property>
+                <style><class name="profile-icon"/></style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label">Balanced</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
+      <packing>
+        <property name="left-attach">1</property>
+        <property name="right-attach">2</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
     </child>
     <child>
       <object class="GtkMenuItem" id="performance">
-        <property name="label">Performance</property>
+        <property name="name">profile-performance</property>
+        <child>
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">5</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="label"></property>
+                <style><class name="profile-icon"/></style>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="label">Performance</property>
+              </object>
+            </child>
+          </object>
+        </child>
       </object>
+      <packing>
+        <property name="left-attach">2</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">0</property>
+        <property name="bottom-attach">1</property>
+      </packing>
     </child>
   </object>
 </interface>

@@ -1,0 +1,108 @@
+--- a/include/AModule.hpp
++++ b/include/AModule.hpp
+@@ -35,6 +35,9 @@
+
+   SCROLL_DIR getScrollDir(GdkEventScroll* e);
+   bool tooltipEnabled() const;
++  static void mirrorStyleClasses(const Glib::RefPtr<Gtk::StyleContext>& source,
++                                 const Glib::RefPtr<Gtk::StyleContext>& target,
++                                 const Glib::ustring& prefix);
+
+   std::vector<int> pid_children_;
+   const std::string name_;
+@@ -48,7 +51,7 @@
+   virtual bool handleMouseLeave(GdkEventCrossing* const& ev);
+   virtual bool handleScroll(GdkEventScroll*);
+   virtual bool handleRelease(GdkEventButton* const& ev);
+-  GObject* menu_;
++  GObject* menu_ = nullptr;
+
+  private:
+   bool handleUserEvent(GdkEventButton* const& ev);
+--- a/src/AModule.cpp
++++ b/src/AModule.cpp
+@@ -87,6 +87,21 @@
+     if (pid != -1) {
+       killpg(pid, SIGTERM);
+     }
++  }
++}
++
++// Mirror only our namespaced classes; preserve the target widget's own styling.
++void AModule::mirrorStyleClasses(const Glib::RefPtr<Gtk::StyleContext>& source,
++                                const Glib::RefPtr<Gtk::StyleContext>& target,
++                                const Glib::ustring& prefix) {
++  for (const auto& name : target->list_classes()) {
++    if (name.compare(0, prefix.size(), prefix) == 0 &&
++        !source->has_class(name.substr(prefix.size()))) {
++      target->remove_class(name);
++    }
++  }
++  for (const auto& name : source->list_classes()) {
++    if (!target->has_class(prefix + name)) target->add_class(prefix + name);
+   }
+ }
+
+@@ -166,12 +181,25 @@
+   }
+
+   // Check that a menu has been configured
+-  if (config_["menu"].isString()) {
++  if (config_["menu"].isString() && menu_ != nullptr && rec != eventMap_.cend()) {
+     // Check if the event is the one specified for the "menu" option
+     if (rec->second == config_["menu"].asString()) {
++      // Battery refreshes may otherwise show a tooltip over the open popup.
++      if (auto* child = event_box_.get_child(); child != nullptr) child->set_has_tooltip(false);
+       // Popup the menu
+       gtk_widget_show_all(GTK_WIDGET(menu_));
+-      gtk_menu_popup_at_pointer(GTK_MENU(menu_), reinterpret_cast<GdkEvent*>(e));
++      auto* group = event_box_.get_parent();
++      if (config_["menu-anchor"] == "group-bottom" && group != nullptr) {
++        // Use the whole grouped control as the anchor, regardless of which
++        // child was pressed. Keep the original event for drag/release selection.
++        auto* menuWidget = Glib::wrap(GTK_WIDGET(menu_));
++        mirrorStyleClasses(group->get_style_context(), menuWidget->get_style_context(), "group-");
++        gtk_menu_popup_at_widget(GTK_MENU(menu_), GTK_WIDGET(group->gobj()),
++                                 GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH,
++                                 reinterpret_cast<GdkEvent*>(e));
++      } else {
++        gtk_menu_popup_at_pointer(GTK_MENU(menu_), reinterpret_cast<GdkEvent*>(e));
++      }
+       // Manually reset prelight to make sure the module doesn't stay in a hover state
+       if (auto* module = event_box_.get_child(); module != nullptr) {
+         module->unset_state_flags(Gtk::StateFlags::STATE_FLAG_PRELIGHT);
+--- a/src/ALabel.cpp
++++ b/src/ALabel.cpp
+@@ -98,6 +98,12 @@
+       if (menu_ == nullptr) {
+         throw std::runtime_error("Failed to get 'menu' object from GtkBuilder");
+       }
++      if (tooltipEnabled()) {
++        // Automatically disconnect if the label is destroyed during a bar reload.
++        g_signal_connect_object(menu_, "hide", G_CALLBACK(+[](GtkWidget*, GtkWidget* label) {
++          gtk_widget_set_has_tooltip(label, true);
++        }), label_.gobj(), G_CONNECT_DEFAULT);
++      }
+       submenus_ = std::map<std::string, GtkMenuItem*>();
+       menuActionsMap_ = std::map<std::string, std::string>();
+
+@@ -127,7 +133,18 @@
+   }
+ }
+
+-auto ALabel::update() -> void { AModule::update(); }
++auto ALabel::update() -> void {
++  // Opt in per module when a group draws the shared battery/status artwork.
++  if (config_["group-state"].asBool()) {
++    if (auto* group = event_box_.get_parent(); group != nullptr) {
++      mirrorStyleClasses(label_.get_style_context(), group->get_style_context(), name_ + "-");
++    }
++  }
++  if (menu_ != nullptr && gtk_widget_get_visible(GTK_WIDGET(menu_))) {
++    label_.set_has_tooltip(false);
++  }
++  AModule::update();
++}
+
+ std::string ALabel::getIcon(uint16_t percentage, const std::string& alt, uint16_t max) {
+   auto format_icons = config_["format-icons"];

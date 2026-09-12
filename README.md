@@ -23,22 +23,32 @@ Exact percentage and dBm remain on hover; disconnected or disabled Wi-Fi shows
 a muted crossed-out icon. The name and icon both open the network sidebar.
 Spacing is compact between the idle inhibitor, Wi-Fi, and CPU/memory dials.
 
-The battery shows its exact percentage inside a horizontal outline, with fill
-in 10% steps. Below 20% it turns red; while charging it turns green and includes
-a bolt. A plug means connected to power but not charging (e.g. a charge limit).
-Hover retains remaining time, watts, health and cycle count. This also uses the
-native Waybar battery module: three static SVG outlines and CSS provide the
-fill and status colors, without a new monitor process.
+The battery contains its exact percentage, charging mark, and active power
+profile in one 64px outline. A green leaf means Power saver, blue scales mean
+Balanced, and an amber speedometer means Performance. Fill advances in 10%
+steps. Below 20% the battery turns red; while charging it turns green and
+includes a bolt. A plug means connected to power but not charging (e.g. a charge
+limit). Hover the percentage for remaining time, watts, health and cycle count;
+hover the profile symbol for its name. The native battery and profile modules
+sit inside `group/power`, sharing three static SVG outlines and CSS.
 
-Press the battery or power-profile indicator, drag to Power saver, Balanced,
-or Performance, and release to choose. A normal click also opens the menu;
-click outside to dismiss it without changing the profile. The adjacent icon keeps
-showing the active mode, and notifications follow it. This uses Waybar's native
-GTK menu and `powerprofilesctl`; `power_profiles_menu.xml` defines the choices.
-The Niri profile applies `waybar-power-profile-menu.patch` so Waybar 0.15.0's
-profile module honors configured menus instead of cycling immediately. Remove
-the patch when upstream supports that behavior. AC plug/unplug events still
-apply the existing balanced/power-saver defaults.
+Press anywhere on the battery's percentage or profile symbol, then drag down-left
+for Power saver, straight down for Balanced, or down-right for Performance.
+Release over a button to apply it. The three equal buttons form one horizontal
+popup centered beneath the whole battery, whichever half was pressed. The
+active profile has a colored border; the hovered choice has a white border.
+A normal click also opens it; click outside to dismiss without changing the
+profile. Battery tooltips stay hidden while the selector is open.
+
+This uses GTK's native menu grid and pointer grab plus `powerprofilesctl`,
+without another polling script or daemon. `power_profiles_menu.xml` defines
+the buttons. The Niri profile applies two small Waybar 0.15.0 patches:
+`waybar-power-profile-menu.patch` bypasses the profile module's immediate
+click-to-cycle action, and `waybar-group-menu.patch` adds opt-in `group-state`
+CSS classes and `menu-anchor: group-bottom` positioning. The latter copies
+namespaced battery/profile classes to their group and to the popup for styling.
+Remove the patches when upstream supports these options. AC plug/unplug events
+still apply the existing balanced/power-saver defaults.
 
 The outline is adapted from [Lucide's battery](https://lucide.dev/icons/battery)
 and widened for the number; its license is in `gauges/LUCIDE-LICENSE`.

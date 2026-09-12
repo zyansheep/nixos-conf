@@ -29,11 +29,12 @@ in {
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
-  # Keep Waybar's native profile observer, but honor a configured GTK menu
-  # instead of its hard-coded click-to-cycle handler (upstream 0.15.0).
+  # Native battery/profile observers share one icon and a centered GTK popup.
+  # Local patches add group styling/anchoring and bypass click-to-cycle (0.15.0).
   programs.waybar.package = pkgs.waybar.overrideAttrs (old: {
     patches = (old.patches or []) ++ [
       ../../../common/patches/waybar-power-profile-menu.patch
+      ../../../common/patches/waybar-group-menu.patch
     ];
   });
 
