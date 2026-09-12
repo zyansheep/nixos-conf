@@ -1,0 +1,10 @@
+--- a/src/modules/power_profiles_daemon.cpp
++++ b/src/modules/power_profiles_daemon.cpp
+@@ -177,2 +177,7 @@
+ bool PowerProfilesDaemon::handleToggle(GdkEventButton* const& e) {
++  // A configured native menu replaces the default click-to-cycle action.
++  // Delegate the original press event so GTK retains press/drag/release selection.
++  if (config_["menu"].isString()) {
++    return ALabel::handleToggle(e);
++  }
+   if (e->type == GdkEventType::GDK_BUTTON_PRESS && connected_) {

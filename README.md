@@ -16,12 +16,29 @@ polling script or daemon. The glyphs use the installed `Font Awesome 7 Free`
 family directly; the old `FontAwesome` name fell back to a patched monospace
 font with an offset ink box.
 
+Wi-Fi uses the original-style separate curved bars and dot, with another bar
+lighting up at 25%, 50%, and 75%. Unlit bars stay faintly visible. Waybar's native
+signal states select four small SVGs; no extra polling process is needed.
+Exact percentage and dBm remain on hover; disconnected or disabled Wi-Fi shows
+a muted crossed-out icon. The name and icon both open the network sidebar.
+Spacing is compact between the idle inhibitor, Wi-Fi, and CPU/memory dials.
+
 The battery shows its exact percentage inside a horizontal outline, with fill
 in 10% steps. Below 20% it turns red; while charging it turns green and includes
 a bolt. A plug means connected to power but not charging (e.g. a charge limit).
 Hover retains remaining time, watts, health and cycle count. This also uses the
 native Waybar battery module: three static SVG outlines and CSS provide the
 fill and status colors, without a new monitor process.
+
+Press the battery or power-profile indicator, drag to Power saver, Balanced,
+or Performance, and release to choose. A normal click also opens the menu;
+click outside to dismiss it without changing the profile. The adjacent icon keeps
+showing the active mode, and notifications follow it. This uses Waybar's native
+GTK menu and `powerprofilesctl`; `power_profiles_menu.xml` defines the choices.
+The Niri profile applies `waybar-power-profile-menu.patch` so Waybar 0.15.0's
+profile module honors configured menus instead of cycling immediately. Remove
+the patch when upstream supports that behavior. AC plug/unplug events still
+apply the existing balanced/power-saver defaults.
 
 The outline is adapted from [Lucide's battery](https://lucide.dev/icons/battery)
 and widened for the number; its license is in `gauges/LUCIDE-LICENSE`.

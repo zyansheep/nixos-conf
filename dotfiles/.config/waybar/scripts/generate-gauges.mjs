@@ -1,4 +1,4 @@
-// Build-time artwork only: Waybar's native modules supply usage and capacity.
+// Build-time artwork only: Waybar's native modules supply usage, capacity and signal.
 // Run with `node dotfiles/.config/waybar/scripts/generate-gauges.mjs`.
 import fs from 'node:fs';
 
@@ -23,6 +23,24 @@ ${usage ? `    <path d="${path(sweep * usage / 100)}" stroke="${color}"/>\n` : '
 </svg>
 `;
 }
+// Classic Wi-Fi silhouette: three separate concentric arcs and a round dot.
+// Keep unlit arcs faint so all four signal levels have the same visual footprint.
+function wifiSvg(level) {
+  const off = level === null;
+  const arcs = [5.4, 10.2, 15].map((radius, index) => {
+    const x = radius / Math.SQRT2;
+    const y = 19.5 - x;
+    const color = off ? '#92969c' : index < level ? '#eeeeee' : '#62676d';
+    return `    <path d="M ${(12 - x).toFixed(3)} ${y.toFixed(3)} A ${radius} ${radius} 0 0 1 ${(12 + x).toFixed(3)} ${y.toFixed(3)}" stroke="${color}"/>`;
+  }).join('\n');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+${off ? `  <defs><mask id="slash-gap"><rect width="24" height="24" fill="white"/><path d="M3 3l18 18" stroke="black" stroke-width="5"/></mask></defs>\n` : ''}  <g fill="none" stroke-width="2.4" stroke-linecap="round"${off ? ' mask="url(#slash-gap)"' : ''}>
+${arcs}
+    <circle cx="12" cy="19.5" r="1.6" fill="${off ? '#92969c' : '#eeeeee'}"/>
+  </g>
+${off ? '  <path d="M3 3l18 18" fill="none" stroke="#92969c" stroke-width="2.4" stroke-linecap="round"/>\n' : ''}</svg>
+`;
+}
 
 const startMarker = '/* BEGIN GENERATED USAGE GAUGES */';
 const endMarker = '/* END GENERATED USAGE GAUGES */';
@@ -43,6 +61,9 @@ let css = `${startMarker}
   background-position: center;
   background-repeat: no-repeat;
 }
+/* Compact gaps from Wi-Fi through the CPU/memory pair. */
+#cpu { margin-left: 1px; margin-right: 1px; }
+#memory { margin-left: 1px; }
 `;
 for (const mode of ['ring', 'arc']) {
   for (let usage = 0; usage <= 100; usage += 5) {
@@ -54,6 +75,26 @@ window.gauges-${mode} #memory.gauge${usage} {
 }
 `;
   }
+}
+css += `
+/* Native network states select separate curved bars, matching the old Wi-Fi icon. */
+#network.signal {
+  background-image: url("gauges/wifi-off.svg");
+  background-size: 18px 18px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+#network.signal.ethernet { background-image: none; }
+`;
+fs.writeFileSync(new URL('wifi-off.svg', assets), wifiSvg(null));
+for (let level = 0; level < 4; level++) {
+  const file = `wifi-${level}.svg`;
+  fs.writeFileSync(new URL(file, assets), wifiSvg(level));
+  css += `#network.signal.wifi.signal${level * 25},
+#network.signal.linked.signal${level * 25} {
+  background-image: url("gauges/${file}");
+}
+`;
 }
 // Lucide's battery outline, widened to make room for the live percentage.
 // https://github.com/lucide-icons/lucide/blob/main/icons/battery.svg

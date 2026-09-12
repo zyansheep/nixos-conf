@@ -12,7 +12,6 @@ in {
     wl-clipboard # wl-copy and wl-paste for copy/paste from stdin / stdout
     cliphist # clipboard manager
     swaynotificationcenter # notification daemon + control center
-    waybar # topbar
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -30,6 +29,13 @@ in {
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
+  # Keep Waybar's native profile observer, but honor a configured GTK menu
+  # instead of its hard-coded click-to-cycle handler (upstream 0.15.0).
+  programs.waybar.package = pkgs.waybar.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [
+      ../../../common/patches/waybar-power-profile-menu.patch
+    ];
+  });
 
   # Installing swaylock alone does not create its PAM authentication service.
   # Use password authentication without waiting for the fingerprint reader.
@@ -63,6 +69,7 @@ in {
     ../../../../dotfiles/.config/waybar/config.jsonc
     ../../../../dotfiles/.config/waybar/style.css
     ../../../../dotfiles/.config/waybar/gauges
+    ../../../../dotfiles/.config/waybar/power_profiles_menu.xml
   ];
 
   # Keep the long-lived sidebar attached to the session and replace it on

@@ -21,15 +21,15 @@
     "mpd",
     "group/tray-group",
     "idle_inhibitor",
-    "network",
+    "group/network",
     "cpu",
     "memory",
     "temperature",
     // "backlight",
     "custom/services",
     "battery",
-    "custom/notification",
     "power-profiles-daemon",
+    "custom/notification",
     // "battery#bat2",
     "pulseaudio",
     "custom/power"
@@ -47,6 +47,10 @@
     "format": "",
     "tooltip": true,
     "tooltip-format": "System tray (hover to expand)"
+  },
+  "group/network": {
+    "orientation": "horizontal",
+    "modules": [ "network", "network#signal" ]
   },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
@@ -237,15 +241,29 @@
     "format": "{capacity}%",
     "format-charging": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
     "format-plugged": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
-    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
-    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}",
+    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
+    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
+    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nPress, drag to a power profile, and release to select",
+    "menu": "on-click",
+    "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
+    "menu-actions": {
+      "power-saver": "powerprofilesctl set power-saver",
+      "balanced": "powerprofilesctl set balanced",
+      "performance": "powerprofilesctl set performance"
+    },
     "interval": 3
   },
   "power-profiles-daemon": {
     "format": "{icon}",
-    "tooltip-format": "Power profile: {profile}\nDriver: {driver}",
+    "tooltip-format": "Power profile: {profile}\nPress and drag to choose a profile",
     "tooltip": true,
+    "menu": "on-click",
+    "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
+    "menu-actions": {
+      "power-saver": "powerprofilesctl set power-saver",
+      "balanced": "powerprofilesctl set balanced",
+      "performance": "powerprofilesctl set performance"
+    },
     "format-icons": {
       "default": "",
       "performance": "",
@@ -257,7 +275,7 @@
     // Follow Wi-Fi even while a VPN owns the default route.
     "interface": "wl*",
     "interval": 5,
-    "format-wifi": "{essid} ({signalStrength}%) ",
+    "format-wifi": "{essid}",
     "format-ethernet": "{ipaddr}/{cidr} ",
     "tooltip-format": "{ifname}\nAddress: {ipaddr}/{cidr}\nGateway: {gwaddr}",
     "tooltip-format-wifi": "{essid}\nSignal: {signalStrength}% ({signaldBm} dBm) · {frequency} GHz\nInterface: {ifname}\nAddress: {ipaddr}/{cidr}\nGateway: {gwaddr}\n↓ {bandwidthDownBits}  ↑ {bandwidthUpBits}\nClick to connect or configure networks",
@@ -266,6 +284,22 @@
     "format-linked": "{ifname} (No IP) ",
     "format-disconnected": "Wi-Fi disconnected ⚠",
     "format-disabled": "Wi-Fi off",
+    "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
+  },
+  "network#signal": {
+    "interface": "wl*",
+    "interval": 5,
+    // A nonempty label keeps the SVG icon's tooltip and click target active.
+    "format": "\u00a0",
+    "format-ethernet": "",
+    // Native signal states light the dot, then each separate curved bar.
+    "states": {
+      "signal0": 0, "signal25": 25, "signal50": 50, "signal75": 75
+    },
+    "tooltip-format-wifi": "{essid}\nSignal: {signalStrength}% ({signaldBm} dBm) · {frequency} GHz\nClick to connect or configure networks",
+    "tooltip-format-linked": "Connected to Wi-Fi, waiting for an IP address",
+    "tooltip-format-disconnected": "Wi-Fi disconnected · Click to connect",
+    "tooltip-format-disabled": "Wi-Fi disabled · Click to enable Wi-Fi",
     "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
   },
   "pulseaudio": {

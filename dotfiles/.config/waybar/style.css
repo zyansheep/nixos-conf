@@ -146,6 +146,18 @@ label:focus {
 
 #network.disconnected {}
 
+/* Keep the idle toggle, network name/icon, and usage dials close together. */
+#idle_inhibitor { padding-right: 3px; }
+#network:not(.signal) { padding: 0 2px 0 3px; }
+#network.signal {
+  font-family: "Font Awesome 7 Free";
+  font-size: 16px;
+  font-weight: 900;
+  min-width: 18px;
+  min-height: 22px;
+  padding: 0;
+  margin: 0 1px 0 0;
+}
 #pulseaudio {}
 
 #pulseaudio.muted {}
@@ -297,16 +309,24 @@ label:focus {
   padding: 0 3px;
 }
 
-/* Tighten two specific gaps without affecting neighbors: reduce only the left
-   padding facing the smaller neighbor.
-   #battery left  -> custom/services ↔ battery gap
-   #power-profiles-daemon left -> notification (bell) ↔ power-profiles gap */
-#battery {
-  padding-left: 3px;
-}
+/* Keep the profile indicator close to the battery; notifications follow it. */
 #power-profiles-daemon {
   padding-left: 3px;
 }
+
+#power-profiles-menu {
+  background-color: #303236;
+  border: 1px solid #606369;
+  border-radius: 6px;
+  padding: 4px;
+}
+#power-profiles-menu menuitem {
+  padding: 7px 12px;
+  border-radius: 4px;
+  color: #eeeeee;
+}
+#power-profiles-menu menuitem:hover { background-color: #50545b; }
+#power-profiles-menu menuitem:disabled { color: #a0a4ab; }
 
 #custom-notification.dnd-none,
 #custom-notification.dnd-notification,
@@ -332,6 +352,9 @@ label:focus {
   background-position: center;
   background-repeat: no-repeat;
 }
+/* Compact gaps from Wi-Fi through the CPU/memory pair. */
+#cpu { margin-left: 1px; margin-right: 1px; }
+#memory { margin-left: 1px; }
 window.gauges-ring #cpu.gauge0,
 window.gauges-ring #memory.gauge0 {
   background-image: url("gauges/ring-0.svg");
@@ -499,6 +522,31 @@ window.gauges-arc #memory.gauge95 {
 window.gauges-arc #cpu.gauge100,
 window.gauges-arc #memory.gauge100 {
   background-image: url("gauges/arc-100.svg");
+}
+
+/* Native network states select separate curved bars, matching the old Wi-Fi icon. */
+#network.signal {
+  background-image: url("gauges/wifi-off.svg");
+  background-size: 18px 18px;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+#network.signal.ethernet { background-image: none; }
+#network.signal.wifi.signal0,
+#network.signal.linked.signal0 {
+  background-image: url("gauges/wifi-0.svg");
+}
+#network.signal.wifi.signal25,
+#network.signal.linked.signal25 {
+  background-image: url("gauges/wifi-1.svg");
+}
+#network.signal.wifi.signal50,
+#network.signal.linked.signal50 {
+  background-image: url("gauges/wifi-2.svg");
+}
+#network.signal.wifi.signal75,
+#network.signal.linked.signal75 {
+  background-image: url("gauges/wifi-3.svg");
 }
 
 /* Keep the number centered in the body, excluding the terminal on the right.
