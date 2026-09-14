@@ -30,7 +30,8 @@
     "group/power",
     "custom/notification",
     // "battery#bat2",
-    "pulseaudio",
+    "wireplumber#output",
+    "wireplumber#microphone",
     "custom/power"
   ],
   "group/tray-group": {
@@ -309,28 +310,45 @@
     "tooltip-format-disabled": "Wi-Fi disabled · Click to enable Wi-Fi",
     "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
   },
-  "pulseaudio": {
-    // "scroll-step": 1, // %, can be a float
-    "format": "{volume}% {icon} {format_source}",
-    "format-bluetooth": "{volume}% {icon} {format_source}",
-    "format-bluetooth-muted": " {icon} {format_source}",
-    "format-muted": " {format_source}",
-    "format-source": "{volume}% ",
-    "format-source-muted": "",
-    "format-icons": {
-      "headphone": "",
-      "hands-free": "",
-      "headset": "",
-      "phone": "",
-      "portable": "",
-      "car": "",
-      "default": [
-        "",
-        "",
-        ""
-      ]
-    },
-    "on-click": "pavucontrol"
+  "wireplumber#output": {
+    "node-type": "Audio/Sink",
+    "format": "",
+    "format-muted": "",
+    "align": 0.6, // Optical centering for the speaker's asymmetrical glyph.
+    "tooltip-format": "Speaker: {volume}%\n{node_name}\nScroll to adjust · Right-click to mute\nClick to configure audio",
+    "scroll-step": 1.0,
+    "max-volume": 100.0,
+    "on-click": "pavucontrol",
+    "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
+    // Native WirePlumber states track this device's own volume.
+    "states": {
+      "gauge0": 0, "gauge5": 5, "gauge10": 10, "gauge15": 15,
+      "gauge20": 20, "gauge25": 25, "gauge30": 30, "gauge35": 35,
+      "gauge40": 40, "gauge45": 45, "gauge50": 50, "gauge55": 55,
+      "gauge60": 60, "gauge65": 65, "gauge70": 70, "gauge75": 75,
+      "gauge80": 80, "gauge85": 85, "gauge90": 90, "gauge95": 95,
+      "gauge100": 100
+    }
+  },
+  "wireplumber#microphone": {
+    "node-type": "Audio/Source",
+    "format": "",
+    "format-muted": "",
+    "align": 0.5,
+    "tooltip-format": "Microphone: {volume}%\n{node_name}\nScroll to adjust · Right-click to mute\nClick to configure audio",
+    "scroll-step": 1.0,
+    "max-volume": 100.0,
+    "on-click": "pavucontrol",
+    "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle",
+    // Native WirePlumber states track this device's own volume.
+    "states": {
+      "gauge0": 0, "gauge5": 5, "gauge10": 10, "gauge15": 15,
+      "gauge20": 20, "gauge25": 25, "gauge30": 30, "gauge35": 35,
+      "gauge40": 40, "gauge45": 45, "gauge50": 50, "gauge55": 55,
+      "gauge60": 60, "gauge65": 65, "gauge70": 70, "gauge75": 75,
+      "gauge80": 80, "gauge85": 85, "gauge90": 90, "gauge95": 95,
+      "gauge100": 100
+    }
   },
   "custom/media": {
     "format": "{icon} {}",

@@ -1,6 +1,11 @@
 # Native Wi-Fi settings extension
 
-Applied to the pinned upstream source in `../../packages/nm-sidebar.nix`.
+Applied to the pinned [upstream sidebar](https://github.com/Relz/network-manager-sidebar)
+in [nm-sidebar.nix](../../packages/nm-sidebar.nix). For connection usage,
+storage and migration, see [isomorph networking](../../../nixos/hosts/isomorph/README.md).
+
+## Implementation
+
 The zero-context patch changes the upstream call sites; the new C files are
 copied into the source tree during `postPatch`.
 
@@ -28,7 +33,7 @@ and settings without a field in the form are preserved. Save does not reconnect
 an active network. Back discards the draft. A credentials-read failure prevents
 saving rather than risking removal of a saved secret.
 
-Layout and editability:
+## Layout and editability
 
 - Connect/Disconnect and Auto-connect share one row. Only explicit Save persists
   a switch, text or dropdown edit. The fixed bottom bar appears when dirty, with
@@ -54,6 +59,26 @@ Layout and editability:
   hardware address, driver, BSSID, radio, routes and UUID belong in diagnostics.
   Existing authentication methods, certificates and BSSID/band locks are displayed
   there and retained; the form does not implement every NetworkManager option.
+
+New enterprise connections support PEAP/MSCHAPv2 and TTLS/PAP with server-domain
+and CA-certificate validation. Existing enterprise methods and certificates are
+preserved while identity, password and server-domain fields can be edited.
+
+## Runtime integration
+
+The [Niri profile](../../../nixos/profiles/graphics/niri.nix) starts the
+`nm-sidebar` user service hidden with the graphical session and replaces it on
+upgrades. The CLI sends requests through an IPC socket in `$XDG_RUNTIME_DIR`.
+Waybar and `Alt+Shift+W` toggle this same process. The sidebar uses libnm directly,
+with no connection-parsing scripts or separate credential store.
+
+The upstream external editor is a private runtime dependency for VPN profiles;
+native Wi-Fi editing does not launch it, and nm-applet does not autostart.
+Control Proton's generated profiles and kill switch through Proton's own app.
+
+## Verification
+
+Run these commands from the repository root.
 
 `nix build .#nm-sidebar` runs the isolated model regression tests. For the live
 libnm persistence check, run `bash cells/common/patches/nm-sidebar/test-live-save.sh`

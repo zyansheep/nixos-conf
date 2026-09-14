@@ -432,9 +432,9 @@ binds {
     Mod+Z hotkey-overlay-title="📁 File Manager: foot yazi" { spawn "foot" "yazi"; }
     Mod+D hotkey-overlay-title="🚀 Run an Application: rofi" { spawn "rofi" "-run-use-desktop-cache" "-show" "run"; }
     Mod+Shift+D hotkey-overlay-title="📦 Install an Application: npmenu.py" { spawn "/home/zyansheep/Projects/npmenu/npmenu.py" "-l" "rofi"; }
-    // Super+L is used for navigation below; lock with Super+Alt+L.
+    // Super+L is used for navigation below; lock with Ctrl+Alt+L.
     // Authentication is configured in cells/nixos/profiles/graphics/niri.nix.
-    Super+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock" "-f"; }
+    Ctrl+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock" "-f"; }
 
     // Clipboard and utility bindings from sway
     Mod+C hotkey-overlay-title="📋 Clipboard History: rofi" { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }

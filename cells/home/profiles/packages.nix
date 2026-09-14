@@ -94,6 +94,7 @@ _: {pkgs, ...}: {
     logmein-hamachi
     # opendrop  # removed from nixpkgs 2026-08 (unmaintained upstream); localsend covers this
     openfortivpn
+    qrencode # `qrencode -o - "text" | swayimg -` shows a QR on screen
     osmctools
     parted
     pbzip2
