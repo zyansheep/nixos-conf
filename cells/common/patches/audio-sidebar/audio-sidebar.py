@@ -8,9 +8,10 @@ from pathlib import Path
 import gi
 
 gi.require_version("Gtk", "4.0")
+gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
 gi.require_version("Gtk4LayerShell", "1.0")
-from gi.repository import Gdk, Gio, GLib, Gtk, Gtk4LayerShell as GtkLayerShell, Pango
+from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Gtk4LayerShell as GtkLayerShell, Pango
 
 
 def pactl(*args):
@@ -53,24 +54,19 @@ def topology(state):
 
 CSS = b"""
 window { background: transparent; }
-#audio-card { background: @menu_bg; color: @menu_fg; border: 1px solid @menu_border_strong;
-              border-radius: 9px; padding: 10px; font-family: sans-serif; font-size: 12px; }
-#audio-card .section { font-size: 12px; font-weight: 600; margin-top: 4px; }
-#audio-card .device { background: @menu_card; border-radius: 6px; padding: 8px; }
+#audio-card { background: @menu_bg; color: @menu_fg; border: 1px solid @menu_border;
+              border-left-color: @menu_border_strong; border-radius: 12px;
+              padding: 12px; font-family: sans-serif; font-size: 14px; }
+#audio-card .section { font-size: 13px; font-weight: 700; margin-top: 8px; }
+#audio-card .device { background: @menu_card; border-radius: 12px; padding: 12px; }
 #audio-card .device.active { background: @menu_active; }
-#audio-card .muted { color: @menu_muted; font-size: 11px; }
-#audio-card button { background: @menu_card; background-image: none; color: @menu_fg;
-                    border: 1px solid #4b5057; border-radius: 6px; padding: 3px 8px;
-                    min-height: 22px; font-weight: normal; box-shadow: none; }
+#audio-card .muted { color: @menu_muted; font-size: 12px; }
 #audio-card button:hover { background: @menu_hover; }
-#audio-card button:checked { background: @menu_active; border-color: @menu_accent; }
-#audio-card scale trough { min-height: 4px; }
-#audio-card scale slider { min-width: 14px; min-height: 14px; padding: 0; margin: 0;
-                           border: 1px solid @menu_accent; background: @menu_accent; }
+#audio-card button:checked { background: @menu_active; color: @menu_accent; }
 """
 
 
-class AudioPopup(Gtk.Application):
+class AudioPopup(Adw.Application):
     def __init__(self):
         super().__init__(application_id="org.zyansheep.AudioSidebar",
                          flags=Gio.ApplicationFlags.IS_SERVICE)
@@ -84,6 +80,7 @@ class AudioPopup(Gtk.Application):
         self.state = None
         self.shape = None
         self.timer = None
+        self.focused_once = False
         self.volume_timers = {}
         self.connect("startup", self.startup)
         self.connect("activate", self.toggle)
@@ -98,6 +95,8 @@ class AudioPopup(Gtk.Application):
 
     def startup(self, *_):
         self.hold()
+        Gtk.Settings.get_default().set_property("gtk-icon-theme-name", "Adwaita")
+        Adw.StyleManager.get_default().set_color_scheme(Adw.ColorScheme.FORCE_DARK)
         toggle = Gio.SimpleAction.new("toggle", None)
         toggle.connect("activate", self.toggle)
         self.add_action(toggle)
@@ -111,12 +110,33 @@ class AudioPopup(Gtk.Application):
         if self.window.get_visible():
             self.close()
         else:
+            self.focus_for_open()
             self.window.present()
             self.refresh()
 
+    def focus_for_open(self):
+        self.focused_once = False
+        GtkLayerShell.set_keyboard_mode(self.window, GtkLayerShell.KeyboardMode.ON_DEMAND)
+
+    def focus_changed(self, window, *_):
+        if not window.get_visible():
+            return
+        if window.is_active():
+            self.focused_once = True
+            GtkLayerShell.set_keyboard_mode(window, GtkLayerShell.KeyboardMode.ON_DEMAND)
+        elif self.focused_once:
+            # A dropdown may briefly take keyboard focus within our application.
+            GLib.timeout_add(100, self.dismiss_if_unfocused)
+
+    def dismiss_if_unfocused(self):
+        if self.window.get_visible() and not self.window.is_active() and not self.busy():
+            self.close()
+        return False
+
     def build_window(self):
-        self.window = Gtk.ApplicationWindow(application=self, title="Audio")
+        self.window = Adw.ApplicationWindow(application=self, title="Audio")
         self.window.connect("close-request", self.close)
+        self.window.connect("notify::is-active", self.focus_changed)
         self.window.set_decorated(False)
         self.window.set_default_size(1, 1)
         GtkLayerShell.init_for_window(self.window)
@@ -139,10 +159,20 @@ class AudioPopup(Gtk.Application):
         keys = Gtk.EventControllerKey()
         keys.connect("key-pressed", self.key_press)
         self.window.add_controller(keys)
-        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=18)
         self.card = card
         card.set_name("audio-card")
         card.set_size_request(400, -1)
+        header = Gtk.Box(spacing=8)
+        title = self.label("Audio", "title-2")
+        title.set_hexpand(True)
+        header.append(title)
+        close = Gtk.Button.new_from_icon_name("window-close-symbolic")
+        close.add_css_class("flat")
+        close.update_property([Gtk.AccessibleProperty.LABEL], ["Close audio"])
+        close.connect("clicked", self.close)
+        header.append(close)
+        card.append(header)
         self.error = self.label("", "muted")
         self.error.set_wrap(True)
         self.error.set_max_width_chars(40)
@@ -164,7 +194,7 @@ class AudioPopup(Gtk.Application):
         actions.append(graph)
         actions.append(self.button("Close", self.close))
         card.append(actions)
-        self.window.set_child(card)
+        self.window.set_content(card)
         self.fit_panel()
 
     def fit_panel(self):
@@ -297,7 +327,9 @@ class AudioPopup(Gtk.Application):
         name.set_max_width_chars(38)
         box.append(name)
         row = Gtk.Box(spacing=8)
-        mute = Gtk.ToggleButton(label="Mute")
+        mute = Gtk.ToggleButton()
+        mute.add_css_class("flat")
+        recording = kind in ("sources", "source-outputs")
         mute.connect("toggled", lambda b: self.command("set-" + singular + "-mute", index, "1" if b.get_active() else "0"))
         scale = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
         scale.set_digits(0)
@@ -336,7 +368,12 @@ class AudioPopup(Gtk.Application):
         def update(state):
             current = next(i for i in state[kind] if i["index"] == index)
             scale.set_value(volume(current))
-            mute.set_active(current.get("mute", False))
+            muted = current.get("mute", False)
+            mute.set_active(muted)
+            mute.set_icon_name(("microphone-disabled-symbolic" if muted else "microphone-sensitivity-high-symbolic")
+                               if recording else ("audio-volume-muted-symbolic" if muted else "audio-volume-high-symbolic"))
+            mute.update_property([Gtk.AccessibleProperty.LABEL],
+                                 [("Unmute " if muted else "Mute ") + description(current)])
             if default:
                 selected = state["default-" + singular] == current["name"]
                 (box.add_css_class if selected else box.remove_css_class)("active")

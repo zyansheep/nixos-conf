@@ -39,11 +39,45 @@ not cover open menus. Module settings disable them immediately on reload; the
 Waybar package also disables GTK tooltip windows for tray items. Audio device
 names and routing controls use visible labels without extra hover hints.
 
+## CPU, memory and temperature hover panels
+
+Hovering any of these indicators opens a native GTK3 panel immediately, without
+starting a process or waiting to sample. The panel stays open while the pointer
+is over its indicator or contents, supports scrolling its list, and closes
+180 ms after leaving both. It does not grab background input or re-enable the
+other bar tooltips.
+
+- **CPU:** top 20 program names ranked by rolling past-minute CPU usage,
+  normalized to the whole CPU (all cores busy = 100%). The label shows actual
+  coverage during the first minute. CPU from already-observed exited programs
+  remains in the rolling window until it ages out.
+- **Memory:** top 20 program names by current summed resident memory (RSS).
+  Shared pages can be counted in several processes; this is not unique memory
+  ownership and will not necessarily sum to the bar's used-memory figure.
+- **Temperature:** every readable hwmon temperature channel and thermal zone,
+  with chip/channel names. Different interfaces can report the same sensor.
+
+`waybar-monitor.service` samples every two seconds and publishes an atomic cache
+under `$XDG_RUNTIME_DIR/waybar-monitor`. It stores no command lines or persistent
+history. CPU counters use PID plus process start time, so PID reuse cannot
+inherit another process's CPU time. A long sampling gap resets the window.
+Processes that finish entirely between samples cannot be measured.
+
+## Notification panel
+
+SwayNC supplies notification grouping, actions, inline replies, DND and media
+controls. `swaync.service` now pins the configured GTK4 package and preloads its
+widgets/surface at graphical-session startup. The panel has no opening
+transition. `Alt+N` toggles it; `Alt+Shift+R` restarts the managed Waybar and
+notification services. Broken legacy Wi-Fi/Bluetooth/DPMS quick-toggle shell
+commands were removed; their dedicated panels remain available.
+
 ## Audio popup
 
 The speaker and microphone open `audio-sidebar`, also bound to `Alt+Shift+V`.
-It uses plain GTK 4 and gtk4-layer-shell, with a compact custom style and no
-libadwaita header. A session service preloads GTK and constructs the window in
+It uses GTK 4, libadwaita and gtk4-layer-shell, with the same rounded cards,
+spacing, title row and dark palette as Wi-Fi. Mute buttons show speaker or
+microphone icons and expose accessible action labels. A session service preloads GTK and constructs the window in
 the background; the launcher sends a D-Bus toggle action to that process.
 
 - Outputs and inputs: volume (0–100%), mute, default device, and available ports.
@@ -62,7 +96,11 @@ Dismissal hides the window for reuse; audio-server polling pauses while hidden. 
 Audio, Wi-Fi and notifications occupy only their panel's bounds. There is no
 fullscreen invisible click catcher and no exclusive keyboard grab. Scroll or
 click a background application without closing the panel. Click a control to
-focus the panel when keyboard input is needed.
+focus the panel when keyboard input is needed. Audio and notifications dismiss
+after losing that focus to another application. On Niri, a panel opened without
+first receiving focus cannot detect a click in the already-focused background
+app; use its toggle or Close control in that case. Full click-outside dismissal
+would require a pointer grab or backdrop that also blocks background scrolling.
 
 Use Close, Escape while focused, or `Alt+Shift+V` to dismiss audio. Wi-Fi toggles
 with `Alt+Shift+W`; notifications toggle with `Alt+N`.
@@ -75,10 +113,10 @@ background scrolling is unavailable until it closes.
 ## Menu style
 
 [menu-theme.css](menu-theme.css) provides the GTK4 palette for audio and SwayNC,
-matching Wi-Fi's dark palette. Audio uses compact custom widgets without a
-libadwaita title bar. The native battery menu has its compact styles in
+matching Wi-Fi's dark palette. Audio uses the same libadwaita controls and a simple title row as Wi-Fi. The native battery menu has its compact styles in
 [style.css](style.css), with three profile choices and a health/cycles footer.
-Wi-Fi and notifications remain GTK4/libadwaita; battery is GTK3 inside Waybar.
+Audio, Wi-Fi and notifications use GTK4/libadwaita; battery and resource hover
+panels use GTK3 inside Waybar.
 
 Rebuild after palette changes to update the audio package. Reload notification
 styles with `swaync-client --reload-css` after the shared file is installed.
@@ -152,10 +190,12 @@ Build without switching the system (the path flake includes new files):
 nix build path:.#packages.x86_64-linux.audio-sidebar \
   path:.#packages.x86_64-linux.nm-sidebar \
   path:.#packages.x86_64-linux.notification-sidebar \
+  path:.#packages.x86_64-linux.waybar-monitor \
   path:.#nixosConfigurations.isomorph.config.programs.waybar.package --no-link
 ```
 
-The audio package tests command handling, hotplug behavior, monitor-source
+The monitor tests cover rolling CPU windows, PID reuse, exited tasks, memory
+ordering and sensor parsing. The audio package tests command handling, hotplug behavior, monitor-source
 classification, and resident-window behavior. The Waybar build tests battery
 capacity/cycle fallbacks against synthetic sysfs fixtures. Apply using `nrb` to
 install the commands, CSS link, and patched packages. Niri reloads linked key

@@ -186,6 +186,7 @@
     }
   },
   "cpu": {
+    "hover-monitor": "cpu",
     "format": "",
     "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{usage}</span>",
     "format-alt-click": 1,
@@ -202,6 +203,7 @@
     }
   },
   "memory": {
+    "hover-monitor": "memory",
     "tooltip": false,
     "format": "",
     "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{percentage}</span>",
@@ -218,6 +220,7 @@
     }
   },
   "temperature": {
+    "hover-monitor": "temperature",
     "tooltip": false,
     // "thermal-zone": 2,
     // "hwmon-path": "/sys/class/hwmon/hwmon2/temp1_input",

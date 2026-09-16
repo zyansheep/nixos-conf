@@ -1,11 +1,11 @@
-{ lib, stdenvNoCC, python3, gtk4, gtk4-layer-shell, gobject-introspection, glib, systemd,
+{ lib, stdenvNoCC, python3, gtk4, libadwaita, adwaita-icon-theme, gtk4-layer-shell, gobject-introspection, glib, systemd,
   wrapGAppsHook4, pulseaudio, helvum, sources ? null }:
 stdenvNoCC.mkDerivation {
   pname = "audio-sidebar";
   version = "0.1.0";
   src = ../patches/audio-sidebar;
   nativeBuildInputs = [ wrapGAppsHook4 gobject-introspection ];
-  buildInputs = [ gtk4 gtk4-layer-shell ];
+  buildInputs = [ gtk4 libadwaita gtk4-layer-shell ];
   dontBuild = true;
   installPhase = ''
     runHook preInstall
@@ -31,6 +31,7 @@ stdenvNoCC.mkDerivation {
   '';
   dontWrapGApps = true;
   preFixup = ''
+    gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : ${adwaita-icon-theme}/share)
     gappsWrapperArgs+=(--prefix LD_PRELOAD : ${gtk4-layer-shell}/lib/libgtk4-layer-shell.so)
     gappsWrapperArgs+=(--prefix PATH : ${lib.makeBinPath [ pulseaudio helvum ]})
     gappsWrapperArgs+=(--prefix PYTHONPATH : "${python3.withPackages (p: [ p.pygobject3 ])}/${python3.sitePackages}")

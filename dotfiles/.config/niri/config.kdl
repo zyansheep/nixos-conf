@@ -481,7 +481,7 @@ binds {
     Mod+N hotkey-overlay-title="🔔 Toggle Notifications Panel" { spawn "swaync-client" "-t" "-sw"; }
 
     // Reload waybar and other user services
-    Mod+Shift+R hotkey-overlay-title="🔄 Restart Waybar & Notifications" { spawn "sh" "-c" "systemctl --user restart waybar; pkill swaync; /run/current-system/sw/bin/swaync &"; }
+    Mod+Shift+R hotkey-overlay-title="🔄 Restart Waybar & Notifications" { spawn "sh" "-c" "systemctl --user restart waybar swaync"; }
 
     Mod+Shift+Q { close-window; }
 

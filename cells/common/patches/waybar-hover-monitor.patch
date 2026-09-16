@@ -1,0 +1,36 @@
+--- a/include/AModule.hpp
++++ b/include/AModule.hpp
+@@ -9,6 +9,7 @@
+ #include "IModule.hpp"
+ 
+ namespace waybar {
++class HoverMonitor;
+ 
+ class AModule : public IModule {
+  public:
+@@ -52,6 +53,7 @@
+   virtual bool handleScroll(GdkEventScroll*);
+   virtual bool handleRelease(GdkEventButton* const& ev);
+   GObject* menu_ = nullptr;
++  std::unique_ptr<HoverMonitor> hover_monitor_;
+ 
+  private:
+   bool handleUserEvent(GdkEventButton* const& ev);
+--- a/src/AModule.cpp
++++ b/src/AModule.cpp
+@@ -1,4 +1,5 @@
+ #include "AModule.hpp"
++#include "util/hover_monitor.hpp"
+ #include "util/power_menu_stats.hpp"
+ 
+ #include <fmt/format.h>
+@@ -31,6 +32,9 @@
+       isExpand{config_["expand"].isBool() ? config_["expand"].asBool() : false},
+       distance_scrolled_y_(0.0),
+       distance_scrolled_x_(0.0) {
++  if (config_["hover-monitor"].isString())
++    hover_monitor_ = std::make_unique<HoverMonitor>(event_box_, config_["hover-monitor"].asString());
++
+   // Configure module action Map
+   const Json::Value actions{config_["actions"]};
+ 

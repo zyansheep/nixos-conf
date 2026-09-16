@@ -708,3 +708,11 @@ window.gauges-arc #wireplumber.muted {
   color: #c6cbd2;
 }
 #power-profiles-menu #battery-stats { font-size: 10px; }
+
+/* Native non-modal GTK3 hover panels. */
+#system-monitor-menu { background: #222226; color: white; border: 1px solid #414144;
+  border-radius: 12px; }
+#system-monitor-menu label { font-family: sans-serif; font-size: 12px; }
+#system-monitor-menu .monitor-title { font-size: 15px; font-weight: bold; }
+#system-monitor-menu .monitor-note { color: #b8b8bb; font-size: 11px; }
+#system-monitor-menu .monitor-value { font-family: monospace; }

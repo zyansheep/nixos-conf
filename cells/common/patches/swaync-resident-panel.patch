@@ -1,0 +1,54 @@
+--- a/src/controlCenter/controlCenter.vala
++++ b/src/controlCenter/controlCenter.vala
+@@ -9,6 +9,7 @@
+         private Gtk.GestureClick blank_window_gesture;
+         private bool blank_window_down = false;
+         private bool blank_window_in = false;
++        private bool had_focus = false;
+ 
+         private Gtk.EventControllerKey key_controller;
+ 
+@@ -121,6 +122,19 @@
+             key_controller.key_pressed.connect (key_press_event_cb);
+ 
+             add_widgets ();
++            notify["is-active"].connect (() => {
++                if (!visible || ConfigModel.instance.layer_shell_cover_screen) return;
++                if (is_active) {
++                    had_focus = true;
++                    if (app.use_layer_shell)
++                        GtkLayerShell.set_keyboard_mode (this, GtkLayerShell.KeyboardMode.ON_DEMAND);
++                } else if (had_focus) {
++                    Timeout.add (100, () => {
++                        if (visible && !is_active) set_visibility (false);
++                        return Source.REMOVE;
++                    });
++                }
++            });
+ 
+             // Change output on config reload
+             app.config_reload.connect ((old, config) => {
+@@ -379,8 +393,11 @@
+             // Destroy the wl_surface to get a new "enter-monitor" signal and
+             // fixes issues where keyboard shortcuts stop working after clearing
+             // all notifications.
+-            ((Gtk.Widget) this).unrealize ();
+-
++            if (ConfigModel.instance.layer_shell_cover_screen) {
++                ((Gtk.Widget) this).unrealize ();
++            }
++
++            if (visibility) had_focus = false;
+             this.set_visible (visibility);
+ 
+             // Updates all widgets on visibility change
+--- a/src/main.vala
++++ b/src/main.vala
+@@ -285,6 +285,7 @@
+ 
+             Gtk.init ();
+             Adw.init ();
++            Gtk.Settings.get_default ().gtk_icon_theme_name = "Adwaita";
+ 
+             Functions.init ();
+             self_settings = new Settings ("org.erikreider.swaync");

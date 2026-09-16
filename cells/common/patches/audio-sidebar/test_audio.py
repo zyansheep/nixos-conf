@@ -60,7 +60,7 @@ class ResidentTests(unittest.TestCase):
         self.assertEqual(popup.pending, 1)
 
     def test_toggle_reuses_window_and_close_hides_without_destroying(self):
-        popup = SimpleNamespace(window=Mock(), dragging=True, refresh=Mock())
+        popup = SimpleNamespace(window=Mock(), dragging=True, refresh=Mock(), focus_for_open=Mock())
         popup.close = lambda: audio.AudioPopup.close(popup)
         window = popup.window
         window.get_visible.return_value = True

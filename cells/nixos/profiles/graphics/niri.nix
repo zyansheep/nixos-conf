@@ -36,6 +36,7 @@ in {
   programs.waybar.package = pkgs.waybar.overrideAttrs (old: {
     postPatch = (old.postPatch or "") + ''
       cp ${../../../common/patches/waybar-power-menu-stats.hpp} include/util/power_menu_stats.hpp
+      cp ${../../../common/patches/waybar-hover-monitor.hpp} include/util/hover_monitor.hpp
     '';
     postCheck = (old.postCheck or "") + ''
       $CXX -std=c++17 -Wall -Wextra -Werror \
@@ -46,6 +47,7 @@ in {
     patches = (old.patches or []) ++ [
       ../../../common/patches/waybar-power-profile-menu.patch
       ../../../common/patches/waybar-group-menu.patch
+      ../../../common/patches/waybar-hover-monitor.patch
       ../../../common/patches/waybar-no-tooltips.patch
     ];
   });
@@ -85,6 +87,43 @@ in {
     ../../../../dotfiles/.config/waybar/power_profiles_menu.xml
     ../../../../dotfiles/.config/waybar/gauges
   ];
+
+  systemd.user.services.waybar-monitor = {
+    description = "Rolling process and temperature statistics for Waybar";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar-monitor}/bin/waybar-monitor";
+      Restart = "on-failure";
+      RuntimeDirectory = "waybar-monitor";
+      RuntimeDirectoryMode = "0700";
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = "read-only";
+      PrivateTmp = true;
+    };
+  };
+
+  # Keep notification widgets and GTK4 loaded before the first panel toggle.
+  systemd.user.services.swaync = {
+    description = "Resident notification center";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    restartTriggers = [
+      ../../../../dotfiles/.config/swaync/config.json
+      ../../../../dotfiles/.config/swaync/style.css
+      ../../../../dotfiles/.config/waybar/menu-theme.css
+    ];
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "org.freedesktop.Notifications";
+      ExecStart = "${notificationCenter}/bin/swaync";
+      Restart = "on-failure";
+    };
+  };
 
   # Preload GTK and build the audio widgets once per graphical session.
   systemd.user.services.audio-sidebar = {

@@ -21,7 +21,7 @@
   --notification-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   --font-size-body: 14px;
   --font-size-summary: 14px;
-  --hover-transition: background 0.15s ease-in-out;
+  --hover-transition: none;
 }
 
 * {
@@ -177,7 +177,7 @@ notificationwindow, blankwindow {
   border: var(--border);
   box-shadow: none;
   border-left-color: @menu_border_strong;
-  padding: 4px;
+  padding: 12px;
 }
 
 .control-center .control-center-list {
@@ -339,3 +339,11 @@ notificationwindow, blankwindow {
 .widget-dnd switch { background: @menu_card; border: 1px solid @menu_border_strong; }
 .widget-dnd switch:checked { background: @menu_accent; }
 .widget-dnd switch slider { background: white; }
+
+/* Same inset and typography as nm-sidebar's panel_content. */
+.control-center { padding: 12px; }
+.widget { margin: 0 0 12px; }
+.widget-title { padding: 0; margin: 0 0 18px; }
+.widget-title > label { font-size: 20px; font-weight: 700; }
+.widget-dnd { background: @menu_card; padding: 12px; border-radius: 12px; }
+.control-center .notification-row .notification-background { padding: 4px 0; }
