@@ -1,0 +1,21 @@
+--- a/src/gui/layer_shell.c
++++ b/src/gui/layer_shell.c
+@@ -36,7 +36,7 @@
+ {
+   if (gtk_layer_get_protocol_version() >= NETWORK_SIDEBAR_LAYER_SHELL_ON_DEMAND_PROTOCOL_VERSION)
+     return (GtkLayerShellKeyboardMode) 2;
+-  return GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE;
++  return GTK_LAYER_SHELL_KEYBOARD_MODE_NONE;
+ }
+
+ static void
+@@ -70,7 +70,8 @@
+   gtk_layer_set_keyboard_mode(window, keyboard_mode());
+   set_respect_close_if_supported(window);
+
+-  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
++  gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_LEFT, FALSE);
++  gtk_widget_set_size_request(GTK_WIDGET(window), NETWORK_SIDEBAR_WIDTH, 1);
+   gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+   gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+   gtk_layer_set_anchor(window, GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);

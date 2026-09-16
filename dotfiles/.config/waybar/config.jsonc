@@ -35,6 +35,7 @@
     "custom/power"
   ],
   "group/tray-group": {
+    "tooltip": false,
     "orientation": "horizontal",
     "drawer": {
       "transition-duration": 300,
@@ -45,14 +46,16 @@
   },
   "custom/tray-toggle": {
     "format": "",
-    "tooltip": true,
+    "tooltip": false,
     "tooltip-format": "System tray (hover to expand)"
   },
   "group/network": {
+    "tooltip": false,
     "orientation": "horizontal",
     "modules": [ "network", "network#signal" ]
   },
   "group/power": {
+    "tooltip": false,
     "orientation": "horizontal",
     "modules": [ "battery", "power-profiles-daemon" ]
   },
@@ -60,11 +63,11 @@
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",
     "return-type": "json",
     "interval": 5,
-    "tooltip": true,
+    "tooltip": false,
     "on-click": "eww open --toggle services-popup"
   },
   "custom/notification": {
-    "tooltip": true,
+    "tooltip": false,
     "format": "{icon} {text}",
     "format-icons": {
       "notification": "󱅫",
@@ -89,11 +92,12 @@
     "exec-on-event": false,
     "on-click": "pkill -INT wf-recorder", // Click to stop recording
     "return-type": "json",
-    "tooltip": true,
+    "tooltip": false,
     "format": "{}",
     "interval": 1 // How often to check the script (in seconds)
   },
   "niri/workspaces": {
+    "tooltip": false,
     "format": "{icon}",
     "format-icons": {
       "web": "󰖟",
@@ -105,12 +109,14 @@
     }
   },
   "niri/window": {
+    "tooltip": false,
     "format": "{title}",
     "icon": true,
     "icon-size": 16,
     "max-length": 50
   },
   "mpd": {
+    "tooltip": false,
     "format": "{stateIcon} {consumeIcon}{randomIcon}{repeatIcon}{singleIcon}{artist} - {album} - {title} ({elapsedTime:%M:%S}/{totalTime:%M:%S}) ⸨{songPosition}|{queueLength}⸩ {volume}% ",
     "format-disconnected": "Disconnected ",
     "format-stopped": "{consumeIcon}{randomIcon}{repeatIcon}{singleIcon}Stopped ",
@@ -137,6 +143,7 @@
     "tooltip-format-disconnected": "MPD (disconnected)"
   },
   "idle_inhibitor": {
+    "tooltip": false,
     "format": "{icon}",
     "format-icons": {
       "activated": "",
@@ -146,10 +153,12 @@
     "tooltip-format-deactivated": "Idle inhibitor: OFF (click to keep screen awake)"
   },
   "tray": {
+    "tooltip": false,
     // "icon-size": 21,
     "spacing": 10
   },
   "clock": {
+    "tooltip": false,
     "format": "{:%A %B %d, 1%Y %H:%M:%S}",
     "interval": 1,
     // "format-alt": "{:%A, %B %d, %Y (%R)}  ",
@@ -180,7 +189,7 @@
     "format": "",
     "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{usage}</span>",
     "format-alt-click": 1,
-    "tooltip": true,
+    "tooltip": false,
     "interval": 2,
     // Native usage states select the generated SVG background.
     "states": {
@@ -193,6 +202,7 @@
     }
   },
   "memory": {
+    "tooltip": false,
     "format": "",
     "format-alt": "<span font_family='DejaVu Sans' weight='normal' size='small'>{percentage}</span>",
     "format-alt-click": 1,
@@ -208,6 +218,7 @@
     }
   },
   "temperature": {
+    "tooltip": false,
     // "thermal-zone": 2,
     // "hwmon-path": "/sys/class/hwmon/hwmon2/temp1_input",
     "critical-threshold": 80,
@@ -220,6 +231,7 @@
     ]
   },
   "backlight": {
+    "tooltip": false,
     // "device": "acpi_video1",
     "format": "{percent}% {icon}",
     "format-icons": [
@@ -235,6 +247,7 @@
     ]
   },
   "battery": {
+    "tooltip": false,
     "group-state": true,
     // Battery states select the first threshold >= capacity (unlike CPU).
     // Each ten-percent bucket uses a matching fill; only 100% looks full.
@@ -246,9 +259,9 @@
     "format": "{capacity}%",
     "format-charging": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
     "format-plugged": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
-    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
-    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
+    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
+    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
+    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
     "menu": "on-click",
     "menu-anchor": "group-bottom",
     "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
@@ -262,8 +275,8 @@
   "power-profiles-daemon": {
     "group-state": true,
     "format": "{icon}",
-    "tooltip-format": "Power profile: {profile}\nHold and drag: ↙ Power saver · ↓ Balanced · ↘ Performance",
-    "tooltip": true,
+    "tooltip-format": "Power profile: {profile}\nClick for power profiles and battery health",
+    "tooltip": false,
     "menu": "on-click",
     "menu-anchor": "group-bottom",
     "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
@@ -280,6 +293,7 @@
     }
   },
   "network": {
+    "tooltip": false,
     // Follow Wi-Fi even while a VPN owns the default route.
     "interface": "wl*",
     "interval": 5,
@@ -295,9 +309,10 @@
     "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
   },
   "network#signal": {
+    "tooltip": false,
     "interface": "wl*",
     "interval": 5,
-    // A nonempty label keeps the SVG icon's tooltip and click target active.
+    // A nonempty label keeps the SVG icon's click target active.
     "format": "\u00a0",
     "format-ethernet": "",
     // Native signal states light the dot, then each separate curved bar.
@@ -311,6 +326,7 @@
     "on-click": "/run/current-system/sw/bin/nm-sidebar --toggle"
   },
   "wireplumber#output": {
+    "tooltip": false,
     "node-type": "Audio/Sink",
     "format": "",
     "format-muted": "",
@@ -318,7 +334,7 @@
     "tooltip-format": "Speaker: {volume}%\n{node_name}\nScroll to adjust · Right-click to mute\nClick to configure audio",
     "scroll-step": 1.0,
     "max-volume": 100.0,
-    "on-click": "pavucontrol",
+    "on-click": "audio-sidebar",
     "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle",
     // Native WirePlumber states track this device's own volume.
     "states": {
@@ -331,6 +347,7 @@
     }
   },
   "wireplumber#microphone": {
+    "tooltip": false,
     "node-type": "Audio/Source",
     "format": "",
     "format-muted": "",
@@ -338,7 +355,7 @@
     "tooltip-format": "Microphone: {volume}%\n{node_name}\nScroll to adjust · Right-click to mute\nClick to configure audio",
     "scroll-step": 1.0,
     "max-volume": 100.0,
-    "on-click": "pavucontrol",
+    "on-click": "audio-sidebar",
     "on-click-right": "wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle",
     // Native WirePlumber states track this device's own volume.
     "states": {
@@ -351,6 +368,7 @@
     }
   },
   "custom/media": {
+    "tooltip": false,
     "format": "{icon} {}",
     "return-type": "json",
     "max-length": 40,

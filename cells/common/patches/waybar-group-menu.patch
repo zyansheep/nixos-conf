@@ -21,13 +21,35 @@
    bool handleUserEvent(GdkEventButton* const& ev);
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -87,6 +87,21 @@
-     if (pid != -1) {
-       killpg(pid, SIGTERM);
-     }
+@@ -1,4 +1,5 @@
+ #include "AModule.hpp"
++#include "util/power_menu_stats.hpp"
+
+ #include <fmt/format.h>
+ #include <spdlog/spdlog.h>
+@@ -10,6 +11,18 @@
+
+ namespace waybar {
+
++static void updatePowerMenuStats(GtkWidget* widget) {
++  if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-stats") == 0) {
++    gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
++  } else if (GTK_IS_CONTAINER(widget)) {
++    GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
++    for (GList* child = children; child; child = child->next)
++      updatePowerMenuStats(GTK_WIDGET(child->data));
++    g_list_free(children);
 +  }
 +}
 +
++
+ AModule::AModule(const Json::Value& config, const std::string& name, const std::string& id,
+                  bool enable_click, bool enable_scroll)
+     : name_(name),
+@@ -90,6 +103,21 @@
+   }
+ }
+
 +// Mirror only our namespaced classes; preserve the target widget's own styling.
 +void AModule::mirrorStyleClasses(const Glib::RefPtr<Gtk::StyleContext>& source,
 +                                const Glib::RefPtr<Gtk::StyleContext>& target,
@@ -40,10 +62,13 @@
 +  }
 +  for (const auto& name : source->list_classes()) {
 +    if (!target->has_class(prefix + name)) target->add_class(prefix + name);
-   }
- }
-
-@@ -166,12 +181,25 @@
++  }
++}
++
+ auto AModule::update() -> void {
+   // Run user-provided update handler if configured
+   if (config_["on-update"].isString()) {
+@@ -166,12 +194,37 @@
    }
 
    // Check that a menu has been configured
@@ -54,6 +79,7 @@
 +      // Battery refreshes may otherwise show a tooltip over the open popup.
 +      if (auto* child = event_box_.get_child(); child != nullptr) child->set_has_tooltip(false);
        // Popup the menu
++      updatePowerMenuStats(GTK_WIDGET(menu_));
        gtk_widget_show_all(GTK_WIDGET(menu_));
 -      gtk_menu_popup_at_pointer(GTK_MENU(menu_), reinterpret_cast<GdkEvent*>(e));
 +      auto* group = event_box_.get_parent();
@@ -62,9 +88,20 @@
 +        // child was pressed. Keep the original event for drag/release selection.
 +        auto* menuWidget = Glib::wrap(GTK_WIDGET(menu_));
 +        mirrorStyleClasses(group->get_style_context(), menuWidget->get_style_context(), "group-");
-+        gtk_menu_popup_at_widget(GTK_MENU(menu_), GTK_WIDGET(group->gobj()),
++        auto* anchor = GTK_WIDGET(group->gobj());
++        auto* top = gtk_widget_get_toplevel(anchor);
++        gint x = 0, y = 0;
++        if (gtk_widget_translate_coordinates(anchor, top, 0, 0, &x, &y)) {
++          GdkRectangle rect{x, y, gtk_widget_get_allocated_width(anchor),
++                            gtk_widget_get_allocated_height(anchor)};
++          gtk_menu_popup_at_rect(GTK_MENU(menu_), gtk_widget_get_window(top), &rect,
 +                                 GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH,
 +                                 reinterpret_cast<GdkEvent*>(e));
++        } else {
++          gtk_menu_popup_at_widget(GTK_MENU(menu_), anchor,
++                                   GDK_GRAVITY_SOUTH, GDK_GRAVITY_NORTH,
++                                   reinterpret_cast<GdkEvent*>(e));
++        }
 +      } else {
 +        gtk_menu_popup_at_pointer(GTK_MENU(menu_), reinterpret_cast<GdkEvent*>(e));
 +      }

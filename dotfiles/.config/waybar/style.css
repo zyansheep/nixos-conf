@@ -319,53 +319,6 @@ label:focus {
   padding: 0 3px;
 }
 
-#power-profiles-menu {
-  background-color: #303236;
-  border: 1px solid #606369;
-  border-radius: 9px;
-  padding: 5px;
-}
-#power-profiles-menu menuitem {
-  /* Keep the row centered on the battery after the audio controls shrink. */
-  min-width: 64px;
-  padding: 9px 2px;
-  margin: 2px 1px;
-  border: 1px solid #4b5057;
-  border-radius: 6px;
-  background-color: #383c42;
-  color: #eeeeee;
-}
-#power-profiles-menu label {
-  font-family: "DejaVu Sans", sans-serif;
-  font-size: 11px;
-}
-#power-profiles-menu .profile-icon {
-  font-family: "Font Awesome 7 Free";
-  font-weight: 900;
-  font-size: 17px;
-}
-#profile-saver .profile-icon { color: #8fdf8f; }
-#profile-balanced .profile-icon { color: #80b9e3; }
-#profile-performance .profile-icon { color: #e7bc6b; }
-#power-profiles-menu.group-power-profiles-daemon-power-saver #profile-saver {
-  border-color: #8fdf8f;
-  background-color: #38483f;
-}
-#power-profiles-menu.group-power-profiles-daemon-balanced #profile-balanced {
-  border-color: #80b9e3;
-  background-color: #384550;
-}
-#power-profiles-menu.group-power-profiles-daemon-performance #profile-performance {
-  border-color: #e7bc6b;
-  background-color: #4b4538;
-}
-#power-profiles-menu menuitem#profile-saver:hover,
-#power-profiles-menu menuitem#profile-balanced:hover,
-#power-profiles-menu menuitem#profile-performance:hover {
-  background-color: #565d68;
-  border-color: #eeeeee;
-}
-
 #custom-notification.dnd-none,
 #custom-notification.dnd-notification,
 #custom-notification.dnd-inhibited-none,
@@ -699,3 +652,59 @@ window.gauges-arc #wireplumber.muted {
 #power.battery-level90 { background-size: 64px 18px, 48.6px 12px; }
 #power.battery-level100 { background-size: 64px 18px, 54px 12px; }
 /* END GENERATED USAGE GAUGES */
+
+#power-profiles-menu {
+  background-color: #303236;
+  border: 1px solid #606369;
+  border-radius: 9px;
+  padding: 5px;
+}
+#power-profiles-menu menuitem {
+  /* Keep the centered picker narrow enough to clear the screen edge. */
+  min-width: 56px;
+  padding: 9px 2px;
+  margin: 2px 1px;
+  border: 1px solid #4b5057;
+  border-radius: 6px;
+  background-color: #383c42;
+  color: #eeeeee;
+}
+#power-profiles-menu label {
+  font-family: "DejaVu Sans", sans-serif;
+  font-size: 11px;
+}
+#power-profiles-menu .profile-icon {
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  font-size: 17px;
+}
+#profile-saver .profile-icon { color: #8fdf8f; }
+#profile-balanced .profile-icon { color: #80b9e3; }
+#profile-performance .profile-icon { color: #e7bc6b; }
+#power-profiles-menu.group-power-profiles-daemon-power-saver #profile-saver {
+  border-color: #8fdf8f;
+  background-color: #38483f;
+}
+#power-profiles-menu.group-power-profiles-daemon-balanced #profile-balanced {
+  border-color: #80b9e3;
+  background-color: #384550;
+}
+#power-profiles-menu.group-power-profiles-daemon-performance #profile-performance {
+  border-color: #e7bc6b;
+  background-color: #4b4538;
+}
+#power-profiles-menu menuitem#profile-saver:hover,
+#power-profiles-menu menuitem#profile-balanced:hover,
+#power-profiles-menu menuitem#profile-performance:hover {
+  background-color: #565d68;
+  border-color: #eeeeee;
+}
+
+#power-profiles-menu #battery-details {
+  background: transparent;
+  border: none;
+  min-width: 0;
+  padding: 5px 0;
+  color: #c6cbd2;
+}
+#power-profiles-menu #battery-stats { font-size: 10px; }

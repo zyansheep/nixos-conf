@@ -1,6 +1,7 @@
 { inputs, common, }:
 { config, pkgs, lib, ... }:
 let
+  notificationCenter = pkgs.notification-sidebar;
   networkSidebar = pkgs.nm-sidebar.override {
     defaultWifiMacAddress = config.networking.networkmanager.wifi.macAddress;
     wifiBackend = config.networking.networkmanager.wifi.backend;
@@ -11,7 +12,8 @@ in {
     slurp # rectangle selection for screenshot functionality
     wl-clipboard # wl-copy and wl-paste for copy/paste from stdin / stdout
     cliphist # clipboard manager
-    swaynotificationcenter # notification daemon + control center
+    notificationCenter # GTK4 notification panel; background input passes through
+    audio-sidebar # Audio devices, levels and per-app routing popup
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -29,12 +31,22 @@ in {
   ];
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
-  # Native battery/profile observers share one icon and a centered GTK popup.
-  # Local patches add group styling/anchoring and bypass click-to-cycle (0.15.0).
+  # Native battery/profile observers share one icon and open a centered native GTK3 menu.
+  # Local patches add group styling/coordinates and bypass click-to-cycle (0.15.0).
   programs.waybar.package = pkgs.waybar.overrideAttrs (old: {
+    postPatch = (old.postPatch or "") + ''
+      cp ${../../../common/patches/waybar-power-menu-stats.hpp} include/util/power_menu_stats.hpp
+    '';
+    postCheck = (old.postCheck or "") + ''
+      $CXX -std=c++17 -Wall -Wextra -Werror \
+        -include ${../../../common/patches/waybar-power-menu-stats.hpp} \
+        ${../../../common/patches/test-waybar-power-menu.cpp} -o test-power-menu
+      ./test-power-menu
+    '';
     patches = (old.patches or []) ++ [
       ../../../common/patches/waybar-power-profile-menu.patch
       ../../../common/patches/waybar-group-menu.patch
+      ../../../common/patches/waybar-no-tooltips.patch
     ];
   });
 
@@ -69,9 +81,25 @@ in {
   systemd.user.services.waybar.restartTriggers = [
     ../../../../dotfiles/.config/waybar/config.jsonc
     ../../../../dotfiles/.config/waybar/style.css
-    ../../../../dotfiles/.config/waybar/gauges
+    ../../../../dotfiles/.config/waybar/menu-theme.css
     ../../../../dotfiles/.config/waybar/power_profiles_menu.xml
+    ../../../../dotfiles/.config/waybar/gauges
   ];
+
+  # Preload GTK and build the audio widgets once per graphical session.
+  systemd.user.services.audio-sidebar = {
+    description = "Resident audio control popup";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "org.zyansheep.AudioSidebar";
+      ExecStart = "${pkgs.audio-sidebar}/libexec/audio-sidebar";
+      Restart = "on-failure";
+    };
+  };
 
   # Keep the long-lived sidebar attached to the session and replace it on
   # upgrades; otherwise a new CLI keeps talking to an old background GUI.

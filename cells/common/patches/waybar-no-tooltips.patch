@@ -1,0 +1,12 @@
+--- a/src/client.cpp
++++ b/src/client.cpp
+@@ -152,6 +152,9 @@
+ const std::string waybar::Client::getStyle(const std::string& style,
+                                            std::optional<Appearance> appearance = std::nullopt) {
+   auto gtk_settings = Gtk::Settings::get_default();
++  // Suppress hover windows for every module, including third-party tray items
++  // whose tooltip updates bypass the module-level "tooltip" option.
++  gtk_settings->set_property("gtk-enable-tooltips", false);
+   std::optional<std::string> css_file;
+
+   if (style.empty()) {

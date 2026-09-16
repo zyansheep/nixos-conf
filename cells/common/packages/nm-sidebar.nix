@@ -29,7 +29,10 @@ stdenv.mkDerivation {
     hash = "sha256-HCZN0fxqaNrGtX99AdtK/JXkWzCsKsHaaGa0LW9OKao=";
   };
 
-  patches = [ ../patches/nm-sidebar/integrated-settings.patch ];
+  patches = [
+    ../patches/nm-sidebar/integrated-settings.patch
+    ../patches/nm-sidebar/background-input.patch
+  ];
   postPatch = ''
     cp ${../patches/nm-sidebar/profile-model.c} src/actions/profile-model.c
     cp ${../patches/nm-sidebar/profile-model.h} src/actions/profile-model.h

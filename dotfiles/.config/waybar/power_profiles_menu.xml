@@ -87,5 +87,23 @@
         <property name="bottom-attach">1</property>
       </packing>
     </child>
+    <child>
+      <object class="GtkMenuItem" id="battery-details">
+        <property name="name">battery-details</property>
+        <property name="sensitive">False</property>
+        <child>
+          <object class="GtkLabel">
+            <property name="name">battery-stats</property>
+            <property name="justify">center</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">1</property>
+        <property name="bottom-attach">2</property>
+      </packing>
+    </child>
   </object>
 </interface>

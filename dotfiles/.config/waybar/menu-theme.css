@@ -1,0 +1,13 @@
+/* Shared GTK4 palette, matched to nm-sidebar's dark Libadwaita theme.
+ * Consumed by audio-sidebar and SwayNC. Keep these in sync with the
+ * Wi-Fi panel when changing the desktop theme. */
+@define-color menu_bg #222226;
+@define-color menu_card #343437;
+@define-color menu_hover #414144;
+@define-color menu_active #343f4f;
+@define-color menu_active_hover #3a485c;
+@define-color menu_accent #3584e4;
+@define-color menu_fg #ffffff;
+@define-color menu_muted rgba(255, 255, 255, 0.68);
+@define-color menu_border rgba(255, 255, 255, 0.06);
+@define-color menu_border_strong rgba(255, 255, 255, 0.12);

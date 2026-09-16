@@ -481,7 +481,7 @@ binds {
     Mod+N hotkey-overlay-title="🔔 Toggle Notifications Panel" { spawn "swaync-client" "-t" "-sw"; }
 
     // Reload waybar and other user services
-    Mod+Shift+R hotkey-overlay-title="🔄 Restart Waybar & Notifications" { spawn "sh" "-c" "systemctl --user restart waybar; pkill swaync; swaync &"; }
+    Mod+Shift+R hotkey-overlay-title="🔄 Restart Waybar & Notifications" { spawn "sh" "-c" "systemctl --user restart waybar; pkill swaync; /run/current-system/sw/bin/swaync &"; }
 
     Mod+Shift+Q { close-window; }
 
@@ -629,7 +629,7 @@ binds {
 
     // Move the focused window between the floating and the tiling layout.
     Mod+V       { toggle-window-floating; }
-    // Mod+Shift+V { switch-focus-between-floating-and-tiling; }
+    Mod+Shift+V hotkey-overlay-title="Audio devices and routing" { spawn "audio-sidebar"; }
 
     // Toggle tabbed column display mode.
     // Windows in this column will appear as vertical tabs,

@@ -1,0 +1,12 @@
+--- a/src/controlCenter/controlCenter.vala
++++ b/src/controlCenter/controlCenter.vala
+@@ -247,7 +247,8 @@
+                 // Grabs the keyboard input until closed
+                 bool keyboard_shortcuts = ConfigModel.instance.keyboard_shortcuts;
+                 var mode = keyboard_shortcuts ?
+-                    GtkLayerShell.KeyboardMode.EXCLUSIVE :
++                    (ConfigModel.instance.layer_shell_cover_screen ?
++                        GtkLayerShell.KeyboardMode.EXCLUSIVE : GtkLayerShell.KeyboardMode.ON_DEMAND) :
+                     GtkLayerShell.KeyboardMode.NONE;
+                 GtkLayerShell.set_keyboard_mode (this, mode);
+
