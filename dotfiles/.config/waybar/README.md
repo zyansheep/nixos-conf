@@ -43,15 +43,15 @@ names and routing controls use visible labels without extra hover hints.
 
 Hovering any of these indicators opens a native GTK3 panel immediately, without
 starting a process or waiting to sample. The panel stays open while the pointer
-is over its indicator or contents, supports scrolling its list, and closes
-180 ms after leaving both. It does not grab background input or re-enable the
+is over its indicator or contents, supports scrolling with a visible scrollbar,
+preserves the scroll position across refreshes, and closes 180 ms after leaving both. It does not grab background input or re-enable the
 other bar tooltips.
 
-- **CPU:** top 20 program names ranked by rolling past-minute CPU usage,
+- **CPU:** up to 100 program names ranked by rolling past-minute CPU usage,
   normalized to the whole CPU (all cores busy = 100%). The label shows actual
   coverage during the first minute. CPU from already-observed exited programs
   remains in the rolling window until it ages out.
-- **Memory:** top 20 program names by current summed resident memory (RSS).
+- **Memory:** up to 100 program names by current summed resident memory (RSS).
   Shared pages can be counted in several processes; this is not unique memory
   ownership and will not necessarily sum to the bar's used-memory figure.
 - **Temperature:** every readable hwmon temperature channel and thermal zone,
@@ -62,6 +62,33 @@ under `$XDG_RUNTIME_DIR/waybar-monitor`. It stores no command lines or persisten
 history. CPU counters use PID plus process start time, so PID reuse cannot
 inherit another process's CPU time. A long sampling gap resets the window.
 Processes that finish entirely between samples cannot be measured.
+
+### Browser processes and readable labels
+
+Process rows use application names and roles where the executable or installed
+Electron entry point identifies them. Browser web-content processes are split
+into individual PID rows (for example, `Floorp web · PID 12345`) instead of
+combining every `Isolated Web Co` process into one large total. Helpers have
+labels such as `Floorp · extensions` and `Floorp · media decoder`.
+
+Floorp's packaged AutoConfig bridge calls `ChromeUtils.requestProcInfo()` every
+five seconds after startup. It writes origins and up to three document titles
+per process to `$XDG_RUNTIME_DIR/floorp-monitor/<browser-pid>.json` (directory
+0700, file 0600). Private-browsing origins are excluded. Full page URLs and
+persistent browsing history are not exported. No remote debugging port is used.
+The package enables privileged AutoConfig for this script; the web-content
+sandbox remains enabled. Floorp must be restarted after installing the bridge.
+
+The collector joins these labels using PID **and process start time**, ignores
+snapshots older than 15 seconds, and decorates rows only after calculating CPU
+usage. Changing titles cannot split the rolling CPU history. Browser failures
+fall back to PID labels. This is an internal Firefox API and may need maintenance
+when Floorp changes. One process can contain multiple tabs, and cross-site frames
+can run in separate processes: these remain process totals, not exact per-tab
+measurements. `about:processes` provides the browser's full breakdown.
+
+Limited Electron role/entry-point arguments are read transiently; full command
+lines are never written to the cache.
 
 ## Notification panel
 

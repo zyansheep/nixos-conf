@@ -5,6 +5,7 @@
 #include <json/json.h>
 #include <fstream>
 #include <ctime>
+#include <vector>
 
 namespace waybar {
 // No grab: the pointer may move from the bar into the scrollable panel, and
@@ -16,6 +17,8 @@ class HoverMonitor : public sigc::trackable {
   Gtk::Label title_, note_;
   Gtk::ScrolledWindow scroll_;
   Gtk::Box rows_{Gtk::ORIENTATION_VERTICAL, 4};
+  struct Row { Gtk::Box* box; Gtk::Label* name; Gtk::Label* value; };
+  std::vector<Row> row_widgets_;
   std::string kind_;
   sigc::connection leave_, refresh_;
   bool inside_ = false;
@@ -55,32 +58,44 @@ class HoverMonitor : public sigc::trackable {
     std::string errors;
     bool valid = Json::parseFromStream(builder, input, &state, &errors) &&
                  std::abs(std::time(nullptr) - state["timestamp"].asDouble()) < 10;
-    for (auto* child : rows_.get_children()) rows_.remove(*child);
     if (!valid) {
       note_.set_text("Waiting for the background monitor…");
     } else {
       note_.set_text(kind_ == "cpu"
-        ? "Last " + std::to_string(state["coverage"].asInt()) + "s · % of whole CPU · grouped by name"
-        : kind_ == "memory" ? "Current RSS · grouped by name · shared pages counted per process"
+        ? "Top 100 · last " + std::to_string(state["coverage"].asInt()) + "s · % of whole CPU"
+        : kind_ == "memory" ? "Top 100 · current RSS · shared pages counted per process"
         : "All readable hwmon and thermal-zone sensors");
-      for (const auto& row : state[kind_]) {
-        auto* line = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 12));
-        auto* name = Gtk::manage(new Gtk::Label(row["name"].asString()));
-        name->set_xalign(0);
-        name->set_ellipsize(Pango::ELLIPSIZE_END);
-        name->set_max_width_chars(32);
-        auto* value = Gtk::manage(new Gtk::Label(row["value"].asString()));
-        value->get_style_context()->add_class("monitor-value");
-        line->pack_start(*name, true, true);
-        line->pack_end(*value, false, false);
-        rows_.pack_start(*line, false, false);
-      }
-      if (state[kind_].empty()) {
-        auto* empty = Gtk::manage(new Gtk::Label(kind_ == "cpu" ? "Collecting the first CPU interval…" : "No readings available"));
-        rows_.pack_start(*empty, false, false);
+    }
+    const auto& readings = state[kind_];
+    const size_t count = valid ? readings.size() : 0;
+    // Reuse rows so a refresh does not tear down the viewport and reset scrolling.
+    while (row_widgets_.size() < std::max(size_t{1}, count)) {
+      auto* line = Gtk::manage(new Gtk::Box(Gtk::ORIENTATION_HORIZONTAL, 12));
+      auto* name = Gtk::manage(new Gtk::Label());
+      name->set_xalign(0);
+      name->set_ellipsize(Pango::ELLIPSIZE_END);
+      name->set_max_width_chars(32);
+      auto* value = Gtk::manage(new Gtk::Label());
+      value->get_style_context()->add_class("monitor-value");
+      line->pack_start(*name, true, true);
+      line->pack_end(*value, false, false);
+      rows_.pack_start(*line, false, false);
+      line->show_all();
+      row_widgets_.push_back({line, name, value});
+    }
+    for (size_t i = 0; i < row_widgets_.size(); ++i) {
+      auto& row = row_widgets_[i];
+      row.box->set_visible(i < std::max(size_t{1}, count));
+      if (i < count) {
+        row.name->set_text(readings[static_cast<Json::ArrayIndex>(i)]["name"].asString());
+        row.value->set_text(readings[static_cast<Json::ArrayIndex>(i)]["value"].asString());
+      } else if (i == 0) {
+        row.name->set_text(!valid ? "" : kind_ == "cpu"
+          ? "No CPU activity recorded yet…" : "No readings available");
+        row.value->set_text("");
       }
     }
-    rows_.show_all();
+
   }
 
  public:
@@ -106,6 +121,7 @@ class HoverMonitor : public sigc::trackable {
     note_.set_max_width_chars(48);
     note_.get_style_context()->add_class("monitor-note");
     scroll_.set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
+    scroll_.set_overlay_scrolling(false);
     scroll_.set_propagate_natural_height(true);
     scroll_.set_max_content_height(440);
     scroll_.add(rows_);

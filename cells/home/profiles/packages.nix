@@ -3,7 +3,21 @@ _: {pkgs, ...}: {
     # Browsers
     brave
     chromium
-    floorp-bin
+    ((floorp-bin.override {
+      extraPrefsFiles = [ (pkgs.writeText "floorp-monitor.js"
+        (builtins.readFile ../../common/patches/system-monitor/floorp-bridge.js)) ];
+    }).overrideAttrs (old: {
+      postBuild = (old.postBuild or "") + ''
+        # Only the packaged AutoConfig script gets browser privileges. No debugger port.
+        for config in "$out"/lib/floorp*/defaults/pref/autoconfig.js; do
+          cp "$config" "$TMPDIR/floorp-autoconfig.js"
+          chmod u+w "$TMPDIR/floorp-autoconfig.js"
+          echo 'pref("general.config.sandbox_enabled", false);' >> "$TMPDIR/floorp-autoconfig.js"
+          rm "$config"
+          cp "$TMPDIR/floorp-autoconfig.js" "$config"
+        done
+      '';
+    }))
     tor-browser
 
     # Communication
