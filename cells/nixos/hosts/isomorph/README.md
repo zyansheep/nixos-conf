@@ -47,8 +47,8 @@ rollback and reboot through the host's `/persist` configuration:
 - `/etc/NetworkManager/system-connections`
 
 NetworkManager's iwd backend mirrors existing iwd KnownNetworks, including
-externally configured enterprise Wi-Fi. Edit connections through NetworkManager
-after migration; the sidebar does not maintain its own credential store.
+externally configured enterprise Wi-Fi. Edit connections through NetworkManager;
+the sidebar does not maintain its own credential store.
 
 The default Wi-Fi MAC is stable per network: NetworkManager uses `stable-ssid`
 and iwd uses `General.AddressRandomization=network`. NetworkManager's setting
@@ -56,45 +56,6 @@ alone is insufficient with this backend. The sidebar shows the policy name
 directly, and explicit per-profile overrides are retained. Its Device address
 choice saves the adapter's literal MAC because iwd ignores the `permanent`
 keyword. See the extension README for supported policies and draft semantics.
-
-## Migration from the standalone-iwd build
-
-This section is for the first activation from the older networking setup.
-Build before switching, and keep the working generation available in the boot
-menu. Back up iwd's profiles outside the Nix store because NetworkManager can
-update them when connections are edited. From the repository root, run in a
-local terminal:
-
-```sh
-sudo cp -a /var/lib/iwd "/persist/iwd-before-networkmanager-$(date +%Y%m%d-%H%M%S)"
-sudo nixos-rebuild switch --flake .#isomorph
-sudo systemctl restart tailscaled
-```
-
-The switch may briefly disconnect Wi-Fi. Restarting Tailscale makes it detect
-the new resolved DNS backend. Log out and back in to pick up group membership
-and the new session packages. The old iwmenu/Impala tools bypass NetworkManager;
-use the sidebar instead. If updating from the nm-applet generation, logging out
-also stops the previously autostarted tray icon.
-
-Verify before rebooting:
-
-```sh
-nmcli device status
-nmcli connection show --active
-systemctl is-active NetworkManager iwd systemd-resolved
-systemctl is-active dhcpcd # should be inactive / not found
-resolvectl status
-getent hosts example.com
-```
-
-Then test a tailnet hostname, Wi-Fi reconnect, and Proton connect/disconnect
-using its GUI. Check the public address and `resolvectl status` with Proton
-connected. Test a cold boot only after these checks pass.
-
-If connection activation fails, select the saved network in the sidebar. For
-recovery, boot the previous working generation. The original iwd profiles are
-retained, with the timestamped backup available if any were edited.
 
 ## DNS with concurrent VPNs
 
@@ -104,3 +65,32 @@ both VPNs are running. Inspect the per-link DNS domains, especially `~.`, and
 test Tailscale/Hampshire access with Proton's kill switch before relying on
 concurrent VPN operation. Tailnet DNS policy belongs in the tailnet configuration,
 not a local script that repeatedly rewrites `resolv.conf`.
+
+## Application launcher
+
+`Super+D` toggles the resident Vicinae launcher; `Super+Shift+D` opens Rofi as a
+fallback. Native/Flatpak subtitles come from desktop metadata. Window matching
+uses process identity so two installations with the same window class remain
+separate. The package patch and regression tests are in
+[the Vicinae patch directory](../../../common/patches/vicinae).
+
+User preferences live in `~/.config/vicinae/settings.json`. Automatic file
+indexing, file results in root search and the input-injection server were disabled
+for the minimal trial; these preferences are not enforced by Nix. No browser
+integration is configured.
+
+## Flatpak font troubleshooting
+
+If Flatseal shows missing glyphs, rebuild its font cache and restart it:
+
+```sh
+flatpak run --command=fc-cache com.github.tchx84.Flatseal -f
+```
+
+This repairs the cache without resetting permissions or app data. Nix's fixed
+font-directory timestamps can leave stale caches after updates. In an isolated
+Flatseal-runtime test, [nixpkgs PR #529277](https://github.com/NixOS/nixpkgs/pull/529277)'s
+path change bypassed a stale cache once, but another font update reproduced the
+failure. A generation-specific cache identity passed that test; no such Flatpak
+package patch is deployed here. The original glyph failure's cause was not
+conclusively established before its cache was repaired.

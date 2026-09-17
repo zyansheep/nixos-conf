@@ -36,5 +36,5 @@ Add new files to Git before rebuilding so the flake includes them.
 | [cells/common](cells/common) | Local packages, patches and pinned sources |
 
 For desktop controls and customization, see the [Waybar guide](dotfiles/.config/waybar/README.md).
-For Wi-Fi, VPNs, saved connections, or migration from the old networking setup,
-see [isomorph networking](cells/nixos/hosts/isomorph/README.md).
+For the launcher, Wi-Fi, VPNs, saved connections and Flatpak troubleshooting,
+see [the isomorph guide](cells/nixos/hosts/isomorph/README.md).

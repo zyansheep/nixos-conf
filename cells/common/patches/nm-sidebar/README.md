@@ -1,8 +1,8 @@
 # Native Wi-Fi settings extension
 
 Applied to the pinned [upstream sidebar](https://github.com/Relz/network-manager-sidebar)
-in [nm-sidebar.nix](../../packages/nm-sidebar.nix). For connection usage,
-storage and migration, see [isomorph networking](../../../nixos/hosts/isomorph/README.md).
+in [nm-sidebar.nix](../../packages/nm-sidebar.nix). For connection usage
+and storage, see [isomorph networking](../../../nixos/hosts/isomorph/README.md).
 
 ## Implementation
 
