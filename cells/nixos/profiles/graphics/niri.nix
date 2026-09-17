@@ -1,6 +1,18 @@
 { inputs, common, }:
 { config, pkgs, lib, ... }:
 let
+  # Vicinae 0.27.4: label desktop-entry sources and distinguish native/Flatpak
+  # window PIDs for focus and quit. Unknown PIDs fall back to launching the app;
+  # focus-existing therefore requires a compositor exposing host PIDs (Niri).
+  launcher = pkgs.vicinae.overrideAttrs (old: {
+    patches = (old.patches or []) ++ [ ../../../common/patches/vicinae/flatpak-app-identity.patch ];
+    postPatch = (old.postPatch or "") + ''
+      cp ${../../../common/patches/vicinae/flatpak-identity.hpp} src/server/src/services/window-manager/flatpak-identity.hpp
+      $CXX -std=c++20 -Wall -Wextra -Werror -I${../../../common/patches/vicinae} \
+        ${../../../common/patches/vicinae/test-identity.cpp} -o /tmp/test-vicinae-identity
+      /tmp/test-vicinae-identity
+    '';
+  });
   notificationCenter = pkgs.notification-sidebar;
   networkSidebar = pkgs.nm-sidebar.override {
     defaultWifiMacAddress = config.networking.networkmanager.wifi.macAddress;
@@ -21,7 +33,8 @@ in {
     swaybg # wallpaper (legacy / fallback)
     awww # wallpaper daemon (LGFae/awww — successor to swww)
     brightnessctl # brightness control
-    rofi # menu
+    launcher # resident application launcher
+    rofi # clipboard/emoji menus and launcher fallback
     fuzzel # alternative menu
     swaylock # lockscreen
     polkit
@@ -29,6 +42,24 @@ in {
     xwayland-satellite # xwayland support
     nautilus # file picker (for popups)
   ];
+  # Keep the launcher loaded; Mod+D only toggles the resident window.
+  systemd.user.services.vicinae = {
+    description = "Vicinae application launcher";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requires = [ "dbus.socket" ];
+    environment.QT_QPA_PLATFORM = "wayland";
+    # Desktop entries often use bare commands, including Flatpak's `flatpak run`.
+    environment.PATH = lib.mkForce
+      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:%h/.nix-profile/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      ExecStart = "${launcher}/bin/vicinae server --replace";
+      Restart = "on-failure";
+      RestartSec = 3;
+    };
+  };
+
   programs.foot.enable = true; # terminal
   programs.waybar.enable = true; # top bar
   # Native battery/profile observers share one icon and open a centered native GTK3 menu.

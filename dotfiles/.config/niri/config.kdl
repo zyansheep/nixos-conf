@@ -430,8 +430,8 @@ binds {
     // Suggested binds for running programs: terminal, app launcher, screen locker.
     Mod+Return hotkey-overlay-title="💻 Open a Terminal: foot" { spawn "foot"; }
     Mod+Z hotkey-overlay-title="📁 File Manager: foot yazi" { spawn "foot" "yazi"; }
-    Mod+D hotkey-overlay-title="🚀 Run an Application: rofi" { spawn "rofi" "-run-use-desktop-cache" "-show" "run"; }
-    Mod+Shift+D hotkey-overlay-title="📦 Install an Application: npmenu.py" { spawn "/home/zyansheep/Projects/npmenu/npmenu.py" "-l" "rofi"; }
+    Mod+D hotkey-overlay-title="🚀 Launcher: Vicinae" { spawn "vicinae" "toggle"; }
+    Mod+Shift+D hotkey-overlay-title="🚀 Launcher fallback: rofi" { spawn "rofi" "-show" "run"; }
     // Super+L is used for navigation below; lock with Ctrl+Alt+L.
     // Authentication is configured in cells/nixos/profiles/graphics/niri.nix.
     Ctrl+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock" "-f"; }
