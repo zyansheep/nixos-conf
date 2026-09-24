@@ -32,6 +32,8 @@ stdenv.mkDerivation {
   patches = [
     ../patches/nm-sidebar/integrated-settings.patch
     ../patches/nm-sidebar/background-input.patch
+    ../patches/nm-sidebar/focus-dismiss.patch
+    ../patches/nm-sidebar/ipc-ack-race.patch
   ];
   postPatch = ''
     cp ${../patches/nm-sidebar/profile-model.c} src/actions/profile-model.c

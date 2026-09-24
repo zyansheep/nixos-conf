@@ -121,16 +121,16 @@ Dismissal hides the window for reuse; audio-server polling pauses while hidden. 
 ### Background interaction
 
 Audio, Wi-Fi and notifications occupy only their panel's bounds. There is no
-fullscreen invisible click catcher and no exclusive keyboard grab. Scroll or
-click a background application without closing the panel. Click a control to
-focus the panel when keyboard input is needed. Audio and notifications dismiss
-after losing that focus to another application. On Niri, a panel opened without
-first receiving focus cannot detect a click in the already-focused background
-app; use its toggle or Close control in that case. Full click-outside dismissal
-would require a pointer grab or backdrop that also blocks background scrolling.
+fullscreen invisible click catcher and no exclusive keyboard grab. Scroll a
+background application without closing the panel. Niri gives an on-demand panel
+keyboard focus when it opens, so clicking another window moves focus away and
+dismisses Audio and Wi-Fi (`nm-sidebar/focus-dismiss.patch`); dropdown popovers
+and in-panel dialogs keep focus. Clicking Waybar itself does not take focus and
+leaves the panel open.
 
-Use Close, Escape while focused, or `Alt+Shift+V` to dismiss audio. Wi-Fi toggles
-with `Alt+Shift+W`; notifications toggle with `Alt+N`.
+Escape closes the innermost layer first: an open dropdown or dialog, then a
+details page, then the panel. Use Close or `Alt+Shift+V` to dismiss audio. Wi-Fi
+toggles with `Alt+Shift+W`; notifications toggle with `Alt+N`.
 
 The battery intentionally uses a native GTK 3 menu inside Waybar again. This
 restores press-drag-release selection and avoids starting another process. It

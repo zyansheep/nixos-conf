@@ -69,7 +69,11 @@ preserved while identity, password and server-domain fields can be edited.
 The [Niri profile](../../../nixos/profiles/graphics/niri.nix) starts the
 `nm-sidebar` user service hidden with the graphical session and replaces it on
 upgrades. The CLI sends requests through an IPC socket in `$XDG_RUNTIME_DIR`.
-Waybar and `Alt+Shift+W` toggle this same process. The sidebar uses libnm directly,
+Waybar and `Alt+Shift+W` toggle this same process.
+`focus-dismiss.patch` hides the panel 100 ms after it loses keyboard focus (a
+click in another window), rechecking so popovers don't dismiss it.
+`ipc-ack-race.patch` fixes a use-after-free: the socket thread used to ack with
+the command string that the main loop had already freed, crashing on `--hide`. The sidebar uses libnm directly,
 with no connection-parsing scripts or separate credential store.
 
 The upstream external editor is a private runtime dependency for VPN profiles;
