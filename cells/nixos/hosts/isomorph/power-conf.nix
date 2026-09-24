@@ -15,8 +15,6 @@
       "kernel.sysrq" = 1 + 16 + 32 + 64 + 128;
     };
   };
-  # Enable module that exposes battery charge limit (TODO: WHY DOESN'T THIS WORK???)
-  boot.kernelModules = [ "framework-laptop-kmod" ];
 
   /* services.udev.extraRules = ''
     SUBSYSTEM=="pci", ATTR{power/control}="auto"

@@ -1,4 +1,4 @@
-{ swaynotificationcenter, adwaita-icon-theme, sources ? null }:
+{ swaynotificationcenter, adwaita-icon-theme }:
 swaynotificationcenter.overrideAttrs (old: {
   preFixup = (old.preFixup or "") + ''
     gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : ${adwaita-icon-theme}/share)

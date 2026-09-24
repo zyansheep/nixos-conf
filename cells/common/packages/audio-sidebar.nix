@@ -1,5 +1,5 @@
 { lib, stdenvNoCC, python3, gtk4, libadwaita, adwaita-icon-theme, gtk4-layer-shell, gobject-introspection, glib, systemd,
-  wrapGAppsHook4, pulseaudio, helvum, sources ? null }:
+  wrapGAppsHook4, pulseaudio, helvum }:
 stdenvNoCC.mkDerivation {
   pname = "audio-sidebar";
   version = "0.1.0";

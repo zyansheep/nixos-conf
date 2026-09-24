@@ -35,9 +35,6 @@
 
     nixos-generators.url = "github:nix-community/nixos-generators";
     nixos-generators.inputs.nixpkgs.follows = "stable";
-
-    nvfetcher.url = "github:berberman/nvfetcher";
-    nvfetcher.inputs.nixpkgs.follows = "stable";
   };
 
   outputs = inputs @ {
@@ -55,7 +52,7 @@
       # ============================================================
       # Library functions for loading profiles
       # ============================================================
-      lib = import ./lib.nix {inherit inputs haumea;};
+      lib = import ./lib.nix {inherit haumea;};
 
       # ============================================================
       # Overlays
@@ -65,12 +62,10 @@
           inherit system;
           config.allowUnfree = true;
         };
-        sources = (import stable {inherit system;}).callPackage ./cells/common/sources/generated.nix {};
       in {
         common-packages = final: prev:
           lib.importPackages {
             nixpkgs = latestPkgs;
-            sources = sources;
             packages = ./cells/common/packages;
           };
         latest-overrides = final: prev: {
@@ -80,14 +75,9 @@
             vscodium
             alejandra
             nil
-            nixpkgs-fmt
-            statix
             nix
-            cachix
             nix-index
-            ffmpeg_5-full
             ;
-          nvfetcher = inputs.nvfetcher.packages.${system}.default;
         };
       };
 
@@ -124,26 +114,21 @@
       # ============================================================
       # User profiles (Home Manager suites)
       # ============================================================
-      userProfiles = let
-        l = stable.lib // builtins;
-        suites = with homeProfiles; {
-          base = [
+      userProfiles = {
+        minimal = {...}: {
+          imports = with homeProfiles; [
             shell.direnv
             git
             dev.codium
             shell.zsh
             shell.nvim
             home-manager-base
-            ssh
             packages
             kimi
             emoji
             dotfiles
           ];
-          develop = [dev.nix];
         };
-      in {
-        minimal = {...}: {imports = suites.base;};
       };
 
       # ============================================================
@@ -333,7 +318,6 @@
         # Expose custom packages
         packages = lib.importPackages {
           nixpkgs = latestPkgs;
-          sources = pkgs.callPackage ./cells/common/sources/generated.nix {};
           packages = ./cells/common/packages;
         };
       };

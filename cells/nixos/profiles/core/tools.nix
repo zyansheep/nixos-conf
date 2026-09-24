@@ -55,7 +55,6 @@ with lib; {
     iputils # IP utilities
     inotify-tools # File Watching tools
     jq # Json processor
-    usbutils # Usb utilities
     util-linux # Linux utilities
     smartmontools # Drive Health tools
     ffmpeg # Video Converter

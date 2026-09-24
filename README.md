@@ -33,7 +33,7 @@ Add new files to Git before rebuilding so the flake includes them.
 | [cells/nixos/profiles](cells/nixos/profiles) | Reusable system and service configuration |
 | [cells/home](cells/home) | Home Manager configuration |
 | [dotfiles/.config](dotfiles/.config) | Desktop and application configuration |
-| [cells/common](cells/common) | Local packages, patches and pinned sources |
+| [cells/common](cells/common) | Local packages and patches |
 
 For desktop controls and customization, see the [Waybar guide](dotfiles/.config/waybar/README.md).
 For the launcher, Wi-Fi, VPNs, saved connections and Flatpak troubleshooting,

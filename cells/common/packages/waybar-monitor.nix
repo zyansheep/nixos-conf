@@ -1,4 +1,4 @@
-{ stdenvNoCC, python3, sources ? null }:
+{ stdenvNoCC, python3 }:
 stdenvNoCC.mkDerivation {
   pname = "waybar-monitor";
   version = "0.1.0";

@@ -125,12 +125,6 @@ _: {pkgs, ...}: {
     wlsunset
     wtype
 
-    # Wayland / Desktop
-    bemoji
-    rofimoji
-    tofi
-    walker
-
     # 3D Printing / CAD
     cura-appimage
     ipe

@@ -10,7 +10,6 @@
   // Choose the order of the modules
   "modules-left": [
     "niri/workspaces",
-    "custom/media",
     "niri/window"
   ],
   "modules-center": [
@@ -18,7 +17,6 @@
   ],
   "modules-right": [
     "custom/recording",
-    "mpd",
     "group/tray-group",
     "idle_inhibitor",
     "group/network",
@@ -114,33 +112,6 @@
     "icon": true,
     "icon-size": 16,
     "max-length": 50
-  },
-  "mpd": {
-    "tooltip": false,
-    "format": "{stateIcon} {consumeIcon}{randomIcon}{repeatIcon}{singleIcon}{artist} - {album} - {title} ({elapsedTime:%M:%S}/{totalTime:%M:%S}) ⸨{songPosition}|{queueLength}⸩ {volume}% ",
-    "format-disconnected": "Disconnected ",
-    "format-stopped": "{consumeIcon}{randomIcon}{repeatIcon}{singleIcon}Stopped ",
-    "unknown-tag": "N/A",
-    "interval": 5,
-    "consume-icons": {
-      "on": " "
-    },
-    "random-icons": {
-      "off": "<span color=\"#f53c3c\"></span> ",
-      "on": " "
-    },
-    "repeat-icons": {
-      "on": " "
-    },
-    "single-icons": {
-      "on": "1 "
-    },
-    "state-icons": {
-      "paused": "",
-      "playing": ""
-    },
-    "tooltip-format": "MPD (connected)",
-    "tooltip-format-disconnected": "MPD (disconnected)"
   },
   "idle_inhibitor": {
     "tooltip": false,
@@ -370,19 +341,6 @@
       "gauge100": 100
     }
   },
-  "custom/media": {
-    "tooltip": false,
-    "format": "{icon} {}",
-    "return-type": "json",
-    "max-length": 40,
-    "format-icons": {
-      "spotify": "",
-      "default": "🎜"
-    },
-    "escape": true,
-    "exec": "$HOME/.config/waybar/mediaplayer.py 2> /dev/null" // Script in resources folder
-    // "exec": "$HOME/.config/waybar/mediaplayer.py --player spotify 2> /dev/null" // Filter player based on name
-  },
   "custom/power": {
     "format": "⏻ ",
     "tooltip": false,
@@ -391,8 +349,7 @@
     "menu-actions": {
       "shutdown": "shutdown",
       "reboot": "reboot",
-      "suspend": "systemctl suspend",
-      "hibernate": "systemctl hibernate"
+      "suspend": "systemctl suspend"
     }
   }
 }

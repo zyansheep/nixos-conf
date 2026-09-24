@@ -14,7 +14,6 @@
 
     core.minimal
     core.common
-    core.installation-cd-base
   ];
 
   # Override hostname for live system

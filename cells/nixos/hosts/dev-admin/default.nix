@@ -9,10 +9,7 @@
     suites.base
 
     ./hardware-configuration.nix
-    # creative.common
-    # creative.steno
     development.common
-    # development.arduino
     # development.shell.starship
 
     development.rust
@@ -23,7 +20,6 @@
     core.tools
     # core.hacking-tools
     services.containers
-    # core.privacy
     core.communications
     core.laptop-tlp
     gaming.common
@@ -33,7 +29,6 @@
 
     services.printing
     services.syncthing
-    services.containers
     services.ssh
   ];
 

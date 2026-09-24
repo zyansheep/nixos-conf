@@ -9,13 +9,10 @@
     inputs.lanzaboote.nixosModules.lanzaboote
     inputs.impermanence.nixosModules.impermanence
 
-    # creative.common
-    # creative.steno
     development.common
     development.tools
     development.rust
     development.r-lang
-    # development.arduino
     # development.shell.starship
     development.android
 
@@ -26,7 +23,6 @@
     core.power-lab # root helper for power experiments (see profile)
     # core.laptop-tlp
     # core.hacking-tools
-    # core.privacy
     core.communications
     gaming.common
     gaming.steam

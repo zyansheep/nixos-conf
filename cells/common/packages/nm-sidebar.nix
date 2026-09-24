@@ -16,7 +16,6 @@
   kdePackages,
   defaultWifiMacAddress ? "stable-ssid",
   wifiBackend ? "iwd",
-  sources ? null,
 }:
 stdenv.mkDerivation {
   pname = "nm-sidebar";

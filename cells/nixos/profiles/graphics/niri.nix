@@ -30,14 +30,11 @@ in {
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
     swayimg # img viewer
-    swaybg # wallpaper (legacy / fallback)
     awww # wallpaper daemon (LGFae/awww — successor to swww)
     brightnessctl # brightness control
     launcher # resident application launcher
     rofi # clipboard/emoji menus and launcher fallback
-    fuzzel # alternative menu
     swaylock # lockscreen
-    polkit
     swayidle # idle manager
     xwayland-satellite # xwayland support
     nautilus # file picker (for popups)

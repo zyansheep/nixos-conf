@@ -20,14 +20,12 @@
 
     gaming.common
     gaming.steam
-    # creative.common
 
     development.common
     development.rust
     development.tools
     # development.android
     # development.shell.zsh
-    # development.arduino
 
     services.printing
     # services.ssh
@@ -49,7 +47,6 @@
   networking.networkmanager.wifi.backend = "wpa_supplicant";
 
   services.flatpak.enable = true;
-  services.mullvad-vpn.enable = true;
 
   # Enable virtualization
   virtualisation.libvirtd.enable = true;
