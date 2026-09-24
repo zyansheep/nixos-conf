@@ -1,0 +1,13 @@
+--- a/src/gui/app.c
++++ b/src/gui/app.c
+@@ -1022,6 +1022,10 @@ prepare_runtime(NetworkSidebarGuiApp *self)
+   ensure_actions(self);
+   if (!ensure_window(self))
+     return FALSE;
++  /* Create the GSK renderer while hidden; Vulkan setup otherwise delays the
++   * first show by about half a second. Mapping still creates the layer surface. */
++  gtk_widget_realize(self->window);
++  gtk_widget_measure(self->window, GTK_ORIENTATION_VERTICAL, NETWORK_SIDEBAR_WIDTH, NULL, NULL, NULL, NULL);
+   return ensure_command_server(self, FALSE);
+ }
+ 

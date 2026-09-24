@@ -73,7 +73,11 @@ Waybar and `Alt+Shift+W` toggle this same process.
 `focus-dismiss.patch` hides the panel 100 ms after it loses keyboard focus (a
 click in another window), rechecking so popovers don't dismiss it.
 `ipc-ack-race.patch` fixes a use-after-free: the socket thread used to ack with
-the command string that the main loop had already freed, crashing on `--hide`. The sidebar uses libnm directly,
+the command string that the main loop had already freed, crashing on `--hide`.
+`warm-renderer.patch` realizes and measures the hidden window at startup so
+Vulkan setup, CSS and font layout happen before the first show (first open
+~580 ms → ~180 ms; later opens ~20 ms). The rest is first-draw glyph and icon
+uploads, which GTK can't do for an unmapped window. The sidebar uses libnm directly,
 with no connection-parsing scripts or separate credential store.
 
 The upstream external editor is a private runtime dependency for VPN profiles;
