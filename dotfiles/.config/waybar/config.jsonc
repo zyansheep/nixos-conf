@@ -230,9 +230,10 @@
       "level40": 49, "level50": 59, "level60": 69, "level70": 79,
       "level80": 89, "level90": 99, "level100": 100
     },
-    "format": "{capacity}%",
-    "format-charging": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "format-plugged": "{capacity}% <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
+    // Live draw (or charge rate) next to the percentage, refreshed every second.
+    "format": "{capacity}% <span alpha='75%'>{power:.1f}W</span>",
+    "format-charging": "{capacity}% <span alpha='75%'>{power:.1f}W</span> <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
+    "format-plugged": "{capacity}% <span alpha='75%'>{power:.1f}W</span> <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
     "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
     "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
     "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
@@ -244,7 +245,7 @@
       "balanced": "powerprofilesctl set balanced",
       "performance": "powerprofilesctl set performance"
     },
-    "interval": 3
+    "interval": 1
   },
   "power-profiles-daemon": {
     "group-state": true,

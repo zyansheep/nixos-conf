@@ -15,7 +15,7 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 | Tray chevron | Hover to expand; move away to collapse. |
 | Idle inhibitor | Click to toggle whether the screen may sleep. |
 
-The battery contains its percentage, charging mark, and active profile in one
+The battery contains its percentage, live wattage (updated every second), charging mark, and active profile in one
 outline. A green leaf means Power saver, blue scales mean Balanced, and an amber
 speedometer means Performance. Below 20% the battery turns red; charging makes
 it green with a bolt. A plug means connected to power without charging, such as
@@ -163,7 +163,7 @@ advance width, causing offsets and overlap. The memory glyph has a 1px optical
 correction right/down while its ring keeps the same 22px box. Tray/idle,
 idle/Wi-Fi and notification/audio spacing is set in the stylesheet.
 
-The battery and profile modules sit inside `group/power`, sharing a 64px outline
+The battery and profile modules sit inside `group/power`, sharing a 104px outline
 and translucent fill in 10% steps. Three SVG outlines provide normal, low and
 charging colors. They are adapted from [Lucide's battery](https://lucide.dev/icons/battery);
 the license is in [gauges/LUCIDE-LICENSE](gauges/LUCIDE-LICENSE).

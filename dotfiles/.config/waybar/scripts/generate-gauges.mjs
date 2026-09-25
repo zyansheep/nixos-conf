@@ -111,16 +111,19 @@ for (let level = 0; level < 4; level++) {
 }
 `;
 }
-// Lucide's battery outline, widened to make room for the live percentage.
+// Lucide's battery outline, widened to make room for the live percentage and
+// wattage. BATTERY_WIDTH sets the outline; the fill spans its inner body.
+const BATTERY_WIDTH = 104;
+const BATTERY_FILL = BATTERY_WIDTH - 10;
 // https://github.com/lucide-icons/lucide/blob/main/icons/battery.svg
 // See gauges/LUCIDE-LICENSE. The fill is CSS, so only three SVGs are needed.
 for (const [name, color] of Object.entries({
   normal: '#dce1e7', low: '#ef8585', charging: '#8fdf8f',
 })) {
   fs.writeFileSync(new URL(`battery-${name}.svg`, assets),
-    `<svg xmlns="http://www.w3.org/2000/svg" width="64" height="18" viewBox="0 0 64 18" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-  <rect x="1" y="1" width="58" height="16" rx="3"/>
-  <path d="M62 6v6"/>
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${BATTERY_WIDTH}" height="18" viewBox="0 0 ${BATTERY_WIDTH} 18" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+  <rect x="1" y="1" width="${BATTERY_WIDTH - 6}" height="16" rx="3"/>
+  <path d="M${BATTERY_WIDTH - 2} 6v6"/>
 </svg>
 `);
 }
@@ -128,17 +131,17 @@ css += `
 /* Both native labels sit inside one outline. Mirrored battery states let the
    group retain capacity fill and charging/low colors across the whole body. */
 #power {
-  min-width: 64px;
+  min-width: ${BATTERY_WIDTH}px;
   min-height: 22px;
   margin: 0 3px;
   padding: 0;
   background-image: url("gauges/battery-normal.svg"), linear-gradient(rgba(220, 225, 231, 0.25), rgba(220, 225, 231, 0.25));
-  background-size: 64px 18px, 0 12px;
+  background-size: ${BATTERY_WIDTH}px 18px, 0 12px;
   background-position: center, 3px center;
   background-repeat: no-repeat;
 }
 #battery {
-  min-width: 40px;
+  min-width: ${BATTERY_WIDTH - 24}px;
   min-height: 22px;
   margin: 0 0 0 3px;
   padding: 0;
@@ -168,7 +171,7 @@ css += `
 }
 `;
 for (let capacity = 0; capacity <= 100; capacity += 10) {
-  css += `#power.battery-level${capacity} { background-size: 64px 18px, ${54 * capacity / 100}px 12px; }\n`;
+  css += `#power.battery-level${capacity} { background-size: ${BATTERY_WIDTH}px 18px, ${BATTERY_FILL * capacity / 100}px 12px; }\n`;
 }
 css += endMarker;
 const stylesheet = new URL('style.css', root);
