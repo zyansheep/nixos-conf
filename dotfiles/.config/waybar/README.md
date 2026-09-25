@@ -124,7 +124,7 @@ Audio, Wi-Fi and notifications occupy only their panel's bounds. There is no
 fullscreen invisible click catcher and no exclusive keyboard grab. Scroll a
 background application without closing the panel. Niri gives an on-demand panel
 keyboard focus when it opens, so clicking another window moves focus away and
-dismisses Audio and Wi-Fi (`nm-sidebar/focus-dismiss.patch`); dropdown popovers
+dismisses Audio and Wi-Fi; dropdown popovers
 and in-panel dialogs keep focus. Clicking Waybar itself does not take focus and
 leaves the panel open.
 
@@ -204,7 +204,7 @@ through to GTK so dragging into a choice and releasing activates it.
 the menu opens. The profile patch delegates menu clicks instead of cycling.
 
 The Python popup in `cells/common/patches/audio-sidebar` uses bounded layer-shell
-windows and on-demand keyboard focus. `nm-sidebar/background-input.patch`
+windows and on-demand keyboard focus. The Wi-Fi fork (`cells/common/vendor/nm-sidebar`)
 limits the Wi-Fi surface to the sidebar width. SwayNC uses
 `layer-shell-cover-screen: false` and `swaync-background-input.patch` selects
 on-demand keyboard input in that mode. Its blank windows stay hidden.

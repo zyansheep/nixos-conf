@@ -1,0 +1,3 @@
+[submodule "cells/common/vendor/nm-sidebar"]
+	path = cells/common/vendor/nm-sidebar
+	url = https://github.com/zyansheep/network-manager-sidebar

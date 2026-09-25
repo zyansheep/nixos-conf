@@ -33,9 +33,20 @@ There is no separate network tray applet. The relevant VPN services are
 [tailscale.nix](../../profiles/services/tailscale.nix) and
 [hampshire-vpn.nix](../../profiles/services/hampshire-vpn.nix).
 
-The sidebar is pinned in [nm-sidebar.nix](../../../common/packages/nm-sidebar.nix)
-and uses libnm directly. Its native settings extension, save/conflict handling
-and regression tests are documented [beside the patch](../../../common/patches/nm-sidebar/README.md).
+The sidebar is built by [nm-sidebar.nix](../../../common/packages/nm-sidebar.nix)
+from [our fork](https://github.com/zyansheep/network-manager-sidebar), vendored
+as the git submodule `cells/common/vendor/nm-sidebar`; edit it there, commit and
+push in the submodule, then commit the new submodule pointer here. It uses libnm
+directly. The native settings pages, save/conflict handling and tests are
+documented in the fork's `docs/wifi-settings.md`.
+
+The [Niri profile](../../profiles/graphics/niri.nix) starts the `nm-sidebar` user
+service hidden with the graphical session, pre-rendering setup so the first open is
+fast, and replaces it on upgrades. Waybar and `Alt+Shift+W` toggle this process
+over an IPC socket in `$XDG_RUNTIME_DIR`. Clicking another window dismisses it.
+The upstream external editor is a private runtime dependency for VPN profiles;
+nm-applet does not autostart. Control Proton's generated profiles and kill switch
+through Proton's own app.
 
 ## Saved connections and MAC addresses
 
