@@ -26,6 +26,9 @@ The profile popup centers its three buttons beneath the battery. A highlighted b
 marks the active profile. Battery health and cycle count appear below the
 buttons and refresh whenever the menu opens. Health is full capacity divided by design
 capacity; unsupported readings show “unavailable”, and zero cycles is valid.
+Below that, the five apps using the most CPU (grouped like the CPU hover panel,
+from the same `waybar-monitor` snapshot) stand in for battery use, since Linux
+has no per-process power meter.
 AC plug/unplug events still select Balanced / Power saver through udev rules.
 
 Wi-Fi lights another curved bar at 25%, 50%, and 75%; unlit bars stay faintly
@@ -94,7 +97,8 @@ lines are never written to the cache.
 
 SwayNC supplies notification grouping, actions, inline replies, DND and media
 controls. `swaync.service` now pins the configured GTK4 package and preloads its
-widgets/surface at graphical-session startup. The panel has no opening
+widgets/surface at graphical-session startup; `swaync-warm-renderer.patch` also
+realizes the hidden panel so the first `Alt+N` is not slowed by Vulkan setup. The panel has no opening
 transition. `Alt+N` toggles it; `Alt+Shift+R` restarts the managed Waybar and
 notification services. Broken legacy Wi-Fi/Bluetooth/DPMS quick-toggle shell
 commands were removed; their dedicated panels remain available.
@@ -224,7 +228,7 @@ nix build path:.#packages.x86_64-linux.audio-sidebar \
 The monitor tests cover rolling CPU windows, PID reuse, exited tasks, memory
 ordering and sensor parsing. The audio package tests command handling, hotplug behavior, monitor-source
 classification, and resident-window behavior. The Waybar build tests battery
-capacity/cycle fallbacks against synthetic sysfs fixtures. Apply using `nrb` to
+capacity/cycle fallbacks against synthetic sysfs fixtures and the top-app snapshot parser. Apply using `nrb` to
 install the commands, CSS link, and patched packages. Niri reloads linked key
 bindings. `Alt+Shift+R` restarts Waybar and notifications using the system package;
 the managed Wi-Fi service is replaced by a rebuild.

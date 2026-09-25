@@ -1,8 +1,11 @@
 #pragma once
+#include <json/json.h>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace waybar {
 inline double powerMenuNumber(const std::filesystem::path& path) {
@@ -36,5 +39,25 @@ inline std::string powerMenuStats(const std::filesystem::path& root = "/sys/clas
     result += "\nCycles: " + (cycles >= 0 ? std::to_string(static_cast<long long>(cycles)) : "unavailable");
   }
   return result.empty() ? "Battery health: unavailable\nCycles: unavailable" : result;
+}
+
+// Top apps by CPU share from the waybar-monitor snapshot, the usual proxy for
+// battery use (Linux has no per-process power meter). Empty when stale.
+inline std::vector<std::pair<std::string, std::string>> powerMenuProcesses(
+    const std::filesystem::path& snapshot, double now, size_t limit = 5) {
+  Json::Value state;
+  std::ifstream input(snapshot);
+  Json::CharReaderBuilder builder;
+  std::string errors;
+  std::vector<std::pair<std::string, std::string>> rows;
+  if (!Json::parseFromStream(builder, input, &state, &errors) || !state.isObject() ||
+      std::abs(now - state["timestamp"].asDouble()) >= 10 || !state["cpu"].isArray())
+    return rows;
+  for (const auto& entry : state["cpu"]) {
+    if (rows.size() >= limit) break;
+    if (entry.isObject() && entry["name"].isString() && entry["value"].isString())
+      rows.emplace_back(entry["name"].asString(), entry["value"].asString());
+  }
+  return rows;
 }
 }  // namespace waybar

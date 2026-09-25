@@ -69,7 +69,7 @@ in {
     postCheck = (old.postCheck or "") + ''
       $CXX -std=c++17 -Wall -Wextra -Werror \
         -include ${../../../common/patches/waybar-power-menu-stats.hpp} \
-        ${../../../common/patches/test-waybar-power-menu.cpp} -o test-power-menu
+        ${../../../common/patches/test-waybar-power-menu.cpp} $(pkg-config --cflags --libs jsoncpp) -o test-power-menu
       ./test-power-menu
     '';
     patches = (old.patches or []) ++ [
@@ -77,6 +77,7 @@ in {
       ../../../common/patches/waybar-group-menu.patch
       ../../../common/patches/waybar-hover-monitor.patch
       ../../../common/patches/waybar-no-tooltips.patch
+      ../../../common/patches/waybar-power-menu-processes.patch
     ];
   });
 

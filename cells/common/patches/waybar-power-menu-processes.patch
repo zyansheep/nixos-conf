@@ -1,0 +1,41 @@
+--- a/src/AModule.cpp
++++ b/src/AModule.cpp
+@@ -12,9 +12,38 @@
+ 
+ namespace waybar {
+ 
++static void fillPowerMenuProcesses(GtkWidget* box) {
++  GList* old = gtk_container_get_children(GTK_CONTAINER(box));
++  for (GList* child = old; child; child = child->next) gtk_widget_destroy(GTK_WIDGET(child->data));
++  g_list_free(old);
++  const auto snapshot =
++      std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "snapshot.json";
++  const auto rows = powerMenuProcesses(snapshot, g_get_real_time() / 1e6);
++  auto* title = gtk_label_new(rows.empty() ? "Top apps: waiting for the system monitor…"
++                                           : "Top apps by CPU use");
++  gtk_label_set_xalign(GTK_LABEL(title), 0);
++  gtk_style_context_add_class(gtk_widget_get_style_context(title), "battery-processes-title");
++  gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
++  for (const auto& [name, value] : rows) {
++    auto* line = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
++    auto* label = gtk_label_new(name.c_str());
++    gtk_label_set_xalign(GTK_LABEL(label), 0);
++    gtk_label_set_ellipsize(GTK_LABEL(label), PANGO_ELLIPSIZE_END);
++    gtk_label_set_max_width_chars(GTK_LABEL(label), 24);
++    auto* amount = gtk_label_new(value.c_str());
++    gtk_style_context_add_class(gtk_widget_get_style_context(amount), "battery-process-value");
++    gtk_box_pack_start(GTK_BOX(line), label, TRUE, TRUE, 0);
++    gtk_box_pack_end(GTK_BOX(line), amount, FALSE, FALSE, 0);
++    gtk_box_pack_start(GTK_BOX(box), line, FALSE, FALSE, 0);
++  }
++  gtk_widget_show_all(box);
++}
++
+ static void updatePowerMenuStats(GtkWidget* widget) {
+   if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-stats") == 0) {
+     gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
++  } else if (GTK_IS_BOX(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-processes") == 0) {
++    fillPowerMenuProcesses(widget);
+   } else if (GTK_IS_CONTAINER(widget)) {
+     GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
+     for (GList* child = children; child; child = child->next)

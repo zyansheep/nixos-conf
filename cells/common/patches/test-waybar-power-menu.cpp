@@ -25,6 +25,18 @@ int main() {
   put("scope", "Device");
   assert(waybar::powerMenuStats(root) == "Battery health: unavailable\nCycles: unavailable");
   assert(waybar::powerMenuStats(root / "missing") == "Battery health: unavailable\nCycles: unavailable");
+
+  const auto snapshot = root / "snapshot.json";
+  std::ofstream(snapshot) << R"({"timestamp": 1000, "cpu": [
+    {"name": "Floorp", "value": "4.0%"}, 3, {"name": "Niri"},
+    {"name": "Waybar", "value": "0.5%"}]})";
+  const auto rows = waybar::powerMenuProcesses(snapshot, 1005, 5);
+  assert(rows.size() == 2 && rows[0].first == "Floorp" && rows[1].second == "0.5%");
+  assert(waybar::powerMenuProcesses(snapshot, 1005, 1).size() == 1);
+  assert(waybar::powerMenuProcesses(snapshot, 1010).empty());  // stale
+  std::ofstream(snapshot) << "not json";
+  assert(waybar::powerMenuProcesses(snapshot, 1000).empty());
+  assert(waybar::powerMenuProcesses(root / "missing", 1000).empty());
   std::filesystem::remove_all(root);
-  std::cout << "Battery health/cycle checks passed\n";
+  std::cout << "Battery health/cycle and process checks passed\n";
 }

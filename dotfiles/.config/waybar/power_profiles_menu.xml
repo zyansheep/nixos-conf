@@ -105,5 +105,25 @@
         <property name="bottom-attach">2</property>
       </packing>
     </child>
+    <child>
+      <object class="GtkMenuItem" id="battery-top-apps">
+        <property name="name">battery-top-apps</property>
+        <property name="sensitive">False</property>
+        <child>
+          <!-- Filled from the waybar-monitor snapshot each time the menu opens. -->
+          <object class="GtkBox">
+            <property name="name">battery-processes</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">2</property>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">2</property>
+        <property name="bottom-attach">3</property>
+      </packing>
+    </child>
   </object>
 </interface>

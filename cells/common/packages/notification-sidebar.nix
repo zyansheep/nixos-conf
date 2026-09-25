@@ -3,5 +3,5 @@ swaynotificationcenter.overrideAttrs (old: {
   preFixup = (old.preFixup or "") + ''
     gappsWrapperArgs+=(--prefix XDG_DATA_DIRS : ${adwaita-icon-theme}/share)
   '';
-  patches = (old.patches or []) ++ [ ../patches/swaync-background-input.patch ../patches/swaync-resident-panel.patch ];
+  patches = (old.patches or []) ++ [ ../patches/swaync-background-input.patch ../patches/swaync-resident-panel.patch ../patches/swaync-warm-renderer.patch ];
 })

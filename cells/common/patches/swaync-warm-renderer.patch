@@ -1,0 +1,15 @@
+--- a/src/main.vala
++++ b/src/main.vala
+@@ -150,6 +150,12 @@ namespace SwayNotificationCenter {
+ 
+             add_window (floating_notifications);
+             add_window (control_center);
++            // Create the GSK renderer and lay out the hidden panel now; Vulkan
++            // setup and first layout otherwise delay the first toggle.
++            ((Gtk.Widget) control_center).realize ();
++            int min_height, nat_height, min_base, nat_base;
++            control_center.measure (Gtk.Orientation.VERTICAL, -1,
++                out min_height, out nat_height, out min_base, out nat_base);
+ 
+             noti_daemon.on_dnd_toggle.connect ((dnd) => {
+                 // Hide all non-critical notifications on toggle

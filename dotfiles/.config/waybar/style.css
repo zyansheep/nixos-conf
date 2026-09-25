@@ -675,6 +675,17 @@ window.gauges-arc #wireplumber.muted {
   color: #c6cbd2;
 }
 #power-profiles-menu #battery-stats { font-size: 10px; }
+#power-profiles-menu #battery-top-apps {
+  background: transparent;
+  border: none;
+  min-width: 0;
+  padding: 2px 8px 6px;
+  color: #c6cbd2;
+  border-top: 1px solid #45484d;
+}
+#power-profiles-menu #battery-processes label { font-size: 10px; }
+#power-profiles-menu .battery-processes-title { font-weight: bold; margin-bottom: 2px; }
+#power-profiles-menu .battery-process-value { font-family: monospace; }
 
 /* Native non-modal GTK3 hover panels. */
 #system-monitor-menu { background: #222226; color: white; border: 1px solid #414144;
