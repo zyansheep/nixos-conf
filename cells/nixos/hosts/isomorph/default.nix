@@ -153,6 +153,11 @@
     # nothing measurable.
     # https://community.frame.work/t/fw13-amd-ai-300-hx-370-48-data-fabric-sync-flood-crashes-in-2-months-comprehensive-data/80338
     "nvme.max_host_mem_size_mb=0"
+    # HMB=0 did not stop the deaths (19 of ~260 suspends Aug 7 – Sep 25, split
+    # between [0x08000800] and silent power loss). Next lever: disable NVMe
+    # APST so the drive never autonomously drops into deep power states around
+    # the s2idle transition.
+    "nvme_core.default_ps_max_latency_us=0"
     # https://community.frame.work/t/12th-gen-not-sending-xf86monbrightnessup-down/20605/11
     # "module_blacklist=hid_sensor_hub" # Q: What is the difference between this and boot.blacklistedKernelModules?
     # "rtc_cmos.use_acpi_alarm=1" # Fix system wake-up after 5 minutes sleep for suspend-them-hibernate (I don't hibernate, is this causing my issue?)
