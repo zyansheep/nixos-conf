@@ -673,3 +673,14 @@ binds {
     // moving the mouse or pressing any other key.
     Mod+Shift+P { power-off-monitors; }
 }
+
+// Grayscale mode: display-panel maps a transparent, input-less overlay with this
+// namespace; niri desaturates everything behind it (non-xray background effect).
+layer-rule {
+    match namespace="^grayscale-filter$"
+    background-effect {
+        xray false
+        blur false
+        saturation 0
+    }
+}

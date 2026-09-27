@@ -26,6 +26,7 @@ in {
     cliphist # clipboard manager
     notificationCenter # GTK4 notification panel; background input passes through
     audio-sidebar # Audio devices, levels and per-app routing popup
+    display-panel # Brightness, night light and grayscale popup
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -165,6 +166,38 @@ in {
       Type = "dbus";
       BusName = "org.zyansheep.AudioSidebar";
       ExecStart = "${pkgs.audio-sidebar}/libexec/audio-sidebar";
+      Restart = "on-failure";
+    };
+  };
+
+  # Gamma ramps for the night light; the display panel sets its Temperature over D-Bus.
+  systemd.user.services.wl-gammarelay = {
+    description = "Wayland gamma/temperature relay";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "rs.wl-gammarelay";
+      ExecStart = "${pkgs.wl-gammarelay-rs}/bin/wl-gammarelay-rs run";
+      Restart = "on-failure";
+    };
+  };
+
+  # Resident brightness / night light / grayscale popup. It also owns the
+  # grayscale overlay, so it restores saved modes at login.
+  systemd.user.services.display-panel = {
+    description = "Resident display control popup";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" "wl-gammarelay.service" ];
+    wants = [ "wl-gammarelay.service" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "org.zyansheep.DisplayPanel";
+      ExecStart = "${pkgs.display-panel}/libexec/display-panel";
       Restart = "on-failure";
     };
   };

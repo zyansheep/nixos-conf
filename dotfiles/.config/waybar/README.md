@@ -12,6 +12,7 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 | Speaker / microphone dials | Scroll to adjust that device; right-click to mute; click for the audio popup. `Alt+Shift+V` toggles the same popup. |
 | Wi-Fi name or icon | Click to open the network sidebar. `Alt+Shift+W` opens the same sidebar. |
 | Battery | Click either half to open the centered power profile selector with battery health and cycle count. |
+| Sun / moon | Scroll to adjust brightness; click for the display panel (brightness, night light with intensity, grayscale). The moon means the night light is on. |
 | Tray chevron | Hover to expand; move away to collapse. |
 | Idle inhibitor | Click to toggle whether the screen may sleep. |
 
@@ -238,3 +239,19 @@ the managed Wi-Fi service is replaced by a rebuild.
 See [power tracing feasibility](../../../cells/nixos/hosts/isomorph/power-tracing.md)
 for available hardware counters, existing tools, and a proposed battery history
 view. Continuous tracing is not enabled by these menu changes.
+
+## Display panel
+
+`display-panel` (package `cells/common/packages/display-panel.nix`, source in
+`cells/common/patches/display-panel`) is a resident GTK4 popup like the audio one.
+Brightness goes through `brightnessctl`. The night light sets the color
+temperature of `wl-gammarelay-rs` over D-Bus: 6500 K when off, down to 2500 K at
+100% intensity. Grayscale maps a full-screen overlay in the `grayscale-filter`
+namespace with an empty input region. A niri layer rule in `config.kdl` desaturates
+everything behind it with a non-xray background effect. That effect is experimental
+in niri 26.04: color briefly returns during window open/close animations and while
+dragging tiled windows, and the whole screen is re-rendered off-screen while it is
+on. The overlay draws a 1/255-alpha background because GTK skips frames for a fully
+transparent window, and niri needs a committed buffer to apply the effect.
+Modes persist in `~/.local/state/display-panel/state.json` and are restored at login;
+the panel re-applies the temperature whenever the gamma daemon restarts.

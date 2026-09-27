@@ -26,6 +26,7 @@
     // "backlight",
     "custom/services",
     "group/power",
+    "custom/display",
     "custom/notification",
     // "battery#bat2",
     "wireplumber#output",
@@ -56,6 +57,18 @@
     "tooltip": false,
     "orientation": "horizontal",
     "modules": [ "battery", "power-profiles-daemon" ]
+  },
+  "custom/display": {
+    // Sun (moon while the night light is on); click for brightness, night light
+    // and grayscale. The panel signals SIGRTMIN+11 when a mode changes.
+    "exec": "/run/current-system/sw/bin/display-panel status",
+    "return-type": "json",
+    "interval": "once",
+    "signal": 11,
+    "tooltip": false,
+    "on-click": "/run/current-system/sw/bin/display-panel",
+    "on-scroll-up": "/run/current-system/sw/bin/brightnessctl -q set 5%+",
+    "on-scroll-down": "/run/current-system/sw/bin/brightnessctl -q set 5%-"
   },
   "custom/services": {
     "exec": "$HOME/.config/waybar/scripts/svc-status.sh",

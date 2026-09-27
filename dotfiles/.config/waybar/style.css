@@ -274,6 +274,18 @@ label:focus {
   background-color: #0069d4;
 }
 
+#custom-display {
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  font-size: 12px;
+  min-width: 16px;
+  padding: 0 4px 0 0;
+  color: #ffffff;
+}
+#custom-display.night { color: #f0a54a; }
+#custom-display.grayscale { color: #b8b8bb; }
+#custom-display.night.grayscale { color: #d9c3a3; }
+
 #custom-notification {
   padding: 0 1px 0 3px;
   color: #ffffff;
