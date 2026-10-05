@@ -430,6 +430,8 @@ binds {
     // Suggested binds for running programs: terminal, app launcher, screen locker.
     Mod+Return hotkey-overlay-title="💻 Open a Terminal: foot" { spawn "foot"; }
     Mod+Z hotkey-overlay-title="📁 File Manager: foot yazi" { spawn "foot" "yazi"; }
+    // Same as the `nrb` alias, from the repo; the terminal stays open to show the result.
+    Mod+Ctrl+Shift+R hotkey-overlay-title="🛠️ Rebuild NixOS (nrb) in a Terminal" { spawn "foot" "--title=nrb" "bash" "-c" "cd ~/nixos-conf && git add . && sudo rebuild; echo; read -rp 'Press Enter to close' _"; }
     Mod+D hotkey-overlay-title="🚀 Launcher: Vicinae" { spawn "vicinae" "toggle"; }
     Mod+Shift+D hotkey-overlay-title="🚀 Launcher fallback: rofi" { spawn "rofi" "-show" "run"; }
     // Super+L is used for navigation below; lock with Ctrl+Alt+L.
@@ -437,7 +439,9 @@ binds {
     Ctrl+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock" "-f"; }
 
     // Clipboard and utility bindings from sway
-    Mod+C hotkey-overlay-title="📋 Clipboard History: rofi" { spawn "rofi" "-modi" "clipboard:/home/zyansheep/.config/rofi/cliphist-rofi-img.sh" "-show" "clipboard" "-show-icons"; }
+    // Opens the resident Vicinae server's own clipboard history (~0.1 s, no
+    // per-open decode of every cliphist entry like the old rofi menu).
+    Mod+C hotkey-overlay-title="📋 Clipboard History: Vicinae" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
     Mod+Shift+C hotkey-overlay-title="🖼️ Show Last Clipboard Image" { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
     // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
     // emoji-picker wraps rofimoji with the same "emojis" + "kaomoji" file set
