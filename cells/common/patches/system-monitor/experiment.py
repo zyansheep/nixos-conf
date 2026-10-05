@@ -13,6 +13,7 @@ file below); the battery panel estimates the effect from paired blocks.
     power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
     power-experiment stop | restore
     power-experiment next-boot default|psr | boot-status      (boot-level experiments)
+    power-experiment test-freeze [--seconds 5] [--keep PATTERN]  (freeze now, measure, thaw)
     power-experiment run      (the power-experiment.service body)
 
 Settings that cannot change at runtime (PSR: amdgpu.dcdebugmask) are boot-level
@@ -100,9 +101,78 @@ def apst_paths():
     return sorted(SYS.glob('class/nvme/nvme*/power/pm_qos_latency_tolerance_us'))
 
 
+def cgroup(unit):
+    return user_slice() / 'app.slice' / unit
+
+
 def freeze_get(unit):
+    """The kernel's view (cgroup.events), falling back to systemd's FreezerState."""
+    events = read(cgroup(unit) / 'cgroup.events')
+    if events is not None:
+        return 'frozen' if 'frozen 1' in events.split('\n') else 'running'
     state = run(['systemctl', '--user', 'show', unit, '-P', 'FreezerState'], check=False)
     return 'frozen' if state.startswith('frozen') else 'running'
+
+
+def cpu_usec(unit):
+    for line in (read(cgroup(unit) / 'cpu.stat') or '').split('\n'):
+        if line.startswith('usage_usec '):
+            return int(line.split()[1])
+    return None
+
+
+def freeze_targets(keep):
+    """App scopes freeze-apps would freeze, minus those matching `keep`."""
+    keep = [k.lower() for k in keep]
+    return [u['unit'] for u in freezable_units()
+            if not any(k in (u['unit'] + ' ' + u['label']).lower() for k in keep)]
+
+
+def uncovered(limit=8):
+    """The user's busiest processes outside app scopes, which freezing apps cannot reach."""
+    groups = {}
+    for proc in Path('/proc').glob('[0-9]*'):
+        try:
+            if proc.stat().st_uid != os.getuid():
+                continue
+            path = (proc / 'cgroup').read_text().strip().split(':', 2)[2]
+            stat = (proc / 'stat').read_text()
+            fields = stat[stat.rindex(')') + 2:].split()
+            ticks = int(fields[11]) + int(fields[12])
+            comm = stat[stat.index('(') + 1:stat.rindex(')')]
+        except (OSError, ValueError, IndexError):
+            continue
+        if '/app.slice/' in path and path.endswith('.scope'):
+            continue
+        entry = groups.setdefault(path.rsplit('/', 1)[-1], {'cpu_s': 0.0, 'processes': 0, 'by_name': {}})
+        seconds = ticks / os.sysconf('SC_CLK_TCK')
+        entry['cpu_s'] += seconds
+        entry['processes'] += 1
+        entry['by_name'][comm] = entry['by_name'].get(comm, 0) + seconds
+    ranked = sorted(groups.items(), key=lambda kv: -kv[1]['cpu_s'])[:limit]
+    return [{'unit': unit, 'cpu_s': round(info['cpu_s']), 'processes': info['processes'],
+             'top': [name for name, _ in sorted(info['by_name'].items(), key=lambda kv: -kv[1])[:2]]}
+            for unit, info in ranked]
+
+
+def freezer_report(units):
+    return [{'unit': unit, 'label': unit_label(unit), 'state': freeze_get(unit) if cgroup(unit).is_dir() else 'gone'}
+            for unit in units or []]
+
+
+def test_freeze(units, seconds):
+    """Freeze `units` now for `seconds`, measure the CPU they still used, and thaw."""
+    before = {unit: cpu_usec(unit) for unit in units}
+    try:
+        freeze_all_set(units, 'frozen')
+        time.sleep(0.5)
+        states = {unit: freeze_get(unit) for unit in live_units(units)}
+        time.sleep(max(0.0, seconds - 0.5))
+        used = {unit: (cpu_usec(unit) or 0) - (before[unit] or 0) for unit in live_units(units)}
+    finally:
+        freeze_all_set(units, 'running')
+    return [{'unit': unit, 'label': unit_label(unit), 'state': states.get(unit, 'gone'),
+             'cpu_ms_while_frozen': round(used.get(unit, 0) / 1000)} for unit in units]
 
 
 def live_units(units):
@@ -218,7 +288,8 @@ def freezable_units():
     for scope in (user_slice() / 'app.slice').glob('*.scope'):
         try:
             usage = int((scope / 'cpu.stat').read_text().split('\n')[0].split()[1])
-            if not (scope / 'cgroup.procs').read_text().strip():
+            # populated covers sub-cgroups too (Flatpak apps live one level down).
+            if 'populated 1' not in (scope / 'cgroup.events').read_text().split('\n'):
                 continue
         except (OSError, IndexError, ValueError):
             continue
@@ -369,6 +440,9 @@ def main(argv=None):
     boot = sub.add_parser('next-boot')
     boot.add_argument('arm', choices=['default', 'psr'])
     sub.add_parser('boot-status')
+    test = sub.add_parser('test-freeze', help='freeze the freeze-apps targets now for a few seconds, then thaw')
+    test.add_argument('--seconds', type=float, default=5)
+    test.add_argument('--keep', action='append')
     sub.add_parser('restore')
     sub.add_parser('run')
     args = parser.parse_args(argv)
@@ -377,13 +451,21 @@ def main(argv=None):
     elif args.command == 'units':
         print(json.dumps(freezable_units()))
     elif args.command == 'status':
-        print(read(STATE) or '{}')
+        try:
+            state = json.loads(read(STATE) or '{}')
+        except ValueError:
+            state = {}
+        state.update(locked=screen_locked(), on_battery=on_battery(), freezer=freezer_report(state.get('units')),
+                     uncovered=uncovered())
+        print(json.dumps(state, indent=1))
+    elif args.command == 'test-freeze':
+        units = freeze_targets(args.keep if args.keep is not None else ['t3code'])
+        print(json.dumps({'seconds': args.seconds, 'units': test_freeze(units, args.seconds),
+                          'uncovered': uncovered()}, indent=1))
     elif args.command == 'start':
         units = None
         if args.name == 'freeze-apps':
-            keep = [k.lower() for k in (args.keep if args.keep is not None else ['t3code'])]
-            units = [u['unit'] for u in freezable_units()
-                     if not any(k in (u['unit'] + ' ' + u['label']).lower() for k in keep)]
+            units = freeze_targets(args.keep if args.keep is not None else ['t3code'])
             if not units:
                 parser.error('no app scopes to freeze')
         if args.name not in catalog(args.unit, units):

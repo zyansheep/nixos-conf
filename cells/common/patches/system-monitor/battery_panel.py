@@ -973,13 +973,35 @@ class BatteryPanel(Adw.Application):
             result.add_css_class('result')
             info.append(result)
         row.append(info)
-        button = Gtk.Button(label='Start', valign=Gtk.Align.CENTER)
-        button.set_sensitive(not active)
-        # '//' matches no unit name: keep nothing.
-        button.connect('clicked', lambda _b: self.start(
-            'freeze-apps', extra=['--keep', 't3code' if self.keep_t3.get_active() else '//']))
-        row.append(button)
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER)
+        keep = lambda: ['--keep', 't3code' if self.keep_t3.get_active() else '//']  # '//' matches nothing.
+        start = Gtk.Button(label='Start')
+        start.set_sensitive(not active)
+        start.connect('clicked', lambda _b: self.start('freeze-apps', extra=keep()))
+        buttons.append(start)
+        test = Gtk.Button(label='Test now (5 s)')
+        test.set_tooltip_text('Freeze the same apps for 5 seconds right now, measure, and thaw')
+        test.set_sensitive(not active)
+        test.connect('clicked', lambda _b: (self.banner.set_text('Freezing apps for 5 seconds…'), self.command(
+            ['power-experiment', 'test-freeze', '--seconds', '5'] + keep(), done=self.freeze_test_result)))
+        buttons.append(test)
+        row.append(buttons)
         return row
+
+    def freeze_test_result(self, output):
+        try:
+            data = json.loads(output)
+        except ValueError:
+            return f'Freeze test: unreadable output {output[:200]!r}'
+        units = data['units']
+        frozen = [u for u in units if u['state'] == 'frozen']
+        leaky = [f"{u['label']} {u['cpu_ms_while_frozen']} ms" for u in units if u['cpu_ms_while_frozen'] > 20]
+        text = (f"Freeze test: {len(frozen)}/{len(units)} app scopes frozen for {data['seconds']:g} s"
+                + (f"; still used CPU: {', '.join(leaky)}" if leaky else '; none used CPU while frozen') + '.')
+        missed = [f"{', '.join(g['top'])} ({g['unit']}, {g['cpu_s']} CPU-s)" for g in data['uncovered'][:3]]
+        if missed:
+            text += ' Not freezable (outside app scopes): ' + '; '.join(missed) + '.'
+        return text
 
     def psr_row(self):
         row = Gtk.Box(spacing=10)
@@ -1031,14 +1053,15 @@ class BatteryPanel(Adw.Application):
         self.command(command + list(extra))
 
     def command(self, argv, done=None):
-        process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDERR_PIPE)
-        message = done
+        """Run a CLI; `done` is a note to pin, or a function of stdout returning one."""
+        process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDOUT_PIPE | Gio.SubprocessFlags.STDERR_PIPE)
 
         def finished(proc, res):
-            _, _, err = proc.communicate_utf8_finish(res)
+            _, out, err = proc.communicate_utf8_finish(res)
             if not proc.get_successful():
                 self.banner.set_text(f'Command failed: {(err or "").strip()[:300]}')
                 return
+            message = done(out or '') if callable(done) else done
             if message:
                 self.note = message  # Kept under the status line until the panel restarts.
                 self.refresh_status()
@@ -1079,13 +1102,21 @@ class BatteryPanel(Adw.Application):
         state = self.experiment_state()
         status = state.get('status')
         self.stop_button.set_visible(status in ('running', 'paused'))
+        frozen = ''
+        if state.get('units') and status in ('running', 'paused'):
+            states = [experiment.freeze_get(u) for u in experiment.live_units(state['units'])]
+            frozen = f" Apps frozen right now: {states.count('frozen')}/{len(states)}."
         if status == 'running':
             left = max(0, state['ends_at'] - time.time()) / 3600
             self.banner.set_text(f"Running: {state['label']} — block {state['block']} is {state['arm']} "
                                  f"({state['value']}), {duration(left)} left. "
-                                 + ('Settling (first minute ignored).' if time.time() < state['washout_until'] else ''))
+                                 + ('Settling (first minute ignored).' if time.time() < state['washout_until'] else '')
+                                 + frozen)
         elif status == 'paused':
-            self.banner.set_text(f"Paused: {state['label']} — {state.get('reason')}. Setting restored meanwhile.")
+            reason = state.get('reason')
+            if reason == 'waiting for the screen to lock':
+                reason += ' (apps keep running until you lock with Ctrl+Alt+L)'
+            self.banner.set_text(f"Paused: {state['label']} — {reason}. Setting restored meanwhile." + frozen)
         elif status == 'finished':
             self.banner.set_text(f"Last run: {state.get('label')} finished after {state.get('blocks', 0)} blocks.")
         else:
