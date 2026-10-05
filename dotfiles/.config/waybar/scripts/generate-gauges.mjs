@@ -116,7 +116,7 @@ for (let level = 0; level < 4; level++) {
 // inner body. ETA_WIDTH fits the widest labels measured in the bar font:
 // "⚡ ~1:42 full ~0:35 24W" (117px; 124 with double-digit hours).
 const BATTERY_WIDTH = 150;
-const ETA_WIDTH = 124;
+const ETA_WIDTH = 121;  // Plus a 6px left margin: 6 + 121 + 14 (profile) + 7 ≤ 150.
 const BATTERY_FILL = BATTERY_WIDTH - 10;
 // https://github.com/lucide-icons/lucide/blob/main/icons/battery.svg
 // See gauges/LUCIDE-LICENSE. The fill is CSS, so only three SVGs are needed.
@@ -150,7 +150,7 @@ css += `
 #custom-battery-eta {
   min-width: ${ETA_WIDTH}px;
   min-height: 22px;
-  margin: 0 0 0 3px;
+  margin: 0 0 0 6px;
   padding: 0;
   font-family: "DejaVu Sans", sans-serif;
   font-size: 10px;

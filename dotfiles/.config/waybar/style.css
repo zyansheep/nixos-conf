@@ -591,9 +591,9 @@ window.gauges-arc #wireplumber.muted {
   background-repeat: no-repeat;
 }
 #custom-battery-eta {
-  min-width: 124px;
+  min-width: 121px;
   min-height: 22px;
-  margin: 0 0 0 3px;
+  margin: 0 0 0 6px;
   padding: 0;
   font-family: "DejaVu Sans", sans-serif;
   font-size: 10px;
