@@ -11,6 +11,12 @@ window#waybar {
   transition-duration: .5s;
 }
 
+/* "height" is 22: the module boxes keep their old 20px and the extra space sits
+   below them, above the bottom border. */
+.modules-left, .modules-center, .modules-right {
+  margin-bottom: 2px;
+}
+
 window#waybar.hidden {
   opacity: 0.2;
 }
@@ -171,7 +177,9 @@ label:focus {
 #wireplumber.muted {}
 
 #custom-power {
-  margin-right: 3px;
+  margin-right: 5px;
+  /* Bottom padding lifts the centred glyph ~2px. */
+  padding-bottom: 4px;
   font-size: 15px;
 }
 
@@ -279,7 +287,8 @@ label:focus {
   font-weight: 900;
   font-size: 12px;
   min-width: 16px;
-  padding: 0 4px 0 0;
+  /* Even gaps between the battery outline and the notification bell. */
+  padding: 0 0 0 4px;
   color: #ffffff;
 }
 #custom-display.night { color: #f0a54a; }
@@ -287,7 +296,7 @@ label:focus {
 #custom-display.night.grayscale { color: #d9c3a3; }
 
 #custom-notification {
-  padding: 0 1px 0 3px;
+  padding: 0 0 0 4px;
   color: #ffffff;
 }
 
