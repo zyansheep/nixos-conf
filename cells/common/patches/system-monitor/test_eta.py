@@ -78,7 +78,7 @@ class EtaTests(unittest.TestCase):
             self.assertAlmostEqual(asleep['hours'], live.estimate()['detail']['energy_wh'], delta=0.01)
             fill = int(next(c for c in out['class'] if c.startswith('fill'))[4:])
             self.assertLess(fill, 33)                 # Energy fraction is below the charge fraction here.
-            self.assertRegex(out['text'], r'^\d+:\d\d <span[^>]*>±\d+:\d\d</span> <span[^>]*>15\.0W</span>$')
+            self.assertRegex(out['text'], r'</span> \d+:\d\d <span[^>]*>±\d+:\d\d</span> <span[^>]*>15\.0W</span>$')
             (battery / 'status').write_text('Not charging')
             plugged = live.estimate()
             self.assertIn('plugged', plugged['class'])

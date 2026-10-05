@@ -324,7 +324,7 @@ def clock(hours):
 
 # Font Awesome glyphs as escapes: private-use characters are invisible in most
 # editors and were once silently lost, leaving the charging bolt blank.
-BOLT, PLUG = '\uf0e7', '\uf1e6'
+BOLT, PLUG, HOURGLASS = '\uf0e7', '\uf1e6', '\uf252'
 APPROX = "<span size='small' alpha='70%'>~</span>"
 
 
@@ -417,7 +417,8 @@ class Live:
             classes.append('discharging')
             if median < 0.5 or fill <= 10:
                 classes.append('low')
-            text = f"{clock(median)} {plus_minus(low, high)} <span alpha='70%'>{state['watts']:.1f}W</span>"
+            text = (f"{icon(HOURGLASS)} {clock(median)} {plus_minus(low, high)} "
+                    f"<span alpha='70%'>{state['watts']:.1f}W</span>")
         elif state['status'] == 'Charging':
             target = state['limit'] or 100
             rate = self.charge_rate(state['full'])
