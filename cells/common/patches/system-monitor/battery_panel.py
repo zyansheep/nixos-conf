@@ -673,6 +673,9 @@ class BatteryPanel(Adw.Application):
 
         self.sleep = SleepChart()
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        self.sleep_life = wrapped()
+        self.sleep_life.add_css_class('headline')
+        page.append(self.sleep_life)
         page.append(self.sleep)
         self.sleep_note = wrapped()
         self.sleep_note.add_css_class('muted')
@@ -838,6 +841,7 @@ class BatteryPanel(Adw.Application):
         drains = sorted(s['pct_per_hour'] for s in result['sleeps_all'])
         median = drains[len(drains) // 2] if drains else None
         self.sleep.set_data(result['sleeps'], result['span'], median)
+        self.fill_sleep_life(result['sleeps_all'])
         if drains:
             watts = sorted(s['watts'] for s in result['sleeps_all'])[len(drains) // 2]
             self.sleep_note.set_text(f'{len(drains)} suspends logged; median drain {median:.1f} %/h ({watts:.2f} W) — '
@@ -851,6 +855,20 @@ class BatteryPanel(Adw.Application):
         self.psr, self.psr_arm = result.get('psr'), result.get('psr_arm')
         self.fill_experiments()
         return False
+
+    def fill_sleep_life(self, sleeps):
+        estimate = self.estimate()
+        energy = estimate.get('energy_wh') if estimate else None
+        life = report.sleep_runtime(sleeps, energy)
+        if life is None:
+            self.sleep_life.set_text('Asleep from now: needs 3+ logged suspends of 15 minutes or more.'
+                                     if energy else 'Asleep from now: waiting for battery-eta.')
+            return
+        hours = lambda h: f'{h:.0f} h' if h >= 10 else duration(h)
+        self.sleep_life.set_text(
+            f"Asleep from now ({estimate['energy_pct']}% energy): ~{hours(life['hours'])} until empty "
+            f"(80%: {hours(life['low'])}–{hours(life['high'])}) at a typical {life['watts']:.2f} W "
+            f"over {life['suspends']} suspends. Nothing hibernates, so this is how long it can stay suspended.")
 
     def fill_legend(self, points):
         while (child := self.legend.get_first_child()) is not None:
@@ -1137,6 +1155,7 @@ window { background: transparent; }
 #battery-card .banner { background: @menu_card; border-radius: 10px; padding: 8px 10px; }
 #battery-card .experiment { padding: 8px 10px; }
 #battery-card .result { font-weight: bold; font-size: 12px; }
+#battery-card .headline { font-weight: bold; }
 #battery-card list { background: @menu_card; border-radius: 10px; }
 #battery-card button:hover { background: @menu_hover; }
 """

@@ -162,7 +162,11 @@ back / forward (or ← →), Now. Tabs:
   separate battery-% strip. Faded columns are on AC (chip power only); shaded
   bands are sleep. Hover lists the groups, the top apps and the battery level.
 - **Sleep drain** — one dot per suspend (size = length) at %/h, with the median
-  across all history.
+  across all history, under a headline estimate of how long the laptop would
+  last suspended from now: remaining energy over a log-normal fit of
+  per-suspend drain (longer suspends weigh more), with an 80% predictive
+  interval for one new suspend (spread between suspends plus the uncertainty of
+  their mean).
 - **What-if runtime** — extra minutes per full charge, with 90% intervals.
   Model estimates (outlined) remove an app's or group's activity, or dim the
   display, and refit on 10-minute moving-block bootstrap resamples (residuals

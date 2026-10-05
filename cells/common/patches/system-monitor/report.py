@@ -561,6 +561,28 @@ def sleep_drain(events):
     return result
 
 
+def sleep_runtime(sleeps, energy_wh, z=1.2816):
+    """Hours a suspend would last from `energy_wh` (median, low, high of an 80% interval).
+
+    Per-suspend drain rates are fitted as log-normal (always positive, a few bad
+    nights skew high), weighting longer suspends more (short ones are mostly
+    counter rounding). The interval is predictive for one new suspend: the
+    spread between suspends plus the uncertainty of their mean.
+    """
+    rows = [(s['watts'], s['hours']) for s in sleeps if s['watts'] > 0.05 and s['hours'] >= 0.25]
+    if len(rows) < 3 or not energy_wh:
+        return None
+    logs = np.log([w for w, _ in rows])
+    weights = np.sqrt([h for _, h in rows])
+    mean = float(np.average(logs, weights=weights))
+    var = float(np.average((logs - mean) ** 2, weights=weights)) * len(rows) / (len(rows) - 1)
+    effective = weights.sum() ** 2 / (weights ** 2).sum()
+    sigma = math.sqrt(var * (1 + 1 / effective))
+    watts = math.exp(mean)
+    return {'hours': energy_wh / watts, 'low': energy_wh / math.exp(mean + z * sigma),
+            'high': energy_wh / math.exp(mean - z * sigma), 'watts': watts, 'suspends': len(rows)}
+
+
 # --- Timeline --------------------------------------------------------------------
 
 def timeline(minutes, model):

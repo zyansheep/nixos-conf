@@ -130,6 +130,16 @@ class ReportTests(unittest.TestCase):
         self.assertAlmostEqual(sleep['watts'], .06 * 15.5)
         self.assertAlmostEqual(sleep['pct_per_hour'], 2)
 
+    def test_sleep_runtime(self):
+        sleeps = [{'watts': w, 'hours': h} for w, h in ((0.9, 3), (1.0, 1), (1.1, 2), (0.95, 8), (1.05, 0.5))]
+        estimate = report.sleep_runtime(sleeps, 24.0)
+        self.assertAlmostEqual(estimate['hours'], 24.0, delta=1.5)        # ~1 W from 24 Wh
+        self.assertLess(estimate['low'], estimate['hours'])
+        self.assertGreater(estimate['high'], estimate['hours'])
+        self.assertIsNone(report.sleep_runtime(sleeps[:2], 24.0))       # Too few suspends
+        noisy = report.sleep_runtime(sleeps + [{'watts': 3.0, 'hours': 1}], 24.0)
+        self.assertGreater(noisy['high'] - noisy['low'], estimate['high'] - estimate['low'])
+
     def test_incremental_day_cache_matches_full_parse(self):
         with tempfile.TemporaryDirectory() as tmp:
             log, cache = Path(tmp) / 'log', Path(tmp) / 'cache'
