@@ -74,7 +74,10 @@ names and routing controls use visible labels without extra hover hints.
 Hovering any of these indicators opens a native GTK3 panel immediately, without
 starting a process or waiting to sample. The panel stays open while the pointer
 is over its indicator or contents, supports scrolling with a visible scrollbar,
-preserves the scroll position across refreshes, and closes 180 ms after leaving both. It does not grab background input or re-enable the
+preserves the scroll position across refreshes, and closes as soon as the pointer
+leaves sideways or upward (a 180 ms grace covers only the gap down into the panel,
+or back up from it). Only one panel is open at a time: hovering another indicator
+replaces it. It does not grab background input or re-enable the
 other bar tooltips.
 
 - **CPU:** up to 100 program names ranked by rolling past-minute CPU usage,

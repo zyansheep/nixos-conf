@@ -23,7 +23,21 @@ class HoverMonitor : public sigc::trackable {
   sigc::connection leave_, refresh_;
   bool inside_ = false;
 
+  // One panel at a time: entering another indicator replaces this one at once
+  // instead of letting both linger through the close delay.
+  static HoverMonitor*& active() {
+    static HoverMonitor* current = nullptr;
+    return current;
+  }
+  void hideNow() {
+    cancelClose();
+    inside_ = false;
+    popup_.hide();
+    if (active() == this) active() = nullptr;
+  }
   void show() {
+    if (active() != nullptr && active() != this) active()->hideNow();
+    active() = this;
     update();
     auto* top = anchor_.get_toplevel();
     auto display = anchor_.get_display();
@@ -47,7 +61,7 @@ class HoverMonitor : public sigc::trackable {
   void scheduleClose() {
     cancelClose();
     leave_ = Glib::signal_timeout().connect([this] {
-      if (!inside_) popup_.hide();
+      if (!inside_) hideNow();
       return false;
     }, 180);
   }
@@ -134,8 +148,11 @@ class HoverMonitor : public sigc::trackable {
     anchor.signal_enter_notify_event().connect(sigc::track_obj([this](GdkEventCrossing*) {
       cancelClose(); show(); return false;
     }, *this));
+    // The 180 ms grace only covers the gap the pointer crosses on its way down
+    // into the panel; leaving sideways or upward closes it immediately.
     anchor.signal_leave_notify_event().connect(sigc::track_obj([this](GdkEventCrossing* event) {
-      if (event->detail != GDK_NOTIFY_INFERIOR) scheduleClose();
+      if (event->detail == GDK_NOTIFY_INFERIOR) return false;
+      if (event->y >= anchor_.get_allocated_height() - 1) scheduleClose(); else hideNow();
       return false;
     }, *this));
     popup_.add_events(Gdk::ENTER_NOTIFY_MASK | Gdk::LEAVE_NOTIFY_MASK);
@@ -143,7 +160,10 @@ class HoverMonitor : public sigc::trackable {
       inside_ = true; cancelClose(); return false;
     });
     popup_.signal_leave_notify_event().connect([this](GdkEventCrossing* event) {
-      if (event->detail != GDK_NOTIFY_INFERIOR) { inside_ = false; scheduleClose(); }
+      if (event->detail == GDK_NOTIFY_INFERIOR) return false;
+      inside_ = false;
+      // Heading back up to the indicator keeps it open; anywhere else closes now.
+      if (event->y <= 0) scheduleClose(); else hideNow();
       return false;
     });
     refresh_ = Glib::signal_timeout().connect_seconds([this] {
@@ -151,6 +171,10 @@ class HoverMonitor : public sigc::trackable {
       return true;
     }, 2);
   }
-  ~HoverMonitor() { leave_.disconnect(); refresh_.disconnect(); }
+  ~HoverMonitor() {
+    leave_.disconnect();
+    refresh_.disconnect();
+    if (active() == this) active() = nullptr;
+  }
 };
 }  // namespace waybar
