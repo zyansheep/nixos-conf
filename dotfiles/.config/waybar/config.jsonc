@@ -240,6 +240,9 @@
   // its models from the power log.
   "custom/battery-eta": {
     "exec": "/run/current-system/sw/bin/battery-eta",
+    // Left-align inside the fixed-width slot, so the icon sits at the outline's
+    // edge instead of floating in the middle of the spare width.
+    "align": 0,
     "return-type": "json",
     "restart-interval": 10,
     "tooltip": false,
