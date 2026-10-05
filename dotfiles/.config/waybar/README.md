@@ -50,7 +50,10 @@ Below that, the time-left distribution: battery-eta's full forecast density
 (the battery is empty by t exactly when the average draw over t reaches the
 remaining energy / t, so P(T ≤ t) comes straight from the draw forecast), with
 the 80% interval shaded darker and the median marked; green and to the charge
-limit while charging. Below that, battery use over the last 30 minutes on battery ranks apps and
+limit while charging. Under the chart, how long the laptop would last
+suspended from now: remaining energy over a log-normal fit of per-suspend
+drain (longer suspends weigh more), with an 80% predictive interval for one new
+suspend (spread between suspends plus the uncertainty of their mean). Below that, battery use over the last 30 minutes on battery ranks apps and
 hardware together in average watts and share, with the size of the long-term
 power log underneath (see [Battery use and the power log](#battery-use-and-the-power-log)).
 AC plug/unplug events still select Balanced / Power saver through udev rules.
@@ -162,11 +165,7 @@ back / forward (or ← →), Now. Tabs:
   separate battery-% strip. Faded columns are on AC (chip power only); shaded
   bands are sleep. Hover lists the groups, the top apps and the battery level.
 - **Sleep drain** — one dot per suspend (size = length) at %/h, with the median
-  across all history, under a headline estimate of how long the laptop would
-  last suspended from now: remaining energy over a log-normal fit of
-  per-suspend drain (longer suspends weigh more), with an 80% predictive
-  interval for one new suspend (spread between suspends plus the uncertainty of
-  their mean).
+  across all history.
 - **What-if runtime** — extra minutes per full charge, with 90% intervals.
   Model estimates (outlined) remove an app's or group's activity, or dim the
   display, and refit on 10-minute moving-block bootstrap resamples (residuals

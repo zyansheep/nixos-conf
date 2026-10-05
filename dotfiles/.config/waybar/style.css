@@ -786,6 +786,7 @@ window.gauges-arc #wireplumber.muted {
   border-top: 1px solid #45484d;
 }
 #power-profiles-menu #battery-eta-title { font-size: 10px; font-weight: bold; }
+#power-profiles-menu #battery-eta-sleep { font-size: 10px; margin-top: 2px; }
 #power-profiles-menu #battery-top-apps {
   background: transparent;
   border: none;

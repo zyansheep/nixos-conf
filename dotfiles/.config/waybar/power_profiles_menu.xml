@@ -126,6 +126,12 @@
                 <property name="height-request">60</property>
               </object>
             </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="name">battery-eta-sleep</property>
+                <property name="xalign">0</property>
+              </object>
+            </child>
           </object>
         </child>
       </object>

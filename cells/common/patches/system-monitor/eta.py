@@ -299,8 +299,9 @@ class Live:
         self.params, self.loading = dict(DEFAULTS), False
 
     def refit(self):
-        minutes, _ = report.load_range(time.time() - 30 * 86400, time.time() + 60)
+        minutes, events = report.load_range(time.time() - 30 * 86400, time.time() + 60)
         self.params = fit(minutes)
+        self.params['sleep'] = report.sleep_model(report.sleep_drain(events))
         # Seed the recent window from the log so a restart is not blind.
         if not self.samples:
             for m in minutes[-15:]:
@@ -348,6 +349,8 @@ class Live:
         result = {'status': state['status'], 'pct': state['pct'], 'energy_pct': fill, 'watts': state['watts'],
                   'energy_wh': energy, 'updated': time.time()}
         classes = [f'fill{max(0, min(100, fill))}']
+        if (asleep := report.sleep_runtime([], energy, model=params.get('sleep'))) is not None:
+            result['sleep'] = asleep  # How long a suspend from now would last.
         if state['status'] == 'Discharging':
             # A short session borrows from the long-run mean instead of trusting a few seconds.
             recent = self.recent('Discharging', 600)

@@ -91,7 +91,13 @@ struct PowerMenuEta {
   std::string kind;  // "empty" or "full"
   std::vector<double> hours, density;
   double median = 0, low = 0, high = 0;
+  std::string sleep;  // How long a suspend from now would last; empty until fitted.
 };
+
+// Hours as "14 h" from ten hours up, h:mm below.
+inline std::string powerMenuLongHours(double hours) {
+  return hours >= 10 ? std::to_string(std::lround(hours)) + " h" : powerMenuClock(hours);
+}
 
 inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) {
   Json::Value state;
@@ -102,6 +108,12 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
   if (!Json::parseFromStream(builder, input, &state, &errors) || !state.isObject() ||
       std::abs(now - state["updated"].asDouble()) >= 15)
     return eta;
+  const auto& asleep = state["sleep"];
+  if (asleep.isObject() && asleep["hours"].isNumeric())
+    eta.sleep = "Asleep from now: ~" + powerMenuLongHours(asleep["hours"].asDouble()) + "   80%: " +
+                powerMenuLongHours(asleep["low"].asDouble()) + "–" +
+                powerMenuLongHours(asleep["high"].asDouble()) + " at " +
+                powerMenuTenths(asleep["watts"].asDouble()) + " W";
   const auto& distribution = state["distribution"];
   if (!state["hours"].isNumeric() || !distribution.isObject() || !distribution["t"].isArray() ||
       distribution["t"].size() != distribution["p"].size() || distribution["t"].size() < 2) {

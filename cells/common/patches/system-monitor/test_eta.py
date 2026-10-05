@@ -72,6 +72,10 @@ class EtaTests(unittest.TestCase):
             live.params = dict(self.params, volts=[14.0 + 3.0 * p / 100 for p in range(101)])
             out = live.estimate()
             self.assertIn('discharging', out['class'])
+            self.assertNotIn('sleep', out['detail'])                 # No suspends fitted yet
+            live.params['sleep'] = (math.log(1.0), 0.2, 5)           # ~1 W asleep
+            asleep = live.estimate()['detail']['sleep']
+            self.assertAlmostEqual(asleep['hours'], live.estimate()['detail']['energy_wh'], delta=0.01)
             fill = int(next(c for c in out['class'] if c.startswith('fill'))[4:])
             self.assertLess(fill, 33)                 # Energy fraction is below the charge fraction here.
             self.assertRegex(out['text'], r'^\d+:\d\d <span[^>]*>±\d+:\d\d</span> <span[^>]*>15\.0W</span>$')

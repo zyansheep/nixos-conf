@@ -1,6 +1,6 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,126 @@
+@@ -12,9 +12,131 @@
  
  namespace waybar {
  
@@ -111,6 +111,11 @@
 +    const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
 +    gtk_label_set_text(GTK_LABEL(widget), eta.title.empty() ? "Time left: waiting for battery-eta…"
 +                                                              : eta.title.c_str());
++  } else if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-eta-sleep") == 0) {
++    const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
++    gtk_label_set_text(GTK_LABEL(widget), eta.sleep.c_str());
++    gtk_widget_set_no_show_all(widget, TRUE);
++    gtk_widget_set_visible(widget, !eta.sleep.empty());
 +  } else if (GTK_IS_DRAWING_AREA(widget) &&
 +             g_strcmp0(gtk_widget_get_name(widget), "battery-eta-chart") == 0) {
 +    auto* eta = new PowerMenuEta(powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6));

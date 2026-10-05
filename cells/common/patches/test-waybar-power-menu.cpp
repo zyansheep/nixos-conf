@@ -61,6 +61,14 @@ int main() {
     "distribution": {"kind": "full", "t": [0.5, 1.0], "p": [1, 2]}})";
   assert(waybar::powerMenuEta(eta, 1001).title ==
          "Charging: ×1.4 use per minute (80%: ×1.2–1.7)\nTime to 90%: 0:45   80%: 0:30–1:00");
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Not charging",
+    "sleep": {"hours": 14.1, "low": 10.6, "high": 18.8, "watts": 1.03}})";
+  estimate = waybar::powerMenuEta(eta, 1001);
+  assert(!estimate.valid && estimate.sleep == "Asleep from now: ~14 h   80%: 11 h–19 h at 1.0 W");
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Discharging", "hours": 1, "low": 0.8, "high": 1.2,
+    "sleep": {"hours": 6.5, "low": 4.95, "high": 8.25, "watts": 1.5},
+    "distribution": {"kind": "empty", "t": [0.5, 1.5], "p": [1, 1]}})";
+  assert(waybar::powerMenuEta(eta, 1001).sleep == "Asleep from now: ~6:30   80%: 4:57–8:15 at 1.5 W");
   std::filesystem::remove_all(root);
   std::cout << "Battery health/cycle, battery-use and time-left checks passed\n";
 }
