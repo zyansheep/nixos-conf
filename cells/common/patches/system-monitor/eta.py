@@ -11,9 +11,11 @@ long-run mean with a learned time constant, and the variance of the horizon
 average (plus uncertainty in the long-run mean) gives a log-normal interval.
 The horizon is solved jointly with the answer (T = energy / mean draw over T).
 
-Charging. Minutes per percent follow the charge curve learned from past
-charging (constant current, then taper), scaled by the current rate relative
-to that curve; the interval comes from how far 10-minute rates stray from it.
+Charging. The label shows minutes of battery use bought per minute of
+charging (×N): energy entering the battery over the forecast average battery
+draw. Time to the charge limit (for the menu) follows the charge curve learned
+from past charging (constant current, then taper), scaled by the current rate;
+its interval comes from how far 10-minute rates stray from that curve.
 
 `battery-eta` prints one Waybar JSON line every 2 s (time, ± half the 80%
 interval, then watts) and mirrors the estimate to
@@ -239,6 +241,19 @@ def time_to_empty(params, energy, recent):
     return tuple(result)
 
 
+def use_per_charge(params, charge_watts, energy_full):
+    """Minutes of battery use bought per minute of charging (median, low, high).
+
+    Energy entering the battery (true watts, from the charge counter) divided by
+    the draw it will later supply: the forecast average battery draw over a full
+    charge's worth of use (the AC draw itself is not representative: AC runs the
+    Balanced profile). The interval is that draw forecast's 80% interval.
+    """
+    horizon = 60 * energy_full / (params['kappa'] * params['mean'])
+    median, low, high = (params['kappa'] * d for d in horizon_draw(params, params['mean'], horizon))
+    return charge_watts / median, charge_watts / high, charge_watts / low
+
+
 def time_to_full(params, pct, target, rate_now):
     """Minutes (median, low, high) to reach `target` percent at the learned charge curve."""
     curve = params['charge_curve'] or [0.8 if p < 80 else max(0.2, 0.8 - (p - 80) * 0.06) for p in range(101)]
@@ -304,7 +319,7 @@ class Live:
         self.samples.append((now, current * volts, status, charge))
         while self.samples and self.samples[0][0] < now - 900:
             self.samples.popleft()
-        return {'status': status, 'watts': current * volts, 'charge': charge, 'full': full,
+        return {'status': status, 'watts': current * volts, 'charge': charge, 'full': full, 'volts': volts,
                 'pct': 100 * charge / full if full else 0, 'limit': report_number(b / 'charge_control_end_threshold'),
                 'capacity': report_number(b / 'capacity')}
 
@@ -357,9 +372,14 @@ class Live:
                 times, pdf, _ = full_distribution(median / 60, params['charge_sigma'], low / 60, high / 60)
                 result['distribution'] = {'kind': 'full', 't': [round(t, 4) for t in times],
                                           'p': [round(v, 5) for v in pdf]}
+            # Into the battery, in true watts: the counter's rate, else the calibrated reading.
+            charge_watts = (rate / 100 * state['full'] * 60 * state['volts'] if rate
+                            else abs(state['watts']) * params['kappa'])
+            ratio, ratio_low, ratio_high = use_per_charge(params, charge_watts, energy_full)
+            result.update(ratio=ratio, ratio_low=ratio_low, ratio_high=ratio_high, charge_watts=charge_watts)
             classes.append('charging')
             text = (f"<span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span> "
-                    f"{clock(median / 60)} {plus_minus(low / 60, high / 60)} "
+                    f"×{ratio:.1f} <span size='small' alpha='70%'>±{(ratio_high - ratio_low) / 2:.1f}</span> "
                     f"<span alpha='70%'>{abs(state['watts']):.1f}W</span>")
         else:
             classes.append('plugged')

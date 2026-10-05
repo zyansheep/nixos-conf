@@ -89,6 +89,25 @@ class EtaTests(unittest.TestCase):
         times, pdf, cdf = eta.full_distribution(1.0, 0.25, 0.73, 1.38, points=400)
         self.assertAlmostEqual(float(np.interp(1.0, times, cdf)), 0.5, delta=0.01)
 
+    def test_use_per_minute_of_charging(self):
+        median, low, high = eta.use_per_charge(self.params, 32.0, 48.0)   # 32 W in, ~16 W typical draw
+        self.assertAlmostEqual(median, 2.0, delta=0.1)
+        self.assertLess(low, median)
+        self.assertLess(median, high)
+        with tempfile.TemporaryDirectory() as tmp:
+            battery = Path(tmp) / 'class/power_supply/BAT1'
+            battery.mkdir(parents=True)
+            for name, value in {'type': 'Battery', 'status': 'Charging', 'current_now': '2000000',
+                                'voltage_now': '16000000', 'charge_now': '1500000', 'charge_full': '3000000',
+                                'charge_control_end_threshold': '90', 'capacity': '50'}.items():
+                (battery / name).write_text(value)
+            live = eta.Live(Path(tmp))
+            live.params = dict(self.params)
+            out = live.estimate()
+            self.assertRegex(out['text'], r'×2\.0 <span[^>]*>±\d\.\d</span> <span[^>]*>32\.0W</span>$')
+            self.assertIn('charging', out['class'])
+            self.assertAlmostEqual(out['detail']['ratio'], 2.0, delta=0.1)
+
     def test_plus_minus_is_half_the_interval(self):
         self.assertIn('±0:15', eta.plus_minus(1.0, 1.5))
 

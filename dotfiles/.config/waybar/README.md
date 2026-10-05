@@ -18,7 +18,8 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 
 The battery outline shows the estimated time left, ± half its 80% interval and
 live wattage (for example `1:17 ±0:15 14.2W`), plus the active profile. While
-charging it shows a bolt and the time to the charge limit instead; a plug means
+charging it shows a bolt and `×N ±d`: minutes of battery use each minute of charging
+buys (energy into the battery over your forecast average battery draw); a plug means
 connected without charging (“held at limit” at the charge limit). The fill is
 remaining *energy* at 1% resolution, not the EC's charge percentage: the gauge
 counts charge linearly, but loaded voltage falls from ~17 V near full to ~14 V

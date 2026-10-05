@@ -78,6 +78,11 @@ inline std::string powerMenuClock(double hours) {
   return std::to_string(minutes / 60) + (minutes % 60 < 10 ? ":0" : ":") + std::to_string(minutes % 60);
 }
 
+inline std::string powerMenuTenths(double value) {
+  const long tenths = std::lround(value * 10);
+  return std::to_string(tenths / 10) + "." + std::to_string(std::labs(tenths % 10));
+}
+
 // battery-eta's estimate: title line plus the time-left (or time-to-limit)
 // density on a grid of hours. `valid` is false when stale or not estimating.
 struct PowerMenuEta {
@@ -117,6 +122,11 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
                                   : std::string("Time left: ")) +
               powerMenuClock(eta.median) + "   80%: " + powerMenuClock(eta.low) + "–" +
               powerMenuClock(eta.high);
+  // While charging, lead with minutes of battery use bought per minute plugged in.
+  if (eta.kind == "full" && state["ratio"].isNumeric())
+    eta.title = "Charging: ×" + powerMenuTenths(state["ratio"].asDouble()) + " use per minute (80%: ×" +
+                powerMenuTenths(state["ratio_low"].asDouble()) + "–" +
+                powerMenuTenths(state["ratio_high"].asDouble()) + ")\n" + eta.title;
   eta.valid = true;
   return eta;
 }

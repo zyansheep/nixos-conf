@@ -1093,6 +1093,9 @@ class BatteryPanel(Adw.Application):
                 if status == 'Discharging':
                     line += f" · {duration(estimate['hours'])} left (80%: {interval})"
                 elif status == 'Charging':
+                    if estimate.get('ratio') is not None:
+                        line += (f" · ×{estimate['ratio']:.1f} minutes of use per minute charging "
+                                 f"(80%: ×{estimate['ratio_low']:.1f}–{estimate['ratio_high']:.1f})")
                     line += f" · {duration(estimate['hours'])} to {estimate['target']:.0f}% (80%: {interval})"
             elif status == 'Discharging' and watts > 0.5:
                 line += f' · {watts:.1f} W · ~{duration(charge / watts)} left at this draw'

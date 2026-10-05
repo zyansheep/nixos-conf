@@ -56,6 +56,11 @@ int main() {
     "target": 90, "distribution": {"kind": "full", "t": [0.2, 0.5], "p": [1, 2, 3]}})";
   assert(!waybar::powerMenuEta(eta, 1001).valid);  // mismatched arrays
   assert(waybar::powerMenuClock(1.999) == "2:00" && waybar::powerMenuClock(-1) == "--");
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Charging", "hours": 0.75, "low": 0.5, "high": 1.0,
+    "target": 90, "ratio": 1.44, "ratio_low": 1.2, "ratio_high": 1.71,
+    "distribution": {"kind": "full", "t": [0.5, 1.0], "p": [1, 2]}})";
+  assert(waybar::powerMenuEta(eta, 1001).title ==
+         "Charging: ×1.4 use per minute (80%: ×1.2–1.7)\nTime to 90%: 0:45   80%: 0:30–1:00");
   std::filesystem::remove_all(root);
   std::cout << "Battery health/cycle, battery-use and time-left checks passed\n";
 }
