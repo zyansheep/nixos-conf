@@ -177,7 +177,7 @@ label:focus {
 #wireplumber.muted {}
 
 #custom-power {
-  margin-right: 4px;
+  margin-right: 2px;
   /* Bottom padding lifts the centred glyph ~1px to sit level with its neighbours. */
   padding-bottom: 2px;
   font-size: 15px;
