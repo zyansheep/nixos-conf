@@ -116,12 +116,17 @@ battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
   storage (busy time), USB devices, audio and keyboard backlight use learned
   watts per unit of activity; the unexplained remainder is “Rest of system”.
 
-Both are ridge regressions updated online, shrunk toward prior guesses so
-features that never vary keep plausible values, and fitted on battery time only
-(AC runs a hungrier power profile). The platform model sees one-minute means:
-the battery reading lags chip power by ~10 s. Coefficients persist in
-`models.json`. On AC the battery reading is charge, not consumption, so the
-menu shows the last 30 minutes on battery or, failing that, chip power only.
+Both are non-negative least squares on one-minute means (the battery reading
+lags chip power by ~10 s), lightly shrunk toward prior guesses so features that
+never vary keep plausible values, and fitted on battery time only (AC runs a
+hungrier power profile). **Models are trained in one place:** `battery-eta`
+fits these and its own time-left, charging and sleep models on the last 30 days
+at start and every 15 minutes, and writes them all to
+`~/.local/state/waybar-monitor/power/models.json`. The collector's menu
+breakdown reloads that file when it changes, and the battery panel uses it
+(fitting its own only if the file is missing or over an hour old). On AC the
+battery reading is charge, not consumption, so the menu shows the last 30
+minutes on battery or, failing that, chip power only.
 
 Every 10 seconds the monitor appends one JSON line of **raw inputs** (not
 attributions) to `~/.local/state/waybar-monitor/power/YYYY-MM-DD.jsonl`; finished
@@ -195,13 +200,23 @@ back / forward (or ← →), Now. Tabs:
   boots are compared by least squares on workload plus a PSR indicator, with a
   bootstrap over whole boots, once each arm has two boots with battery time.
 
-`report.py` caches per-minute aggregates in `~/.cache/battery-panel` (finished
-days whole, today up to its last complete minute). Caches older than 60 days are
-pruned (readers use the last 30). Scale: a record is ~5 KB raw and ~250 B
-zstd-compressed, so 1M records (≈4 months awake) is ~250 MB of log; the panel
-and battery-eta cost stays bounded by the 30-day window (~1 s at most), and a
-full-history scan takes ~1–1.5 min (Python or `duckdb ... read_json('*.jsonl*',
-format = 'newline_delimited', union_by_name = true)`). `battery_panel.py --render
+**Parquet layer.** The JSONL log stays the source of truth (Parquet files are
+immutable and schema-bound, so they cannot be the 10-second crash-safe
+journal). `store.py` derives tidy Parquet tables per day under
+`~/.cache/waybar-monitor/parquet/`: `records` (one row per 10 s record, map
+columns for C-states, interrupts, settings), `apps` (record × app), `minutes`
+and `minute_apps` (what the models train on), and `events` (starts, suspends).
+Finished days convert once (~5 s each); today's tables extend from the last
+complete minute. The panel and battery-eta read them; so can any analysis:
+
+    duckdb -c "select avg(bat_w) from '~/.cache/waybar-monitor/parquet/records/*.parquet' where status = 'Discharging'"
+    pandas.read_parquet('~/.cache/waybar-monitor/parquet/minutes')
+
+Delete the directory to rebuild it. Scale: a record is ~5 KB raw JSON, ~250 B in
+the zstd log and ~300 B across the Parquet tables, so 1M records (≈4 months
+awake) is ~250–300 MB each; the panel and battery-eta cost stays bounded by the
+30-day window (~1 s).
+`battery_panel.py --render
 DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.
 
 ### Browser processes and readable labels

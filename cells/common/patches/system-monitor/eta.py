@@ -17,6 +17,11 @@ draw. Time to the charge limit (for the menu) follows the charge curve learned
 from past charging (constant current, then taper), scaled by the current rate;
 its interval comes from how far 10-minute rates stray from that curve.
 
+Training. `battery-eta` is the single trainer: at start and every 15 minutes it
+fits these models and the battery-use attribution models (report.fit) on the
+last 30 days and writes them all to the power log's models.json, which the
+collector's menu breakdown and the battery panel read.
+
 `battery-eta` prints one Waybar JSON line every 2 s (time, ± half the 80%
 interval, then watts) and mirrors the estimate to
 $XDG_RUNTIME_DIR/waybar-monitor/eta.json for the battery panel.
@@ -152,6 +157,41 @@ def fit(minutes):
     params['charge_curve'], params['charge_sigma'] = fit_charging(minutes)
     params['fitted'] = time.time()
     return params
+
+
+MODELS = report.LOG / 'models.json'
+WINDOW_DAYS = 30
+
+
+def train(minutes, events, now=None):
+    """Every model, from one window of history. This is the only place models
+    are trained: the collector's battery-use breakdown and the battery panel
+    read the result from models.json instead of fitting their own."""
+    rows = report.battery_rows(minutes)
+    params = fit(minutes)
+    params['sleep'] = report.sleep_model(report.sleep_drain(events))
+    params['attribution'] = {name: float(value) for name, value in report.fit_rows(rows).items()}
+    params.update(fitted=now or time.time(), window_days=WINDOW_DAYS, battery_minutes=len(rows))
+    return params
+
+
+def save_models(params, path=None):
+    path = path or MODELS
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps({'version': 2, **params}))
+    temporary.replace(path)
+
+
+def load_models(path=None, max_age=3600):
+    """The shared models if trained within `max_age` seconds, else None."""
+    try:
+        data = json.loads((path or MODELS).read_text())
+    except (OSError, ValueError):
+        return None
+    if data.get('version') != 2 or time.time() - data.get('fitted', 0) > max_age:
+        return None
+    return data
 
 
 # --- Forecasts --------------------------------------------------------------------
@@ -299,10 +339,9 @@ class Live:
         self.params, self.loading = dict(DEFAULTS), False
 
     def refit(self):
-        minutes, events = report.load_range(time.time() - 30 * 86400, time.time() + 60)
-        self.params = fit(minutes)
-        self.params['sleep'] = report.sleep_model(report.sleep_drain(events))
-        report.prune_cache()
+        minutes, events = report.load_range(time.time() - WINDOW_DAYS * 86400, time.time() + 60)
+        self.params = train(minutes, events)
+        save_models(self.params)
         # Seed the recent window from the log so a restart is not blind.
         if not self.samples:
             for m in minutes[-15:]:
@@ -404,14 +443,14 @@ def report_number(path):
 
 def main():
     live = Live()
-    try:
-        live.refit()
-    except Exception as error:  # noqa: BLE001 - keep the bar alive on bad history
-        print(f'battery-eta: fit failed: {error}', file=sys.stderr)
-    last_fit = time.time()
+    # Start from the last trained models so the label appears at once; the
+    # first training (which may convert days of log to Parquet) follows.
+    if (saved := load_models(max_age=float('inf'))) is not None:
+        live.params = {**DEFAULTS, **saved}
+    last_fit = 0.0
     RUNTIME.mkdir(parents=True, exist_ok=True)
     while True:
-        if time.time() - last_fit > REFIT:
+        if time.time() - last_fit > REFIT and (last_fit or saved is None or live.samples):
             try:
                 live.refit()
             except Exception as error:  # noqa: BLE001

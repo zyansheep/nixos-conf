@@ -140,15 +140,6 @@ class ReportTests(unittest.TestCase):
         noisy = report.sleep_runtime(sleeps + [{'watts': 3.0, 'hours': 1}], 24.0)
         self.assertGreater(noisy['high'] - noisy['low'], estimate['high'] - estimate['low'])
 
-    def test_prune_cache_keeps_recent_days(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            cache = Path(tmp)
-            for day in ('2026-01-01', '2026-09-30', '2026-10-05'):
-                (cache / f'{day}.json').write_text('{}')
-            (cache / 'notes.json').write_text('{}')
-            report.prune_cache(60, cache, now=time.mktime((2026, 10, 5, 12, 0, 0, 0, 0, -1)))
-            self.assertEqual(sorted(p.name for p in cache.iterdir()), ['2026-09-30.json', '2026-10-05.json', 'notes.json'])
-
     def test_incremental_day_cache_matches_full_parse(self):
         with tempfile.TemporaryDirectory() as tmp:
             log, cache = Path(tmp) / 'log', Path(tmp) / 'cache'

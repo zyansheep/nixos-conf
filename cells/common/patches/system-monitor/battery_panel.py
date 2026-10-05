@@ -20,6 +20,7 @@ gi.require_version("PangoCairo", "1.0")
 from gi.repository import Adw, Gdk, Gio, GLib, Gtk, Pango, PangoCairo  # noqa: E402
 from gi.repository import Gtk4LayerShell as GtkLayerShell  # noqa: E402
 
+import eta  # noqa: E402
 import experiment  # noqa: E402
 import report  # noqa: E402
 
@@ -471,7 +472,9 @@ def gather(start, end):
     """Everything the panel shows for one period (runs off the UI thread)."""
     history, events = report.load_range(time.time() - 30 * 86400, time.time() + 60)
     rows_all = report.battery_rows(history)
-    model = report.fit_rows(rows_all[-5000:])
+    # battery-eta trains every model; fit here only if its models.json is missing or stale.
+    shared = eta.load_models()
+    model = shared['attribution'] if shared else report.fit_rows(rows_all)
     minutes = [m for m in history if start <= m['t'] < end]
     if start < time.time() - 30 * 86400:
         minutes, events_old = report.load_range(start, end)
@@ -483,14 +486,15 @@ def gather(start, end):
     if len(rows) < 30:
         rows, scope = rows_all, 'all history (too little battery time in this period)'
     energy = report.full_energy(history)
-    estimates, info = report.what_if(rows, energy) if rows else ([], None)
+    estimates, info = report.what_if(rows, energy, model=model, train_rows=rows_all) if rows else ([], None)
     power = info['power'] if info else None
     return dict(points=report.timeline(minutes, model), span=(start, end), sleeps=sleeps,
                 sleeps_all=report.sleep_drain(events), estimates=estimates, info=info, scope=scope,
                 effects=report.experiment_effects(history, energy, power) if power else [],
                 psr=report.boot_effect(history, energy, power), psr_arm=experiment.psr_arm(),
                 catalog=[experiment.describe(spec) for spec in experiment.catalog().values()],
-                units=experiment.freezable_units()[:12], model=model)
+                units=experiment.freezable_units()[:12], model=model,
+                trained=shared['fitted'] if shared else None)
 
 
 def whatif_rows(result):
@@ -515,7 +519,9 @@ def whatif_rows(result):
         note = (f"Typical draw {info['power']:.1f} W from {result['scope']} → {info['runtime_h']:.1f} h per full "
                 f"charge ({info['energy']:.0f} Wh). Bars: extra minutes per full charge; whiskers: 90% interval. "
                 "Solid = measured by experiment; outlined = model estimate (assumes the activity simply "
-                "disappears and nothing else changes).")
+                "disappears and nothing else changes)."
+                + (f" Models trained {time.strftime('%H:%M', time.localtime(result['trained']))} by battery-eta."
+                   if result.get('trained') else ' Models fitted here (battery-eta has not trained recently).'))
     else:
         note = 'Not enough battery time logged yet for estimates.'
     return rows, pending, note

@@ -4,8 +4,8 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
-from power import (Deltas, GpuClients, PowerLog, Ridge, attribute, battery_watts, chip_model, experiment_assignment,
-                   interrupts, log_footer, parse_fdinfo, platform_model, summarize, TICKS)
+from power import (PRIOR, Deltas, GpuClients, PowerLog, attribute, battery_watts, experiment_assignment,
+                   interrupts, load_attribution, log_footer, parse_fdinfo, summarize, TICKS)
 
 
 def put(path, text):
@@ -70,29 +70,22 @@ class PowerTests(unittest.TestCase):
         usage = deltas.sample(700, {(2, 0): {'io_w': 20}, (3, 0): {'io_w': 1}}, {(3, 0): 'x'})
         self.assertNotIn('early', usage)
 
-    def test_ridge_learns_with_variation_and_keeps_prior_without(self):
-        model = Ridge(['idle', 'core'], [1.0, 1.0], [5, 5], decay=1)
-        rng = random.Random(4)
-        for _ in range(2000):
-            cores = rng.uniform(0, 4)
-            model.update([1.0, cores], 2.5 + 3.0 * cores + rng.gauss(0, .2))
-        self.assertAlmostEqual(model.coefficient('idle'), 2.5, delta=.1)
-        self.assertAlmostEqual(model.coefficient('core'), 3.0, delta=.1)
-        flat = Ridge(['base', 'backlight'], [1.5, 3.0], [20, 100], decay=1)
-        for _ in range(500):
-            flat.update([1.0, 0.0], 2.0)  # Backlight never changes: no evidence about it.
-        self.assertAlmostEqual(flat.coefficient('backlight'), 3.0)
-        negative = Ridge(['x'], [0.0], [1], decay=1)
-        negative.update([1.0], -5.0)
-        self.assertEqual(negative.params, [0.0])
+    def test_attribution_parameters_come_from_battery_etas_models(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'models.json'
+            self.assertIsNone(load_attribution(path))
+            path.write_text(json.dumps({'version': 2, 'attribution': {'chip': 1.4, 'floor': 5.0, 'junk': 1}}))
+            params = load_attribution(path)
+            self.assertEqual((params['chip'], params['floor'], params['bl']), (1.4, 5.0, PRIOR['bl']))
+            self.assertNotIn('junk', params)
 
     def test_attribution_splits_chip_by_activity_and_platform_by_model(self):
-        chip, platform = chip_model(), platform_model()   # floor 6 W, 0.2 W/(core·GHz²), ×1.3 per chip watt
+        params = dict(PRIOR)   # floor 6 W, 0.2 W/(core·GHz²), ×1.3 per chip watt
         record = {'dt': 10, 'status': 'Discharging', 'bat': {'w': 20.0}, 'soc': {'w': 10.0},
                   'cpu': {'busy_s': 10.0, 'mhz': 2000},
                   'apps': {'Browser': {'cpu': 6.0}, 'Game': {'cpu': 2.0, 'gpu': 2.0}},
                   'display': {'bl': .5}, 'net': {'wlan0': {'rx': 0, 'tx': 0}}}
-        rows = attribute(record, chip, platform)
+        rows = attribute(record, params)
         self.assertAlmostEqual(rows['Processor baseline'], 78.0)        # 1.3 × 6 W × 10 s
         self.assertAlmostEqual(rows['Kernel'] / rows['Browser'], 1 / 3)  # Unowned busy CPU
         self.assertGreater(rows['Game'], rows['Browser'])               # GPU time weighs more than CPU
@@ -100,11 +93,11 @@ class PowerTests(unittest.TestCase):
         self.assertAlmostEqual(rows['Rest of system'], 55.0)
         self.assertAlmostEqual(sum(rows.values()), 200.0)                # Equals battery energy
         record['bat']['w'] = 13.5  # Less platform power than modelled: shrink, no negative rest.
-        rows = attribute(record, chip, platform)
+        rows = attribute(record, params)
         self.assertAlmostEqual(rows['Display'], 5.0)
         self.assertAlmostEqual(rows['Rest of system'], 0.0)
         record['status'] = 'Charging'
-        rows = attribute(record, chip, platform)
+        rows = attribute(record, params)
         self.assertNotIn('Display', rows)
         self.assertAlmostEqual(rows['Processor baseline'], 60.0)        # On AC: chip watts only
 

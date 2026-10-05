@@ -25,12 +25,11 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import nnls
 
+import power
 from power import PowerLog
 
 STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
 LOG = STATE_HOME / 'waybar-monitor/power'
-CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'battery-panel'
-CACHE_VERSION = 3
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
@@ -51,8 +50,7 @@ DEVICES = (('Display', 'bl'), ('Wi-Fi', 'wifi'), ('Storage', 'disk'), ('USB devi
            ('Audio', 'audio'), ('Keyboard backlight', 'kbd'))
 CHIP_TERMS = ('floor', 'load', 'gpu', 'video')
 BATTERY_TERMS = ('base', 'chip', 'bl', 'wifi', 'disk', 'usb', 'audio', 'kbd')
-PRIOR = {'floor': 6.0, 'load': 0.2, 'gpu': 3.0, 'video': 1.0,
-         'base': 0.5, 'chip': 1.3, 'bl': 3.0, 'wifi': 0.3, 'disk': 2.0, 'usb': 0.3, 'audio': 0.5, 'kbd': 0.3}
+PRIOR = power.PRIOR  # Shared with the collector's attribution.
 
 
 def display_name(app):
@@ -192,63 +190,10 @@ def read_from(path, offset):
         return
 
 
-def load_day(day, log=LOG, cache=CACHE):
-    """Per-minute rows and events for one day, cached against the source file.
-
-    Finished (compressed) days are cached whole. Today's growing file is cached
-    up to its last complete minute with a byte offset, so a refresh only parses
-    the new lines.
-    """
-    sources = [p for p in (log / f'{day}.jsonl', log / f'{day}.jsonl.zst', log / f'{day}.jsonl.gz') if p.exists()]
-    if not sources:
-        return [], []
-    source = sources[0]
-    stamp = [source.name, source.stat().st_size, int(source.stat().st_mtime)]
-    cached = cache / f'{day}.json'
-    try:
-        data = json.loads(cached.read_text())
-        if data.get('version') != CACHE_VERSION or data.get('source', [None])[0] != source.name:
-            data = None
-    except (OSError, ValueError, AttributeError):
-        data = None
-    if data and data['source'] == stamp and 'offset' not in data:
-        return data['minutes'], data['events']
-    if source.suffix == '.jsonl':
-        resume = data if data and data.get('offset', 0) <= stamp[1] else {'minutes': [], 'events': [], 'offset': 0}
-        lines = list(read_from(source, resume['offset']))
-        fresh, events = aggregate(record for _, record in lines)
-        minutes, events = resume['minutes'] + fresh, resume['events'] + events
-        # Cache all but the newest minute, which may still be filling.
-        offset = resume['offset']
-        if fresh:
-            newest = fresh[-1]['t']
-            offset = next((start for start, record in lines if 'event' not in record and 't1' in record
-                           and int(record['t1'] // 60) * 60 == newest), offset)
-            complete = minutes[:-1]
-            kept = [e for e in events if e.get('t1', 0) < newest]
-        else:
-            complete, kept = minutes, events
-        payload = {'version': CACHE_VERSION, 'source': stamp, 'offset': offset, 'minutes': complete, 'events': kept}
-    else:
-        minutes, events = aggregate(read_records(source))
-        payload = {'version': CACHE_VERSION, 'source': stamp, 'minutes': minutes, 'events': events}
-    cache.mkdir(parents=True, exist_ok=True)
-    temporary = cached.with_suffix('.tmp')
-    temporary.write_text(json.dumps(payload))
-    temporary.replace(cached)
-    return minutes, events
-
-
-def prune_cache(keep_days=60, cache=CACHE, now=None):
-    """Delete per-minute caches older than `keep_days` (rebuilt from the log on
-    demand); readers only use the last 30 days, so the cache stays bounded."""
-    cutoff = datetime.date.fromtimestamp(now or time.time()) - datetime.timedelta(days=keep_days)
-    for path in cache.glob('????-??-??.json'):
-        try:
-            if datetime.date.fromisoformat(path.stem) < cutoff:
-                path.unlink()
-        except (ValueError, OSError):
-            continue
+def load_day(day, log=LOG, cache=None):
+    """Per-minute rows and events for one day, from the Parquet tables (store.py)."""
+    import store  # store imports this module.
+    return store.load_day(day, log, cache or store.ROOT)
 
 
 def days_between(start, end):
@@ -258,7 +203,7 @@ def days_between(start, end):
         day += datetime.timedelta(days=1)
 
 
-def load_range(start, end, log=LOG, cache=CACHE):
+def load_range(start, end, log=LOG, cache=None):
     minutes, events = [], []
     days = available_days(log)
     if not days:
@@ -413,17 +358,22 @@ def candidates(rows, model, top=5):
     return items
 
 
-def what_if(rows, energy, replicates=200, block=10, seed=0):
+def what_if(rows, energy, replicates=200, block=10, seed=0, model=None, train_rows=None):
     """Point estimate and 90% interval of runtime gain (minutes) per intervention.
 
-    Moving-block bootstrap (10-minute blocks; residuals stay correlated for
-    several minutes) refits both models on each resample, so intervals cover
+    `model` is the shared trained model (battery-eta's models.json), evaluated
+    on this period's `rows`; without one, the models are fitted on
+    `train_rows`. The interval refits both models on moving-block bootstrap
+    resamples of the training rows (10-minute blocks: residuals stay correlated
+    for minutes) and averages over block resamples of the period, so it covers
     coefficient uncertainty as well as the period's variability.
     """
-    if len(rows) < 30 or not energy:
+    train_rows = train_rows or rows
+    if len(rows) < 30 or len(train_rows) < 30 or not energy:
         return [], None
-    chip_x, chip_y, battery_x, battery_y = design(rows)
-    model = fit(chip_x, chip_y, battery_x, battery_y)
+    train = design(train_rows)
+    model = model or fit(*train)
+    _, _, _, battery_y = design(rows)
     items = candidates(rows, model)
     dt = np.array([m['dt'] for m in rows])
 
@@ -431,21 +381,20 @@ def what_if(rows, energy, replicates=200, block=10, seed=0):
         power = float(np.average(battery_y[index], weights=dt[index]))
         return power, {name: runtime_gain(energy, power, float(np.average(vector(coef)[index], weights=dt[index])))
                        for name, vector in items.items()}
-    everything = np.arange(len(rows))
-    power, point = evaluate(everything, model)
+    power, point = evaluate(np.arange(len(rows)), model)
     saved = {name: float(np.average(vector(model), weights=dt)) for name, vector in items.items()}
     rng = np.random.default_rng(seed)
     samples = collections.defaultdict(list)
     for _ in range(replicates):
-        index = block_indices(len(rows), block, rng)
-        coef = fit(chip_x[index], chip_y[index], battery_x[index], battery_y[index])
-        for name, gain in evaluate(index, coef)[1].items():
+        picked = block_indices(len(train_rows), block, rng)
+        coef = fit(*(part[picked] for part in train))
+        for name, gain in evaluate(block_indices(len(rows), block, rng), coef)[1].items():
             samples[name].append(gain)
     estimates = []
     for name, gain in point.items():
         low, high = np.percentile(samples[name], [5, 95])
         estimates.append({'name': name, 'evidence': 'model', 'watts': saved[name], 'minutes': gain,
-                          'low': float(low), 'high': float(high)})
+                          'low': float(min(low, gain)), 'high': float(max(high, gain))})
     return (sorted(estimates, key=lambda e: -e['minutes']),
             {'power': power, 'energy': energy, 'model': model, 'runtime_h': energy / power, 'rows': len(rows)})
 

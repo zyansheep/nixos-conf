@@ -112,6 +112,26 @@ class EtaTests(unittest.TestCase):
             self.assertIn('charging', out['class'])
             self.assertAlmostEqual(out['detail']['ratio'], 2.0, delta=0.1)
 
+    def test_train_writes_every_model_and_loads_fresh_only(self):
+        rng = np.random.default_rng(7)
+        minutes = []
+        for i in range(200):
+            load = rng.uniform(1, 20)
+            soc = 6 + .2 * load
+            minutes.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'soc': soc, 'bl': .5, 'pct': 80 - i * .2,
+                            'volts': 16 - i * .005, 'charge': 2.5e6 - i * 1000, 'unit': 'uAh',
+                            'bat': .5 + 1.4 * soc + 1.5 + rng.normal(0, .2), 'set': {}})
+        params = eta.train(minutes, [], now=1000.0)
+        self.assertAlmostEqual(params['attribution']['chip'], 1.4, delta=.1)
+        self.assertGreater(params['tau'], 0)
+        self.assertEqual(params['battery_minutes'], 200)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'models.json'
+            eta.save_models(params, path)
+            self.assertIsNone(eta.load_models(path))                       # Trained at t=1000: stale
+            eta.save_models(dict(params, fitted=__import__('time').time()), path)
+            self.assertAlmostEqual(eta.load_models(path)['attribution']['chip'], params['attribution']['chip'])
+
     def test_plus_minus_is_half_the_interval(self):
         self.assertIn('±0:15', eta.plus_minus(1.0, 1.5))
 

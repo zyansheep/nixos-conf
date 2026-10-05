@@ -471,82 +471,25 @@ def process_io(proc, keys):
 
 # --- Online models and attribution ---------------------------------------------
 
-def solve(matrix, vector):
-    n = len(vector)
-    rows = [list(matrix[i]) + [vector[i]] for i in range(n)]
-    for column in range(n):
-        pivot = max(range(column, n), key=lambda r: abs(rows[r][column]))
-        if abs(rows[pivot][column]) < 1e-12:
-            return None
-        rows[column], rows[pivot] = rows[pivot], rows[column]
-        for r in range(n):
-            if r != column and rows[r][column]:
-                factor = rows[r][column] / rows[column][column]
-                for c in range(column, n + 1):
-                    rows[r][c] -= factor * rows[column][c]
-    return [rows[i][n] / rows[i][i] for i in range(n)]
+# Model terms and the priors they start from. battery-eta trains the real
+# values (report.fit) into models.json every 15 minutes; the collector only
+# reads them. report.py shares this dict.
+PRIOR = {'floor': 6.0, 'load': 0.2, 'gpu': 3.0, 'video': 1.0,
+         'base': 0.5, 'chip': 1.3, 'bl': 3.0, 'wifi': 0.3, 'disk': 2.0, 'usb': 0.3, 'audio': 0.5, 'kbd': 0.3}
 
 
-class Ridge:
-    """Exponentially forgotten least squares shrunk toward prior watts, clamped at zero."""
-
-    def __init__(self, names, prior, strength, decay=0.99995):
-        self.names, self.prior, self.strength, self.decay = list(names), list(prior), list(strength), decay
-        n = len(self.names)
-        self.xtx, self.xty, self.count = [[0.0] * n for _ in range(n)], [0.0] * n, 0
-        self.params = list(prior)
-
-    def update(self, x, y):
-        n = len(x)
-        for i in range(n):
-            self.xty[i] = self.xty[i] * self.decay + x[i] * y
-            for j in range(n):
-                self.xtx[i][j] = self.xtx[i][j] * self.decay + x[i] * x[j]
-        self.count += 1
-        matrix = [[self.xtx[i][j] + (self.strength[i] if i == j else 0) for j in range(n)] for i in range(n)]
-        solution = solve(matrix, [self.xty[i] + self.strength[i] * self.prior[i] for i in range(n)])
-        if solution is not None:
-            self.params = [max(0.0, value) for value in solution]
-
-    def coefficient(self, name):
-        return self.params[self.names.index(name)]
-
-    def state(self):
-        return {'names': self.names, 'xtx': self.xtx, 'xty': self.xty, 'count': self.count, 'params': self.params}
-
-    def load(self, state):
-        if isinstance(state, dict) and state.get('names') == self.names:
-            self.xtx, self.xty = state['xtx'], state['xty']
-            self.count, self.params = state['count'], state['params']
-
-
-def chip_model():
-    # Chip (PPT) watts ~ floor + per busy core weighted by clock² (dynamic power
-    # ~ f·V², V rising with f) + per fully busy GPU + per busy video engine.
-    # Fitted on battery records only: AC uses a hungrier power profile.
-    return Ridge(['idle', 'load', 'gpu', 'video'], [6.0, 0.2, 3.0, 1.0], [20, 50, 50, 50])
-
-
-def platform_model():
-    # Battery watts ~ base + k·chip (conversion losses and rails that follow
-    # load) + display/keyboard backlight, radio, storage, USB and audio. Fitted
-    # on one-minute means: the battery reading lags chip power by ~10 s.
-    return Ridge(['base', 'chip', 'backlight', 'wifi_mbps', 'disk_busy', 'usb_device', 'audio', 'kbd'],
-                 [0.5, 1.3, 3.0, 0.3, 2.0, 0.3, 0.5, 0.3], [20, 200, 100, 100, 100, 100, 100, 100])
+def load_attribution(path):
+    """Trained attribution parameters from battery-eta's models.json, or None."""
+    try:
+        data = json.loads(Path(path).read_text())
+        return {**PRIOR, **{k: float(v) for k, v in data['attribution'].items() if k in PRIOR}}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return None
 
 
 def clock_squared(record):
     mhz = record.get('cpu', {}).get('mhz')
     return (mhz / 1000) ** 2 if mhz else None
-
-
-def chip_features(record):
-    dt, ghz2 = record['dt'], clock_squared(record) or 0
-    apps = record.get('apps', {})
-    return [1.0, record.get('cpu', {}).get('busy_s', 0) / dt * ghz2,
-            # amdgpu's sampled busy percent often reads 0 on APUs; client time does not.
-            record.get('gpu', {}).get('gpu', 0) / dt,
-            sum(a.get('video', 0) for a in apps.values()) / dt]
 
 
 def platform_features(record):
@@ -561,33 +504,32 @@ def discharging(record):
     return record.get('status') == 'Discharging' and 'w' in record.get('bat', {})
 
 
-DEVICE_TERMS = (('Display', 'backlight', 2), ('Wi-Fi', 'wifi_mbps', 3), ('Storage', 'disk_busy', 4),
-                ('USB devices', 'usb_device', 5), ('Audio', 'audio', 6), ('Keyboard backlight', 'kbd', 7))
+DEVICE_TERMS = (('Display', 'bl', 2), ('Wi-Fi', 'wifi', 3), ('Storage', 'disk', 4),
+                ('USB devices', 'usb', 5), ('Audio', 'audio', 6), ('Keyboard backlight', 'kbd', 7))
 
 
-def attribute(record, chip, platform):
+def attribute(record, params):
     """Split one record's measured energy (joules) across apps and hardware.
 
-    On battery each chip watt is scaled by the platform model's per-chip-watt
-    cost, so apps carry their share of conversion losses; on AC only chip
-    power is known.
+    On battery each chip watt is scaled by the model's per-chip-watt cost (k),
+    so apps carry their share of conversion losses; on AC only chip power is
+    known. `params` are battery-eta's trained values (see PRIOR).
     """
     dt, rows = record['dt'], collections.defaultdict(float)
     soc = record.get('soc', {}).get('w')
     if soc is None:
         return rows
     on_battery = discharging(record)
-    scale = platform.coefficient('chip') if on_battery else 1.0
-    floor = min(soc, chip.coefficient('idle'))
+    scale = params['chip'] if on_battery else 1.0
+    floor = min(soc, params['floor'])
     ghz2 = clock_squared(record) or 0
     weights = {}
     apps = record.get('apps', {})
     for name, app in apps.items():
-        weights[name] = (chip.coefficient('load') * app.get('cpu', 0) * ghz2
-                         + chip.coefficient('gpu') * app.get('gpu', 0)
-                         + chip.coefficient('video') * app.get('video', 0)) / dt
+        weights[name] = (params['load'] * app.get('cpu', 0) * ghz2
+                         + params['gpu'] * app.get('gpu', 0) + params['video'] * app.get('video', 0)) / dt
     unowned = record.get('cpu', {}).get('busy_s', 0) - sum(a.get('cpu', 0) for a in apps.values())
-    weights['Kernel'] = weights.get('Kernel', 0) + chip.coefficient('load') * max(0, unowned) * ghz2 / dt
+    weights['Kernel'] = weights.get('Kernel', 0) + params['load'] * max(0, unowned) * ghz2 / dt
     total = sum(weights.values())
     if total > 0:
         for name, weight in weights.items():
@@ -599,7 +541,7 @@ def attribute(record, chip, platform):
     if on_battery:
         rest = record['bat']['w'] - scale * soc
         x = platform_features(record)
-        parts = {name: platform.coefficient(term) * x[index] for name, term, index in DEVICE_TERMS}
+        parts = {name: params[term] * x[index] for name, term, index in DEVICE_TERMS}
         modelled = sum(parts.values())
         shrink = min(1.0, max(0.0, rest) / modelled) if modelled > 0 else 0
         for name, watts in parts.items():
@@ -807,24 +749,17 @@ class Monitor:
     def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None):
         self.sys, self.proc, self.experiment = sys, proc, experiment
         self.log = PowerLog(directory)
-        self.models_path = directory / 'models.json'
-        self.chip, self.platform = chip_model(), platform_model()
-        try:
-            state = json.loads(self.models_path.read_text())
-            self.chip.load(state.get('chip'))
-            self.platform.load(state.get('platform'))
-        except (OSError, ValueError, AttributeError):
-            pass
+        self.models_path, self.models_stamp, self.params = directory / 'models.json', None, dict(PRIOR)
+        self.refresh_models()
         self.fast, self.idle_states, self.commands = FastSampler(sys), IdleStates(sys), Commands()
         self.gpu, self.io = GpuClients(proc), Deltas()
         self.window = collections.deque()
         now = time.time()
         for record in self.log.recent(now - WINDOW):
             self.window.append((record['t1'], record['dt'], discharging(record),
-                                attribute(record, self.chip, self.platform)))
+                                attribute(record, self.params)))
         self.boot = boot_id(proc)
         self.last_battery = None
-        self.minute = []
         self.log.write({'v': SCHEMA, 'event': 'start', 't1': now, 'boot': self.boot})
         self.reset(None, None)
         self.menu = summarize(self.window, now, self.log.totals())
@@ -882,9 +817,9 @@ class Monitor:
         if boot - self.start_boot >= RECORD:
             record = self.record(boot, wall, processes)
             self.log.write(record)
-            self.learn(record)
+            self.refresh_models()
             self.window.append((record['t1'], record['dt'], discharging(record),
-                                attribute(record, self.chip, self.platform)))
+                                attribute(record, self.params)))
             while self.window and self.window[0][0] < wall - WINDOW:
                 self.window.popleft()
             self.start_boot, self.start_wall = boot, wall
@@ -959,27 +894,15 @@ class Monitor:
             record['exp'] = assignment
         return record
 
-    def learn(self, record):
-        """Battery records only; the platform model sees one-minute means."""
-        if record['dt'] <= 0 or 'w' not in record['soc'] or not discharging(record):
-            self.minute = []
+    def refresh_models(self):
+        """Pick up battery-eta's newly trained parameters when models.json changes."""
+        try:
+            stamp = self.models_path.stat().st_mtime
+        except OSError:
             return
-        if clock_squared(record) is not None:
-            self.chip.update(chip_features(record), record['soc']['w'])
-        if self.minute and record['t0'] - self.minute[-1]['t1'] > 1:
-            self.minute = []  # Not contiguous.
-        self.minute.append(record)
-        if sum(r['dt'] for r in self.minute) >= 60:
-            seconds = sum(r['dt'] for r in self.minute)
-            features = [sum(f * r['dt'] for f, r in zip(column, self.minute)) / seconds
-                        for column in zip(*(platform_features(r) for r in self.minute))]
-            target = sum(r['bat']['w'] * r['dt'] for r in self.minute) / seconds
-            self.platform.update(features, target)
-            self.minute = []
-        if self.log.pending == 0:
-            temporary = self.models_path.with_suffix('.tmp')
-            temporary.write_text(json.dumps({'chip': self.chip.state(), 'platform': self.platform.state()}))
-            temporary.replace(self.models_path)
+        if stamp != self.models_stamp:
+            self.models_stamp = stamp
+            self.params = load_attribution(self.models_path) or self.params
 
     def close(self):
         self.log.close()

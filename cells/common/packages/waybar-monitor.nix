@@ -2,9 +2,10 @@
   glib, systemd, wrapGAppsHook4 }:
 let
   # The collector and experiment runner stay on plain Python; the battery
-  # estimator and the tests need NumPy/SciPy, and only the panel needs GTK.
-  panelPython = python3.withPackages (p: [ p.pygobject3 p.pycairo p.numpy p.scipy ]);
-  analysisPython = python3.withPackages (p: [ p.numpy p.scipy ]);
+  # estimator, panel and tests need NumPy/SciPy and pyarrow (the Parquet store),
+  # and only the panel needs GTK.
+  panelPython = python3.withPackages (p: [ p.pygobject3 p.pycairo p.numpy p.scipy p.pyarrow ]);
+  analysisPython = python3.withPackages (p: [ p.numpy p.scipy p.pyarrow ]);
   dir = "$out/libexec/waybar-monitor";
 in
 stdenvNoCC.mkDerivation {
@@ -23,7 +24,7 @@ stdenvNoCC.mkDerivation {
   # Python resolves the bin symlinks, so each entry point finds its modules.
   installPhase = ''
     runHook preInstall
-    install -Dm644 -t ${dir} power.py report.py
+    install -Dm644 -t ${dir} power.py report.py store.py
     install -Dm755 -t ${dir} collector.py experiment.py battery_panel.py eta.py
     sed -i '1s|.*|#!${python3}/bin/python3|' ${dir}/collector.py ${dir}/experiment.py
     sed -i '1s|.*|#!${panelPython}/bin/python3|' ${dir}/battery_panel.py
