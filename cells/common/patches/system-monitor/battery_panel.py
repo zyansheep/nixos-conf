@@ -419,10 +419,11 @@ class WhatIfChart(Chart):
             if row.get('pending'):
                 text(cr, row['pending'], plot_x0, y + 6, 9, (*rgb(COLORS['Display'])[:3], .9))
                 continue
-            color = COLORS['Coding tools'] if row['evidence'] == 'experiment' else COLORS['Browser']
+            measured = row['evidence'] in ('experiment', 'boot')
+            color = COLORS['Coding tools'] if measured else COLORS['Browser']
             x0, x1 = sorted((sx(0), sx(row['minutes'])))
             rounded(cr, x0, y + 6, max(2, x1 - x0), self.ROW - 12, 3)
-            if row['evidence'] == 'experiment':
+            if measured:
                 cr.set_source_rgba(*rgb(color))
                 cr.fill()
             else:  # Model estimates: outlined, never mistaken for measurements.
@@ -456,6 +457,9 @@ class WhatIfChart(Chart):
                  (f"{row['watts']:+.2f} W", 'average saving', None)]
         if row['evidence'] == 'experiment':
             lines.append((f"{row['pairs']} pairs", 'of randomized A/B blocks', COLORS['Coding tools']))
+        elif row['evidence'] == 'boot':
+            lines.append((f"{row['boots']['on']}+{row['boots']['off']} boots", 'with / without, load-adjusted',
+                          COLORS['Coding tools']))
         else:
             lines.append(('Model', 'removes activity; ×chip cost', COLORS['Browser']))
         if row.get('low') is not None:
@@ -484,6 +488,7 @@ def gather(start, end):
     return dict(points=report.timeline(minutes, model), span=(start, end), sleeps=sleeps,
                 sleeps_all=report.sleep_drain(events), estimates=estimates, info=info, scope=scope,
                 effects=report.experiment_effects(history, energy, power) if power else [],
+                psr=report.boot_effect(history, energy, power), psr_arm=experiment.psr_arm(),
                 catalog=[experiment.describe(spec) for spec in experiment.catalog().values()],
                 units=experiment.freezable_units()[:12], model=model)
 
@@ -497,9 +502,14 @@ def whatif_rows(result):
         measured.add(effect['experiment'])
         rows.append(dict(effect, name=name) if 'minutes' in effect else
                     {'name': name, 'pending': f"{effect['pairs']} clean pair(s) so far — results after 3"})
+    psr = result.get('psr') or {}
+    if 'minutes' in psr:
+        rows.append(dict(psr, name='Panel self-refresh (PSR) on'))
     rows += result['estimates']
     pending = [c['label'] for c in result['catalog']
                if c['name'] not in measured and not c['error'] and c['alternative']]
+    if 'minutes' not in psr:
+        pending.append('panel self-refresh (boot-level)')
     info = result['info']
     if info:
         note = (f"Typical draw {info['power']:.1f} W from {result['scope']} → {info['runtime_h']:.1f} h per full "
@@ -547,6 +557,8 @@ class BatteryPanel(Adw.Application):
         self.loaded = None
         self.poll = 0
         self.catalog, self.units, self.effects = [], [], []
+        self.psr, self.psr_arm = None, None
+        self.note = ''
         self.connect('startup', self.startup)
         self.connect('activate', self.toggle)
 
@@ -836,6 +848,7 @@ class BatteryPanel(Adw.Application):
         self.effects = result['effects']
         self.fill_whatif(result)
         self.catalog, self.units = result['catalog'], result['units']
+        self.psr, self.psr_arm = result.get('psr'), result.get('psr_arm')
         self.fill_experiments()
         return False
 
@@ -880,6 +893,8 @@ class BatteryPanel(Adw.Application):
             self.experiment_list.append(self.experiment_row(spec, effects.get(spec['name']), active))
         if self.units:
             self.experiment_list.append(self.freeze_row(active))
+            self.experiment_list.append(self.freeze_all_row(effects.get('freeze-apps'), active))
+        self.experiment_list.append(self.psr_row())
 
     def experiment_row(self, spec, effect, active):
         row = Gtk.Box(spacing=10)
@@ -939,24 +954,97 @@ class BatteryPanel(Adw.Application):
         row.append(button)
         return row
 
-    def start(self, name, unit=None, only_locked=False):
+    def freeze_all_row(self, effect, active):
+        row = Gtk.Box(spacing=10)
+        row.add_css_class('experiment')
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True)
+        title = Gtk.Label(xalign=0, label='Close every app (freeze all, while locked)')
+        title.add_css_class('heading')
+        info.append(title)
+        info.append(self.muted(wrapped(label='Runs only while the screen is locked. Frozen blocks measure the '
+                                       'platform floor; A − B is what the apps cost in the background.')))
+        self.keep_t3 = Gtk.CheckButton(label='Keep T3 Code running (agent sessions would stall)', active=True)
+        info.append(self.keep_t3)
+        if effect and effect.get('b_watts') is not None:
+            text_ = f"Floor with apps frozen: {effect['b_watts']:.1f} W · apps cost {effect['watts']:+.2f} W"
+            if 'minutes' in effect:
+                text_ += f" ({effect['watts_low']:+.2f} to {effect['watts_high']:+.2f}) · {effect['pairs']} pairs"
+            result = Gtk.Label(xalign=0, label=text_)
+            result.add_css_class('result')
+            info.append(result)
+        row.append(info)
+        button = Gtk.Button(label='Start', valign=Gtk.Align.CENTER)
+        button.set_sensitive(not active)
+        # '//' matches no unit name: keep nothing.
+        button.connect('clicked', lambda _b: self.start(
+            'freeze-apps', extra=['--keep', 't3code' if self.keep_t3.get_active() else '//']))
+        row.append(button)
+        return row
+
+    def psr_row(self):
+        row = Gtk.Box(spacing=10)
+        row.add_css_class('experiment')
+        info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, hexpand=True)
+        title = Gtk.Label(xalign=0, label='Panel self-refresh (PSR) — boot-level')
+        title.add_css_class('heading')
+        info.append(title)
+        psr = self.psr or {}
+        boots, hours = psr.get('boots', {'on': 0, 'off': 0}), psr.get('hours', {'on': 0, 'off': 0})
+        current = {'psr': 'on', 'default': 'off'}.get(self.psr_arm, 'unknown')
+        info.append(self.muted(wrapped(label=(
+            f"This boot: PSR {current}. Logged on battery: PSR on {boots['on']} boots / {hours['on']:.1f} h, "
+            f"off {boots['off']} boots / {hours['off']:.1f} h. Needs 2+ boots each. PSR was disabled by "
+            "nixos-hardware for hangs reported in 2024; if the desktop stalls, reboot to the default entry."))))
+        if 'watts' in psr:
+            result = Gtk.Label(xalign=0, label=(
+                f"Result: PSR on saves {psr['watts']:+.2f} W ({psr['watts_low']:+.2f} to {psr['watts_high']:+.2f})"
+                + (f" → {psr['minutes']:+.0f} min per charge" if 'minutes' in psr else '')))
+            result.add_css_class('result')
+            info.append(result)
+        row.append(info)
+        # Suggest the arm with less battery time so far.
+        suggested = 'psr' if hours['on'] <= hours['off'] else 'default'
+        buttons = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, valign=Gtk.Align.CENTER)
+        for arm, label in (('psr', 'Next boot: PSR on'), ('default', 'Next boot: default')):
+            button = Gtk.Button(label=label)
+            if arm == suggested:
+                button.add_css_class('suggested-action')
+            button.connect('clicked', lambda _b, a=arm: self.command(
+                ['power-experiment', 'next-boot', a],
+                done=f"Next boot set to {'PSR on' if a == 'psr' else 'the default entry'} — restart when convenient."))
+            buttons.append(button)
+        row.append(buttons)
+        return row
+
+    @staticmethod
+    def muted(label):
+        label.add_css_class('muted')
+        return label
+
+    def start(self, name, unit=None, only_locked=False, extra=()):
         minutes = [30, 60, 120, 240][self.minutes.get_selected()]
         command = ['power-experiment', 'start', name, '--minutes', str(minutes)]
         if unit:
             command += ['--unit', unit]
         if only_locked:
             command.append('--only-locked')
-        self.command(command)
+        self.command(command + list(extra))
 
-    def command(self, argv):
+    def command(self, argv, done=None):
         process = Gio.Subprocess.new(argv, Gio.SubprocessFlags.STDERR_PIPE)
+        message = done
 
-        def done(proc, res):
+        def finished(proc, res):
             _, _, err = proc.communicate_utf8_finish(res)
             if not proc.get_successful():
                 self.banner.set_text(f'Command failed: {(err or "").strip()[:300]}')
-            GLib.timeout_add(800, lambda: (self.refresh_status(), self.fill_experiments()) and False)
-        process.communicate_utf8_async(None, None, done)
+                return
+            if message:
+                self.note = message  # Kept under the status line until the panel restarts.
+                self.refresh_status()
+            else:
+                GLib.timeout_add(800, lambda: (self.refresh_status(), self.fill_experiments()) and False)
+        process.communicate_utf8_async(None, None, finished)
 
     @staticmethod
     def estimate():
@@ -1002,6 +1090,8 @@ class BatteryPanel(Adw.Application):
             self.banner.set_text(f"Last run: {state.get('label')} finished after {state.get('blocks', 0)} blocks.")
         else:
             self.banner.set_text('No experiment running.')
+        if self.note:
+            self.banner.set_text(self.banner.get_text() + '\n' + self.note)
 
 
 CSS = b"""

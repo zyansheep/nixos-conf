@@ -178,7 +178,18 @@ back / forward (or ← →), Now. Tabs:
   `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe APST
   limit (the s2idle crash workarounds) before every suspend, and the runner
   starts a fresh block after resume. Profile and ABM are left to the AC udev
-  rules while plugged in.
+  rules while plugged in. “Close every app” freezes all app scopes (keeping T3 Code
+  by default so agent sessions do not stall) and only runs while the screen is
+  locked: its frozen blocks measure the platform floor and A − B is the apps'
+  background cost.
+- **Boot-level: panel self-refresh.** PSR cannot change at runtime, so the
+  `psr` specialisation (in `hosts/isomorph/power-conf.nix`) boots with
+  `amdgpu.dcdebugmask=0x0` after nixos-hardware's `0x10`. The Experiments tab
+  (or `power-experiment next-boot psr|default`, via `power-lab next-boot` and
+  `bootctl set-oneshot`) picks the entry for the next restart only, suggesting
+  the arm with less battery time. The log records the running `dcdebugmask`;
+  boots are compared by least squares on workload plus a PSR indicator, with a
+  bootstrap over whole boots, once each arm has two boots with battery time.
 
 `report.py` caches per-minute aggregates in `~/.cache/battery-panel` (finished
 days whole, today up to its last complete minute). `battery_panel.py --render

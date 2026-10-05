@@ -287,6 +287,8 @@ def settings(sys=Path('/sys')):
         'aspm': next((w[1:-1] for w in (read(sys / 'module/pcie_aspm/parameters/policy') or '').split()
                       if w.startswith('[')), None),
         'nvme_apst_us': read(sys / 'module/nvme_core/parameters/default_ps_max_latency_us'),
+        # Boot-level: bit 0x10 disables panel self-refresh (see the psr specialisation).
+        'dcdebugmask': read(sys / 'module/amdgpu/parameters/dcdebugmask'),
     }
     if (limit := number(cpu / 'cpu0/cpufreq/scaling_max_freq')) is not None:
         values['max_mhz'] = round(limit / 1000)

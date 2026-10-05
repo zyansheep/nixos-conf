@@ -14,7 +14,7 @@ _: {
   turbostat = config.boot.kernelPackages.turbostat;
   powerLab = pkgs.writeShellScriptBin "power-lab" ''
     set -euo pipefail
-    PATH=${pkgs.lib.makeBinPath [pkgs.coreutils pkgs.powertop turbostat pkgs.util-linux pkgs.gnugrep pkgs.gnused pkgs.pciutils pkgs.systemd pkgs.iw]}:$PATH
+    PATH=${pkgs.lib.makeBinPath [pkgs.coreutils pkgs.powertop turbostat pkgs.util-linux pkgs.gnugrep pkgs.gnused pkgs.pciutils pkgs.systemd pkgs.iw pkgs.jq]}:$PATH
     usage() {
       cat >&2 <<'USAGE'
     usage: power-lab <cmd> [args]
@@ -30,6 +30,7 @@ _: {
       apst <microseconds>    NVMe APST at runtime via pm_qos_latency_tolerance_us (0 = off)
       wifips <on|off>        Wi-Fi power save on the wireless interface
       sleep-safe             restore the boot-time ASPM policy and NVMe APST limit (pre-sleep hook)
+      next-boot <default|psr|list>  boot the default or a specialisation entry on the next restart only
       sysfs <path> <value>   write <value> to a file under /sys
     USAGE
       exit 2
@@ -97,6 +98,20 @@ _: {
             [ "$(cat "$f")" = "$latency" ] || echo "$latency" > "$f"
           done
         fi
+        ;;
+      next-boot)
+        [ $# -eq 1 ] && [[ "$1" =~ ^(default|psr|list)$ ]] || usage
+        case "$1" in
+          list) bootctl list --no-pager ;;
+          default) bootctl set-oneshot ""; echo "next boot: default entry" ;;
+          *)
+            # Newest entry (menu order) built from the matching NixOS specialisation.
+            id=$(bootctl list --json=short | jq -r --arg s "$1" \
+              '[.[] | select(((.id // "") + " " + (.title // "") + " " + (.version // "")) | test("specialisation[-_ ]?\\(?" + $s; "i"))][0].id // empty')
+            [ -n "$id" ] || { echo "no boot entry for specialisation $1" >&2; bootctl list --no-pager >&2; exit 1; }
+            bootctl set-oneshot "$id"; echo "next boot: $id"
+            ;;
+        esac
         ;;
       sysfs)
         [ $# -eq 2 ] || usage

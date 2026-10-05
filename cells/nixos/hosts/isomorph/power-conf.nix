@@ -52,6 +52,16 @@
     ACTION=="add", SUBSYSTEM=="drm", KERNEL=="card*-eDP-1", RUN+="${panelAbm}"
   '';
 
+  # Boot-level A/B for panel self-refresh. nixos-hardware's Framework 13 AMD
+  # module disables PSR (amdgpu.dcdebugmask=0x10) for hangs reported in 2024
+  # (drm/amd#3647); PSR lets the display engine idle on a static screen. This
+  # entry re-enables it: the later module parameter wins. Pick it for one boot
+  # with `power-experiment next-boot psr` (or the boot menu); the power log
+  # records the running dcdebugmask and the battery panel compares boots.
+  specialisation.psr.configuration = {
+    boot.kernelParams = lib.mkAfter [ "amdgpu.dcdebugmask=0x0" ];
+  };
+
   powerManagement = {
     enable = true;
     # cpuFreqGovernor = lib.mkDefault "powersave";

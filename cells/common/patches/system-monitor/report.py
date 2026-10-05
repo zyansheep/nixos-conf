@@ -30,7 +30,7 @@ from power import PowerLog
 STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
 LOG = STATE_HOME / 'waybar-monitor/power'
 CACHE = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache')) / 'battery-panel'
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
@@ -60,6 +60,15 @@ def display_name(app):
     return re.sub(r'-w(?:r(?:a(?:p(?:p(?:e(?:d)?)?)?)?)?)?$|\.bin$', '', app)
 
 
+def psr_enabled(mask):
+    """PSR on/off from amdgpu.dcdebugmask. Records before it was logged ran with
+    nixos-hardware's 0x10 on every boot, so a missing value means off."""
+    try:
+        return not int(mask, 0) & 0x10
+    except (TypeError, ValueError):
+        return False
+
+
 def group_of(app):
     for group, prefixes in GROUPS:
         if app.startswith(prefixes):
@@ -73,6 +82,7 @@ class Minute:
     def __init__(self, t):
         self.t, self.dt, self.sums, self.weights = t, 0.0, collections.defaultdict(float), collections.defaultdict(float)
         self.status, self.apps, self.last, self.exp, self.settings = collections.Counter(), {}, {}, None, {}
+        self.boot = None
 
     def add(self, record):
         dt = record['dt']
@@ -109,7 +119,9 @@ class Minute:
             if battery.get(key) is not None:
                 self.last[key] = battery[key]
         settings = record.get('settings', {})
+        self.boot = record.get('boot')
         self.settings = {'profile': settings.get('platform_profile'), 'aspm': settings.get('aspm'),
+                         'psr': psr_enabled(settings.get('dcdebugmask')),
                          'boost': settings.get('boost'), 'abm': display.get('abm'),
                          'wifi_ps': ','.join(sorted((settings.get('wifi_ps') or {}).values())) or None,
                          'hz': next((o.get('hz') for o in display.get('niri', [])
@@ -129,6 +141,8 @@ class Minute:
             row['apps'] = {name: [round(v / self.dt, 4) for v in values] for name, values in self.apps.items()}
         row.update({key: value for key, value in self.last.items()})
         row['set'] = self.settings
+        if self.boot:
+            row['boot'] = self.boot
         if self.exp is not None:
             row['exp'] = self.exp
         return row
@@ -441,10 +455,18 @@ def experiment_blocks(minutes):
             for key, v in blocks.items() if v[1] >= 90}
 
 
+def by_value(blocks, arm):
+    values = [b['watts'] for b in blocks if b['arm'] == arm]
+    return sum(values) / len(values) if values else None
+
+
 def experiment_effects(minutes, energy, power, replicates=2000, seed=0):
     """Paired consecutive A/B blocks per run → saving of arm B (W) and runtime gain."""
     blocks = experiment_blocks(minutes)
     pairs = collections.defaultdict(list)
+    arms = collections.defaultdict(list)
+    for block in blocks.values():
+        arms[block['name']].append(block)
     for run in sorted({key[0] for key in blocks}):
         sequence = sorted((key[1], b) for key, b in blocks.items() if key[0] == run)
         i = 0
@@ -461,7 +483,8 @@ def experiment_effects(minutes, energy, power, replicates=2000, seed=0):
     for (name, value), deltas in pairs.items():
         deltas = np.array(deltas)
         estimate = {'experiment': name, 'value': value, 'pairs': len(deltas), 'evidence': 'experiment',
-                    'watts': float(deltas.mean())}
+                    'watts': float(deltas.mean()), 'a_watts': by_value(arms[name], 'A'),
+                    'b_watts': by_value(arms[name], 'B')}
         if len(deltas) >= 3 and energy and power:
             boot = rng.choice(deltas, size=(replicates, len(deltas))).mean(axis=1)
             low, high = np.percentile(boot, [5, 95])
@@ -471,6 +494,48 @@ def experiment_effects(minutes, energy, power, replicates=2000, seed=0):
                             watts_low=float(low), watts_high=float(high))
         results.append(estimate)
     return results
+
+
+def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_boots=2, min_rows=30):
+    """Boot-level setting effect on battery draw, adjusted for workload.
+
+    Least squares of battery W on load, GPU/video, backlight, Wi-Fi and disk plus
+    an indicator for the setting; the interval resamples whole boots within
+    each arm (minutes inside a boot are not independent). Returns progress
+    counts until each arm has `min_boots` boots with battery time.
+    """
+    rows = [m for m in battery_rows(minutes) if m.get('boot')]
+    arms = {False: collections.defaultdict(list), True: collections.defaultdict(list)}
+    for m in rows:
+        arms[bool(m['set'].get(key))][m['boot']].append(m)
+    progress = {'experiment': key, 'evidence': 'boot', 'value': 'on',
+                'boots': {'off': len(arms[False]), 'on': len(arms[True])},
+                'hours': {'off': sum(len(v) for v in arms[False].values()) / 60,
+                          'on': sum(len(v) for v in arms[True].values()) / 60}}
+    enough = lambda arm: sum(1 for v in arm.values() if len(v) >= 10) >= min_boots
+    if not (enough(arms[False]) and enough(arms[True])) or len(rows) < 2 * min_rows:
+        return progress
+
+    def estimate(groups):
+        sample = [(m, arm) for arm in (False, True) for boot in groups[arm] for m in boot]
+        x = np.array([[1.0, m['load'], m.get('gpu', 0), m.get('video', 0), m.get('bl') or 0,
+                       m.get('wifi', 0), m.get('disk', 0), float(arm)] for m, arm in sample])
+        y = np.array([m['bat'] for m, _ in sample])
+        coef, *_ = np.linalg.lstsq(x, y, rcond=None)
+        return -float(coef[-1])  # Watts saved with the setting on.
+    groups = {arm: list(boots.values()) for arm, boots in arms.items()}
+    saved = estimate(groups)
+    rng = np.random.default_rng(seed)
+    boot_samples = []
+    for _ in range(replicates):
+        resample = {arm: [boots[i] for i in rng.integers(0, len(boots), len(boots))] for arm, boots in groups.items()}
+        boot_samples.append(estimate(resample))
+    low, high = np.percentile(boot_samples, [5, 95])
+    progress.update(watts=saved, watts_low=float(low), watts_high=float(high))
+    if energy and power:
+        progress.update(minutes=runtime_gain(energy, power, saved), low=runtime_gain(energy, power, float(low)),
+                        high=runtime_gain(energy, power, float(high)))
+    return progress
 
 
 # --- Sleep ----------------------------------------------------------------------

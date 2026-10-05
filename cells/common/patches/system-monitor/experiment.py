@@ -10,8 +10,14 @@ file below); the battery panel estimates the effect from paired blocks.
 
     power-experiment list | units | status
     power-experiment start <name> [--minutes N] [--unit SCOPE] [--only-locked]
+    power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
     power-experiment stop | restore
+    power-experiment next-boot default|psr | boot-status      (boot-level experiments)
     power-experiment run      (the power-experiment.service body)
+
+Settings that cannot change at runtime (PSR: amdgpu.dcdebugmask) are boot-level
+experiments: the `psr` specialisation boots with PSR enabled, `next-boot` picks
+the entry for the next restart only, and the panel compares boots by arm.
 
 Root settings go through `sudo -n power-lab`; its pre-sleep hook restores the
 s2idle crash workarounds (ASPM, NVMe APST) before every suspend, and the runner
@@ -99,18 +105,42 @@ def freeze_get(unit):
     return 'frozen' if state.startswith('frozen') else 'running'
 
 
+def live_units(units):
+    return [unit for unit in units if (user_slice() / 'app.slice' / unit).is_dir()]
+
+
+def freeze_all_get(units):
+    alive = live_units(units)
+    return 'frozen' if alive and all(freeze_get(unit) == 'frozen' for unit in alive) else 'running'
+
+
+def freeze_all_set(units, value):
+    for unit in live_units(units):  # Apps that exited meanwhile are skipped.
+        run(['systemctl', '--user', 'freeze' if value == 'frozen' else 'thaw', unit], check=False)
+
+
+def psr_arm():
+    """Boot-level PSR arm from the running amdgpu.dcdebugmask (bit 0x10 disables PSR)."""
+    mask = read(SYS / 'module/amdgpu/parameters/dcdebugmask')
+    try:
+        return 'default' if int(mask, 0) & 0x10 else 'psr'
+    except (TypeError, ValueError):
+        return None
+
+
 class Setting:
     def __init__(self, name, label, description, get, set, alternative, root=False, visible='',
-                 sleep_restored=False, unit=None, ac_managed=False):
+                 sleep_restored=False, unit=None, ac_managed=False, units=None):
         self.name, self.label, self.description = name, label, description
         self.get, self.set, self.alternative = get, set, alternative
         self.root, self.visible, self.sleep_restored, self.unit = root, visible, sleep_restored, unit
         # udev switches these on AC/battery changes; never fight it while plugged in.
         self.ac_managed = ac_managed
+        self.units = units
 
 
-def catalog(unit=None):
-    """Experiment specs; `unit` parameterizes the app-freeze experiment."""
+def catalog(unit=None, units=None):
+    """Experiment specs; `unit` / `units` parameterize the app-freeze experiments."""
     wifi = wifi_interface()
     specs = [
         Setting('aspm', 'PCIe link power saving (ASPM)',
@@ -156,6 +186,13 @@ def catalog(unit=None):
             lambda: freeze_get(unit),
             lambda v: run(['systemctl', '--user', 'freeze' if v == 'frozen' else 'thaw', unit]),
             lambda cur: 'frozen', visible='The app stops responding during B blocks.', unit=unit))
+    if units:
+        specs.append(Setting(
+            'freeze-apps', f'Close every app ({len(units)} scopes)',
+            'Freezes all app scopes while the screen is locked: frozen blocks measure the platform floor, '
+            'and the difference is what the apps cost in the background.',
+            lambda: freeze_all_get(units), lambda v: freeze_all_set(units, v), lambda cur: 'frozen',
+            visible='Only runs while the screen is locked.', units=units))
     return {spec.name: spec for spec in specs}
 
 
@@ -237,7 +274,7 @@ def experiment(spec, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, c
     arms = {'A': original, 'B': spec.alternative(original)}
     started = clock.time()
     base = {'run': f'{spec.name}-{int(started)}', 'name': spec.name, 'label': spec.label,
-            'arms': arms, 'original': original, 'unit': spec.unit, 'started': started,
+            'arms': arms, 'original': original, 'unit': spec.unit, 'units': spec.units, 'started': started,
             'ends_at': started + minutes * 60, 'block_seconds': block, 'washout_seconds': washout}
     arms_order = schedule(rng or random.Random())
     number, mark = 0, None
@@ -283,9 +320,11 @@ def experiment(spec, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, c
 
 def command_run():
     request = json.loads(REQUEST.read_text())
-    spec = catalog(request.get('unit'))[request['name']]
+    spec = catalog(request.get('unit'), request.get('units'))[request['name']]
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
-    experiment(spec, request.get('minutes', 60), request.get('only_locked', False))
+    # Freezing every app is only acceptable while nobody is using them.
+    only_locked = request.get('only_locked', False) or spec.name == 'freeze-apps'
+    experiment(spec, request.get('minutes', 60), only_locked)
 
 
 def command_restore():
@@ -294,7 +333,7 @@ def command_restore():
     except (OSError, ValueError):
         return
     if state.get('status') in ('running', 'paused'):
-        spec = catalog(state.get('unit')).get(state['name'])
+        spec = catalog(state.get('unit'), state.get('units')).get(state['name'])
         if spec and spec.get() != state['original']:
             spec.set(state['original'])
         write_state(dict(state, status='finished', finished=time.time()))
@@ -324,7 +363,12 @@ def main(argv=None):
     start.add_argument('--minutes', type=int, default=60)
     start.add_argument('--unit')
     start.add_argument('--only-locked', action='store_true')
+    start.add_argument('--keep', action='append',
+                       help='freeze-apps: leave scopes matching this (default: t3code, so agents keep running)')
     sub.add_parser('stop')
+    boot = sub.add_parser('next-boot')
+    boot.add_argument('arm', choices=['default', 'psr'])
+    sub.add_parser('boot-status')
     sub.add_parser('restore')
     sub.add_parser('run')
     args = parser.parse_args(argv)
@@ -335,15 +379,26 @@ def main(argv=None):
     elif args.command == 'status':
         print(read(STATE) or '{}')
     elif args.command == 'start':
-        if args.name not in catalog(args.unit):
+        units = None
+        if args.name == 'freeze-apps':
+            keep = [k.lower() for k in (args.keep if args.keep is not None else ['t3code'])]
+            units = [u['unit'] for u in freezable_units()
+                     if not any(k in (u['unit'] + ' ' + u['label']).lower() for k in keep)]
+            if not units:
+                parser.error('no app scopes to freeze')
+        if args.name not in catalog(args.unit, units):
             parser.error(f'unknown experiment {args.name!r}' + (' (needs --unit)' if args.name == 'freeze' else ''))
         write_state({'name': args.name, 'minutes': max(8, min(args.minutes, 600)), 'unit': args.unit,
-                     'only_locked': args.only_locked}, REQUEST)
+                     'units': units, 'only_locked': args.only_locked}, REQUEST)
         run(['systemctl', '--user', 'restart', 'power-experiment.service'])
     elif args.command == 'stop':
         run(['systemctl', '--user', 'stop', 'power-experiment.service'], check=False)
     elif args.command == 'restore':
         command_restore()
+    elif args.command == 'next-boot':
+        print(run(POWER_LAB + ['next-boot', args.arm]))
+    elif args.command == 'boot-status':
+        print(json.dumps({'psr': psr_arm()}))
     elif args.command == 'run':
         command_run()
 

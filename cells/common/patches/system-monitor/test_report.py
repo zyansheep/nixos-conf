@@ -96,6 +96,29 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((effect['pairs'], effect['value']), (4, 'powersupersave'))
         self.assertAlmostEqual(effect['watts'], 2)
         self.assertAlmostEqual(effect['minutes'], report.runtime_gain(48, 16, 2))
+        self.assertEqual((effect['a_watts'], effect['b_watts']), (16, 14))   # Frozen floor = B blocks
+
+    def test_psr_flag_and_boot_effect(self):
+        self.assertTrue(report.psr_enabled('0'))
+        self.assertFalse(report.psr_enabled('16'))
+        self.assertFalse(report.psr_enabled(None))          # Before logging: nixos-hardware's 0x10
+        rng = np.random.default_rng(5)
+        minutes, t = [], 0
+        for boot in range(6):
+            psr = boot % 2 == 1
+            for _ in range(60):
+                load = rng.uniform(1, 20)
+                minutes.append({'t': t, 'dt': 60, 'st': 'D', 'load': load, 'soc': 5 + .2 * load, 'bl': .5,
+                                'bat': 9 + .3 * load - (1.5 if psr else 0) + rng.normal(0, .5),
+                                'boot': f'b{boot}', 'set': {'psr': psr}})
+                t += 60
+        effect = report.boot_effect(minutes, 48, 16, replicates=200)
+        self.assertAlmostEqual(effect['watts'], 1.5, delta=.3)
+        self.assertLess(effect['watts_low'], effect['watts'])
+        self.assertGreater(effect['minutes'], 0)
+        progress = report.boot_effect(minutes[:120], 48, 16)   # One boot per arm: not enough yet
+        self.assertNotIn('watts', progress)
+        self.assertEqual(progress['boots'], {'off': 1, 'on': 1})
 
     def test_sleep_drain(self):
         events = [{'event': 'gap', 't1': 7200, 'gap_s': 3600,
