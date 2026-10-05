@@ -11,9 +11,11 @@ long-run mean with a learned time constant, and the variance of the horizon
 average (plus uncertainty in the long-run mean) gives a log-normal interval.
 The horizon is solved jointly with the answer (T = energy / mean draw over T).
 
-Charging. The label shows minutes of battery use bought per minute of
-charging (×N): energy entering the battery over the forecast average battery
-draw. Time to the charge limit (for the menu) follows the charge curve learned
+Charging. The label shows the time on battery banked so far (current energy
+at the typical battery draw) and the time to the charge limit, both marked ~
+(their 80% ranges, ≈±20% and ≈±30%, are in the menu). The menu also shows
+minutes of battery use bought per minute of charging: energy entering the
+battery over the forecast average battery draw. Time to the charge limit (for the menu) follows the charge curve learned
 from past charging (constant current, then taper), scaled by the current rate;
 its interval comes from how far 10-minute rates stray from that curve.
 
@@ -420,10 +422,15 @@ class Live:
                             else abs(state['watts']) * params['kappa'])
             ratio, ratio_low, ratio_high = use_per_charge(params, charge_watts, energy_full)
             result.update(ratio=ratio, ratio_low=ratio_low, ratio_high=ratio_high, charge_watts=charge_watts)
+            # Time on battery banked so far: the current energy at the typical
+            # battery draw (not the AC draw), the same number shown while discharging.
+            banked, banked_low, banked_high = time_to_empty(params, energy, params['mean'])
+            result.update(banked=banked, banked_low=banked_low, banked_high=banked_high)
             classes.append('charging')
+            # Both ranges are wide (≈±20% / ±30%), so the label shows ~ and leaves them to the menu.
             text = (f"<span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span> "
-                    f"×{ratio:.1f} <span size='small' alpha='70%'>±{(ratio_high - ratio_low) / 2:.1f}</span> "
-                    f"<span alpha='70%'>{abs(state['watts']):.1f}W</span>")
+                    f"~{clock(banked)} <span size='small' alpha='70%'>full ~{clock(median / 60)}</span> "
+                    f"<span size='small' alpha='70%'>{abs(state['watts']):.0f}W</span>")
         else:
             classes.append('plugged')
             limit = state['limit'] or 100

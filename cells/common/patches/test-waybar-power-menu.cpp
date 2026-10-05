@@ -58,9 +58,10 @@ int main() {
   assert(waybar::powerMenuClock(1.999) == "2:00" && waybar::powerMenuClock(-1) == "--");
   std::ofstream(eta) << R"({"updated": 1000, "status": "Charging", "hours": 0.75, "low": 0.5, "high": 1.0,
     "target": 90, "ratio": 1.44, "ratio_low": 1.2, "ratio_high": 1.71,
+    "banked": 1.7, "banked_low": 1.4, "banked_high": 2.05,
     "distribution": {"kind": "full", "t": [0.5, 1.0], "p": [1, 2]}})";
   assert(waybar::powerMenuEta(eta, 1001).title ==
-         "Charging: ×1.4 use per minute (80%: ×1.2–1.7)\nTime to 90%: 0:45   80%: 0:30–1:00");
+         "On battery now: ~1:42   80%: 1:24–2:03   +1.4 min per minute\nTime to 90%: 0:45   80%: 0:30–1:00");
   std::ofstream(eta) << R"({"updated": 1000, "status": "Not charging",
     "sleep": {"hours": 14.1, "low": 10.6, "high": 18.8, "watts": 1.03}})";
   estimate = waybar::powerMenuEta(eta, 1001);

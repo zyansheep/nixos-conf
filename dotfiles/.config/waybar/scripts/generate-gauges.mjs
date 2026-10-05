@@ -113,10 +113,10 @@ for (let level = 0; level < 4; level++) {
 }
 // Lucide's battery outline, widened to make room for the time estimate, live
 // wattage and ± interval. BATTERY_WIDTH sets the outline; the fill spans its
-// inner body. ETA_WIDTH fits the widest label measured in the bar font,
-// "⚡ 1:14 ±0:25 36.4W" (105px).
-const BATTERY_WIDTH = 132;
-const ETA_WIDTH = 106;
+// inner body. ETA_WIDTH fits the widest labels measured in the bar font:
+// "⚡ ~1:42 full ~0:35 24W" (117px; 124 with double-digit hours).
+const BATTERY_WIDTH = 150;
+const ETA_WIDTH = 124;
 const BATTERY_FILL = BATTERY_WIDTH - 10;
 // https://github.com/lucide-icons/lucide/blob/main/icons/battery.svg
 // See gauges/LUCIDE-LICENSE. The fill is CSS, so only three SVGs are needed.

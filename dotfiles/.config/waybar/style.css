@@ -581,17 +581,17 @@ window.gauges-arc #wireplumber.muted {
 /* Both labels sit inside one outline; the estimator's mirrored classes give the
    group its energy fill and charging/low colors across the whole body. */
 #power {
-  min-width: 132px;
+  min-width: 150px;
   min-height: 22px;
   margin: 0 3px;
   padding: 0;
   background-image: url("gauges/battery-normal.svg"), linear-gradient(rgba(220, 225, 231, 0.25), rgba(220, 225, 231, 0.25));
-  background-size: 132px 18px, 0 12px;
+  background-size: 150px 18px, 0 12px;
   background-position: center, 3px center;
   background-repeat: no-repeat;
 }
 #custom-battery-eta {
-  min-width: 106px;
+  min-width: 124px;
   min-height: 22px;
   margin: 0 0 0 3px;
   padding: 0;
@@ -619,107 +619,107 @@ window.gauges-arc #wireplumber.muted {
   font-weight: 900;
   font-size: 10px;
 }
-#power.custom-battery-eta-fill0 { background-size: 132px 18px, 0.0px 12px; }
-#power.custom-battery-eta-fill1 { background-size: 132px 18px, 1.2px 12px; }
-#power.custom-battery-eta-fill2 { background-size: 132px 18px, 2.4px 12px; }
-#power.custom-battery-eta-fill3 { background-size: 132px 18px, 3.7px 12px; }
-#power.custom-battery-eta-fill4 { background-size: 132px 18px, 4.9px 12px; }
-#power.custom-battery-eta-fill5 { background-size: 132px 18px, 6.1px 12px; }
-#power.custom-battery-eta-fill6 { background-size: 132px 18px, 7.3px 12px; }
-#power.custom-battery-eta-fill7 { background-size: 132px 18px, 8.5px 12px; }
-#power.custom-battery-eta-fill8 { background-size: 132px 18px, 9.8px 12px; }
-#power.custom-battery-eta-fill9 { background-size: 132px 18px, 11.0px 12px; }
-#power.custom-battery-eta-fill10 { background-size: 132px 18px, 12.2px 12px; }
-#power.custom-battery-eta-fill11 { background-size: 132px 18px, 13.4px 12px; }
-#power.custom-battery-eta-fill12 { background-size: 132px 18px, 14.6px 12px; }
-#power.custom-battery-eta-fill13 { background-size: 132px 18px, 15.9px 12px; }
-#power.custom-battery-eta-fill14 { background-size: 132px 18px, 17.1px 12px; }
-#power.custom-battery-eta-fill15 { background-size: 132px 18px, 18.3px 12px; }
-#power.custom-battery-eta-fill16 { background-size: 132px 18px, 19.5px 12px; }
-#power.custom-battery-eta-fill17 { background-size: 132px 18px, 20.7px 12px; }
-#power.custom-battery-eta-fill18 { background-size: 132px 18px, 22.0px 12px; }
-#power.custom-battery-eta-fill19 { background-size: 132px 18px, 23.2px 12px; }
-#power.custom-battery-eta-fill20 { background-size: 132px 18px, 24.4px 12px; }
-#power.custom-battery-eta-fill21 { background-size: 132px 18px, 25.6px 12px; }
-#power.custom-battery-eta-fill22 { background-size: 132px 18px, 26.8px 12px; }
-#power.custom-battery-eta-fill23 { background-size: 132px 18px, 28.1px 12px; }
-#power.custom-battery-eta-fill24 { background-size: 132px 18px, 29.3px 12px; }
-#power.custom-battery-eta-fill25 { background-size: 132px 18px, 30.5px 12px; }
-#power.custom-battery-eta-fill26 { background-size: 132px 18px, 31.7px 12px; }
-#power.custom-battery-eta-fill27 { background-size: 132px 18px, 32.9px 12px; }
-#power.custom-battery-eta-fill28 { background-size: 132px 18px, 34.2px 12px; }
-#power.custom-battery-eta-fill29 { background-size: 132px 18px, 35.4px 12px; }
-#power.custom-battery-eta-fill30 { background-size: 132px 18px, 36.6px 12px; }
-#power.custom-battery-eta-fill31 { background-size: 132px 18px, 37.8px 12px; }
-#power.custom-battery-eta-fill32 { background-size: 132px 18px, 39.0px 12px; }
-#power.custom-battery-eta-fill33 { background-size: 132px 18px, 40.3px 12px; }
-#power.custom-battery-eta-fill34 { background-size: 132px 18px, 41.5px 12px; }
-#power.custom-battery-eta-fill35 { background-size: 132px 18px, 42.7px 12px; }
-#power.custom-battery-eta-fill36 { background-size: 132px 18px, 43.9px 12px; }
-#power.custom-battery-eta-fill37 { background-size: 132px 18px, 45.1px 12px; }
-#power.custom-battery-eta-fill38 { background-size: 132px 18px, 46.4px 12px; }
-#power.custom-battery-eta-fill39 { background-size: 132px 18px, 47.6px 12px; }
-#power.custom-battery-eta-fill40 { background-size: 132px 18px, 48.8px 12px; }
-#power.custom-battery-eta-fill41 { background-size: 132px 18px, 50.0px 12px; }
-#power.custom-battery-eta-fill42 { background-size: 132px 18px, 51.2px 12px; }
-#power.custom-battery-eta-fill43 { background-size: 132px 18px, 52.5px 12px; }
-#power.custom-battery-eta-fill44 { background-size: 132px 18px, 53.7px 12px; }
-#power.custom-battery-eta-fill45 { background-size: 132px 18px, 54.9px 12px; }
-#power.custom-battery-eta-fill46 { background-size: 132px 18px, 56.1px 12px; }
-#power.custom-battery-eta-fill47 { background-size: 132px 18px, 57.3px 12px; }
-#power.custom-battery-eta-fill48 { background-size: 132px 18px, 58.6px 12px; }
-#power.custom-battery-eta-fill49 { background-size: 132px 18px, 59.8px 12px; }
-#power.custom-battery-eta-fill50 { background-size: 132px 18px, 61.0px 12px; }
-#power.custom-battery-eta-fill51 { background-size: 132px 18px, 62.2px 12px; }
-#power.custom-battery-eta-fill52 { background-size: 132px 18px, 63.4px 12px; }
-#power.custom-battery-eta-fill53 { background-size: 132px 18px, 64.7px 12px; }
-#power.custom-battery-eta-fill54 { background-size: 132px 18px, 65.9px 12px; }
-#power.custom-battery-eta-fill55 { background-size: 132px 18px, 67.1px 12px; }
-#power.custom-battery-eta-fill56 { background-size: 132px 18px, 68.3px 12px; }
-#power.custom-battery-eta-fill57 { background-size: 132px 18px, 69.5px 12px; }
-#power.custom-battery-eta-fill58 { background-size: 132px 18px, 70.8px 12px; }
-#power.custom-battery-eta-fill59 { background-size: 132px 18px, 72.0px 12px; }
-#power.custom-battery-eta-fill60 { background-size: 132px 18px, 73.2px 12px; }
-#power.custom-battery-eta-fill61 { background-size: 132px 18px, 74.4px 12px; }
-#power.custom-battery-eta-fill62 { background-size: 132px 18px, 75.6px 12px; }
-#power.custom-battery-eta-fill63 { background-size: 132px 18px, 76.9px 12px; }
-#power.custom-battery-eta-fill64 { background-size: 132px 18px, 78.1px 12px; }
-#power.custom-battery-eta-fill65 { background-size: 132px 18px, 79.3px 12px; }
-#power.custom-battery-eta-fill66 { background-size: 132px 18px, 80.5px 12px; }
-#power.custom-battery-eta-fill67 { background-size: 132px 18px, 81.7px 12px; }
-#power.custom-battery-eta-fill68 { background-size: 132px 18px, 83.0px 12px; }
-#power.custom-battery-eta-fill69 { background-size: 132px 18px, 84.2px 12px; }
-#power.custom-battery-eta-fill70 { background-size: 132px 18px, 85.4px 12px; }
-#power.custom-battery-eta-fill71 { background-size: 132px 18px, 86.6px 12px; }
-#power.custom-battery-eta-fill72 { background-size: 132px 18px, 87.8px 12px; }
-#power.custom-battery-eta-fill73 { background-size: 132px 18px, 89.1px 12px; }
-#power.custom-battery-eta-fill74 { background-size: 132px 18px, 90.3px 12px; }
-#power.custom-battery-eta-fill75 { background-size: 132px 18px, 91.5px 12px; }
-#power.custom-battery-eta-fill76 { background-size: 132px 18px, 92.7px 12px; }
-#power.custom-battery-eta-fill77 { background-size: 132px 18px, 93.9px 12px; }
-#power.custom-battery-eta-fill78 { background-size: 132px 18px, 95.2px 12px; }
-#power.custom-battery-eta-fill79 { background-size: 132px 18px, 96.4px 12px; }
-#power.custom-battery-eta-fill80 { background-size: 132px 18px, 97.6px 12px; }
-#power.custom-battery-eta-fill81 { background-size: 132px 18px, 98.8px 12px; }
-#power.custom-battery-eta-fill82 { background-size: 132px 18px, 100.0px 12px; }
-#power.custom-battery-eta-fill83 { background-size: 132px 18px, 101.3px 12px; }
-#power.custom-battery-eta-fill84 { background-size: 132px 18px, 102.5px 12px; }
-#power.custom-battery-eta-fill85 { background-size: 132px 18px, 103.7px 12px; }
-#power.custom-battery-eta-fill86 { background-size: 132px 18px, 104.9px 12px; }
-#power.custom-battery-eta-fill87 { background-size: 132px 18px, 106.1px 12px; }
-#power.custom-battery-eta-fill88 { background-size: 132px 18px, 107.4px 12px; }
-#power.custom-battery-eta-fill89 { background-size: 132px 18px, 108.6px 12px; }
-#power.custom-battery-eta-fill90 { background-size: 132px 18px, 109.8px 12px; }
-#power.custom-battery-eta-fill91 { background-size: 132px 18px, 111.0px 12px; }
-#power.custom-battery-eta-fill92 { background-size: 132px 18px, 112.2px 12px; }
-#power.custom-battery-eta-fill93 { background-size: 132px 18px, 113.5px 12px; }
-#power.custom-battery-eta-fill94 { background-size: 132px 18px, 114.7px 12px; }
-#power.custom-battery-eta-fill95 { background-size: 132px 18px, 115.9px 12px; }
-#power.custom-battery-eta-fill96 { background-size: 132px 18px, 117.1px 12px; }
-#power.custom-battery-eta-fill97 { background-size: 132px 18px, 118.3px 12px; }
-#power.custom-battery-eta-fill98 { background-size: 132px 18px, 119.6px 12px; }
-#power.custom-battery-eta-fill99 { background-size: 132px 18px, 120.8px 12px; }
-#power.custom-battery-eta-fill100 { background-size: 132px 18px, 122.0px 12px; }
+#power.custom-battery-eta-fill0 { background-size: 150px 18px, 0.0px 12px; }
+#power.custom-battery-eta-fill1 { background-size: 150px 18px, 1.4px 12px; }
+#power.custom-battery-eta-fill2 { background-size: 150px 18px, 2.8px 12px; }
+#power.custom-battery-eta-fill3 { background-size: 150px 18px, 4.2px 12px; }
+#power.custom-battery-eta-fill4 { background-size: 150px 18px, 5.6px 12px; }
+#power.custom-battery-eta-fill5 { background-size: 150px 18px, 7.0px 12px; }
+#power.custom-battery-eta-fill6 { background-size: 150px 18px, 8.4px 12px; }
+#power.custom-battery-eta-fill7 { background-size: 150px 18px, 9.8px 12px; }
+#power.custom-battery-eta-fill8 { background-size: 150px 18px, 11.2px 12px; }
+#power.custom-battery-eta-fill9 { background-size: 150px 18px, 12.6px 12px; }
+#power.custom-battery-eta-fill10 { background-size: 150px 18px, 14.0px 12px; }
+#power.custom-battery-eta-fill11 { background-size: 150px 18px, 15.4px 12px; }
+#power.custom-battery-eta-fill12 { background-size: 150px 18px, 16.8px 12px; }
+#power.custom-battery-eta-fill13 { background-size: 150px 18px, 18.2px 12px; }
+#power.custom-battery-eta-fill14 { background-size: 150px 18px, 19.6px 12px; }
+#power.custom-battery-eta-fill15 { background-size: 150px 18px, 21.0px 12px; }
+#power.custom-battery-eta-fill16 { background-size: 150px 18px, 22.4px 12px; }
+#power.custom-battery-eta-fill17 { background-size: 150px 18px, 23.8px 12px; }
+#power.custom-battery-eta-fill18 { background-size: 150px 18px, 25.2px 12px; }
+#power.custom-battery-eta-fill19 { background-size: 150px 18px, 26.6px 12px; }
+#power.custom-battery-eta-fill20 { background-size: 150px 18px, 28.0px 12px; }
+#power.custom-battery-eta-fill21 { background-size: 150px 18px, 29.4px 12px; }
+#power.custom-battery-eta-fill22 { background-size: 150px 18px, 30.8px 12px; }
+#power.custom-battery-eta-fill23 { background-size: 150px 18px, 32.2px 12px; }
+#power.custom-battery-eta-fill24 { background-size: 150px 18px, 33.6px 12px; }
+#power.custom-battery-eta-fill25 { background-size: 150px 18px, 35.0px 12px; }
+#power.custom-battery-eta-fill26 { background-size: 150px 18px, 36.4px 12px; }
+#power.custom-battery-eta-fill27 { background-size: 150px 18px, 37.8px 12px; }
+#power.custom-battery-eta-fill28 { background-size: 150px 18px, 39.2px 12px; }
+#power.custom-battery-eta-fill29 { background-size: 150px 18px, 40.6px 12px; }
+#power.custom-battery-eta-fill30 { background-size: 150px 18px, 42.0px 12px; }
+#power.custom-battery-eta-fill31 { background-size: 150px 18px, 43.4px 12px; }
+#power.custom-battery-eta-fill32 { background-size: 150px 18px, 44.8px 12px; }
+#power.custom-battery-eta-fill33 { background-size: 150px 18px, 46.2px 12px; }
+#power.custom-battery-eta-fill34 { background-size: 150px 18px, 47.6px 12px; }
+#power.custom-battery-eta-fill35 { background-size: 150px 18px, 49.0px 12px; }
+#power.custom-battery-eta-fill36 { background-size: 150px 18px, 50.4px 12px; }
+#power.custom-battery-eta-fill37 { background-size: 150px 18px, 51.8px 12px; }
+#power.custom-battery-eta-fill38 { background-size: 150px 18px, 53.2px 12px; }
+#power.custom-battery-eta-fill39 { background-size: 150px 18px, 54.6px 12px; }
+#power.custom-battery-eta-fill40 { background-size: 150px 18px, 56.0px 12px; }
+#power.custom-battery-eta-fill41 { background-size: 150px 18px, 57.4px 12px; }
+#power.custom-battery-eta-fill42 { background-size: 150px 18px, 58.8px 12px; }
+#power.custom-battery-eta-fill43 { background-size: 150px 18px, 60.2px 12px; }
+#power.custom-battery-eta-fill44 { background-size: 150px 18px, 61.6px 12px; }
+#power.custom-battery-eta-fill45 { background-size: 150px 18px, 63.0px 12px; }
+#power.custom-battery-eta-fill46 { background-size: 150px 18px, 64.4px 12px; }
+#power.custom-battery-eta-fill47 { background-size: 150px 18px, 65.8px 12px; }
+#power.custom-battery-eta-fill48 { background-size: 150px 18px, 67.2px 12px; }
+#power.custom-battery-eta-fill49 { background-size: 150px 18px, 68.6px 12px; }
+#power.custom-battery-eta-fill50 { background-size: 150px 18px, 70.0px 12px; }
+#power.custom-battery-eta-fill51 { background-size: 150px 18px, 71.4px 12px; }
+#power.custom-battery-eta-fill52 { background-size: 150px 18px, 72.8px 12px; }
+#power.custom-battery-eta-fill53 { background-size: 150px 18px, 74.2px 12px; }
+#power.custom-battery-eta-fill54 { background-size: 150px 18px, 75.6px 12px; }
+#power.custom-battery-eta-fill55 { background-size: 150px 18px, 77.0px 12px; }
+#power.custom-battery-eta-fill56 { background-size: 150px 18px, 78.4px 12px; }
+#power.custom-battery-eta-fill57 { background-size: 150px 18px, 79.8px 12px; }
+#power.custom-battery-eta-fill58 { background-size: 150px 18px, 81.2px 12px; }
+#power.custom-battery-eta-fill59 { background-size: 150px 18px, 82.6px 12px; }
+#power.custom-battery-eta-fill60 { background-size: 150px 18px, 84.0px 12px; }
+#power.custom-battery-eta-fill61 { background-size: 150px 18px, 85.4px 12px; }
+#power.custom-battery-eta-fill62 { background-size: 150px 18px, 86.8px 12px; }
+#power.custom-battery-eta-fill63 { background-size: 150px 18px, 88.2px 12px; }
+#power.custom-battery-eta-fill64 { background-size: 150px 18px, 89.6px 12px; }
+#power.custom-battery-eta-fill65 { background-size: 150px 18px, 91.0px 12px; }
+#power.custom-battery-eta-fill66 { background-size: 150px 18px, 92.4px 12px; }
+#power.custom-battery-eta-fill67 { background-size: 150px 18px, 93.8px 12px; }
+#power.custom-battery-eta-fill68 { background-size: 150px 18px, 95.2px 12px; }
+#power.custom-battery-eta-fill69 { background-size: 150px 18px, 96.6px 12px; }
+#power.custom-battery-eta-fill70 { background-size: 150px 18px, 98.0px 12px; }
+#power.custom-battery-eta-fill71 { background-size: 150px 18px, 99.4px 12px; }
+#power.custom-battery-eta-fill72 { background-size: 150px 18px, 100.8px 12px; }
+#power.custom-battery-eta-fill73 { background-size: 150px 18px, 102.2px 12px; }
+#power.custom-battery-eta-fill74 { background-size: 150px 18px, 103.6px 12px; }
+#power.custom-battery-eta-fill75 { background-size: 150px 18px, 105.0px 12px; }
+#power.custom-battery-eta-fill76 { background-size: 150px 18px, 106.4px 12px; }
+#power.custom-battery-eta-fill77 { background-size: 150px 18px, 107.8px 12px; }
+#power.custom-battery-eta-fill78 { background-size: 150px 18px, 109.2px 12px; }
+#power.custom-battery-eta-fill79 { background-size: 150px 18px, 110.6px 12px; }
+#power.custom-battery-eta-fill80 { background-size: 150px 18px, 112.0px 12px; }
+#power.custom-battery-eta-fill81 { background-size: 150px 18px, 113.4px 12px; }
+#power.custom-battery-eta-fill82 { background-size: 150px 18px, 114.8px 12px; }
+#power.custom-battery-eta-fill83 { background-size: 150px 18px, 116.2px 12px; }
+#power.custom-battery-eta-fill84 { background-size: 150px 18px, 117.6px 12px; }
+#power.custom-battery-eta-fill85 { background-size: 150px 18px, 119.0px 12px; }
+#power.custom-battery-eta-fill86 { background-size: 150px 18px, 120.4px 12px; }
+#power.custom-battery-eta-fill87 { background-size: 150px 18px, 121.8px 12px; }
+#power.custom-battery-eta-fill88 { background-size: 150px 18px, 123.2px 12px; }
+#power.custom-battery-eta-fill89 { background-size: 150px 18px, 124.6px 12px; }
+#power.custom-battery-eta-fill90 { background-size: 150px 18px, 126.0px 12px; }
+#power.custom-battery-eta-fill91 { background-size: 150px 18px, 127.4px 12px; }
+#power.custom-battery-eta-fill92 { background-size: 150px 18px, 128.8px 12px; }
+#power.custom-battery-eta-fill93 { background-size: 150px 18px, 130.2px 12px; }
+#power.custom-battery-eta-fill94 { background-size: 150px 18px, 131.6px 12px; }
+#power.custom-battery-eta-fill95 { background-size: 150px 18px, 133.0px 12px; }
+#power.custom-battery-eta-fill96 { background-size: 150px 18px, 134.4px 12px; }
+#power.custom-battery-eta-fill97 { background-size: 150px 18px, 135.8px 12px; }
+#power.custom-battery-eta-fill98 { background-size: 150px 18px, 137.2px 12px; }
+#power.custom-battery-eta-fill99 { background-size: 150px 18px, 138.6px 12px; }
+#power.custom-battery-eta-fill100 { background-size: 150px 18px, 140.0px 12px; }
 /* END GENERATED USAGE GAUGES */
 
 #power-profiles-menu {

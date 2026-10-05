@@ -233,8 +233,8 @@
       ""
     ]
   },
-  // Time to empty (discharging) or to the charge limit (charging), ± half the
-  // 80% interval, then live watts.
+  // Discharging: time to empty, ± half its 80% interval, watts. Charging: time
+  // on battery banked so far, time to the charge limit, watts.
   // The outline fill is remaining energy, not charge: near empty each percent
   // holds ~15% less energy than near full. battery-eta (waybar-monitor) fits
   // its models from the power log.

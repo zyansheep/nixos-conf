@@ -108,7 +108,9 @@ class EtaTests(unittest.TestCase):
             live = eta.Live(Path(tmp))
             live.params = dict(self.params)
             out = live.estimate()
-            self.assertRegex(out['text'], r'×2\.0 <span[^>]*>±\d\.\d</span> <span[^>]*>32\.0W</span>$')
+            self.assertRegex(out['text'], r'~\d+:\d\d <span[^>]*>full ~\d+:\d\d</span> <span[^>]*>32W</span>$')
+            banked = out['detail']['banked']
+            self.assertAlmostEqual(banked, eta.time_to_empty(live.params, out['detail']['energy_wh'], 16.0)[0])
             self.assertIn('charging', out['class'])
             self.assertAlmostEqual(out['detail']['ratio'], 2.0, delta=0.1)
 

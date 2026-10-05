@@ -134,11 +134,16 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
                                   : std::string("Time left: ")) +
               powerMenuClock(eta.median) + "   80%: " + powerMenuClock(eta.low) + "–" +
               powerMenuClock(eta.high);
-  // While charging, lead with minutes of battery use bought per minute plugged in.
-  if (eta.kind == "full" && state["ratio"].isNumeric())
-    eta.title = "Charging: ×" + powerMenuTenths(state["ratio"].asDouble()) + " use per minute (80%: ×" +
-                powerMenuTenths(state["ratio_low"].asDouble()) + "–" +
-                powerMenuTenths(state["ratio_high"].asDouble()) + ")\n" + eta.title;
+  // While charging, lead with the time on battery banked so far (as the
+  // outline does) and how much each minute plugged in adds.
+  if (eta.kind == "full" && state["banked"].isNumeric()) {
+    std::string line = "On battery now: ~" + powerMenuClock(state["banked"].asDouble()) + "   80%: " +
+                       powerMenuClock(state["banked_low"].asDouble()) + "–" +
+                       powerMenuClock(state["banked_high"].asDouble());
+    if (state["ratio"].isNumeric())
+      line += "   +" + powerMenuTenths(state["ratio"].asDouble()) + " min per minute";
+    eta.title = line + "\n" + eta.title;
+  }
   eta.valid = true;
   return eta;
 }
