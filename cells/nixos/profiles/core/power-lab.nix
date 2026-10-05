@@ -14,7 +14,7 @@ _: {
   turbostat = config.boot.kernelPackages.turbostat;
   powerLab = pkgs.writeShellScriptBin "power-lab" ''
     set -euo pipefail
-    PATH=${pkgs.lib.makeBinPath [pkgs.coreutils pkgs.powertop turbostat pkgs.util-linux pkgs.gnugrep pkgs.gnused pkgs.pciutils pkgs.systemd]}:$PATH
+    PATH=${pkgs.lib.makeBinPath [pkgs.coreutils pkgs.powertop turbostat pkgs.util-linux pkgs.gnugrep pkgs.gnused pkgs.pciutils pkgs.systemd pkgs.iw]}:$PATH
     usage() {
       cat >&2 <<'USAGE'
     usage: power-lab <cmd> [args]
@@ -27,6 +27,9 @@ _: {
       abm <0-4>              amdgpu panel_power_savings (ABM) on the internal panel
       aspm <policy>          pcie_aspm policy: default|performance|powersave|powersupersave
       boost <0|1>            cpufreq boost (global + per-policy)
+      apst <microseconds>    NVMe APST at runtime via pm_qos_latency_tolerance_us (0 = off)
+      wifips <on|off>        Wi-Fi power save on the wireless interface
+      sleep-safe             restore the boot-time ASPM policy and NVMe APST limit (pre-sleep hook)
       sysfs <path> <value>   write <value> to a file under /sys
     USAGE
       exit 2
@@ -71,6 +74,30 @@ _: {
         for p in /sys/devices/system/cpu/cpu*/cpufreq/boost; do echo "$1" > "$p" 2>/dev/null || true; done
         echo "boost=$(cat /sys/devices/system/cpu/cpufreq/boost)"
         ;;
+      apst)
+        [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || usage
+        for f in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do echo "$1" > "$f"; echo "$f=$(cat "$f")"; done
+        ;;
+      wifips)
+        [ $# -eq 1 ] && [[ "$1" =~ ^(on|off)$ ]] || usage
+        for i in /sys/class/net/*; do
+          [ -d "$i/wireless" ] || [ -e "$i/phy80211" ] || continue
+          iw dev "$(basename "$i")" set power_save "$1"; iw dev "$(basename "$i")" get power_save
+        done
+        ;;
+      sleep-safe)
+        # power-experiment may have relaxed the s2idle crash workarounds while
+        # awake; put back whatever the kernel command line asked for.
+        policy=$(grep -o 'pcie_aspm.policy=[a-z]*' /proc/cmdline | cut -d= -f2 || true)
+        current=$(grep -o '\[[a-z]*\]' /sys/module/pcie_aspm/parameters/policy | tr -d '[]')
+        if [ -n "$policy" ] && [ "$policy" != "$current" ]; then echo "$policy" > /sys/module/pcie_aspm/parameters/policy; fi
+        latency=$(grep -o 'nvme_core.default_ps_max_latency_us=[0-9]*' /proc/cmdline | cut -d= -f2 || true)
+        if [ -n "$latency" ]; then
+          for f in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do
+            [ "$(cat "$f")" = "$latency" ] || echo "$latency" > "$f"
+          done
+        fi
+        ;;
       sysfs)
         [ $# -eq 2 ] || usage
         case "$1" in /sys/*) ;; *) echo "refusing: $1 not under /sys" >&2; exit 1 ;; esac
@@ -81,6 +108,9 @@ _: {
   '';
 in {
   environment.systemPackages = [powerLab];
+  # Runs as root before every suspend (pre-sleep.service), after any user-level
+  # experiment had a chance to change ASPM/APST.
+  powerManagement.powerDownCommands = "${powerLab}/bin/power-lab sleep-safe || true";
   security.sudo-rs.extraRules = [
     {
       users = ["zyansheep"];
