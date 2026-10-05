@@ -112,6 +112,9 @@ in {
   # Out-of-store dotfile symlinks keep the same target across rebuilds, so
   # explicitly restart Waybar when its configuration or artwork changes.
   systemd.user.services.waybar.restartTriggers = [
+    # battery-eta runs as Waybar's custom-module child, so a new build only
+    # takes effect when Waybar restarts.
+    pkgs.waybar-monitor
     ../../../../dotfiles/.config/waybar/config.jsonc
     ../../../../dotfiles/.config/waybar/style.css
     ../../../../dotfiles/.config/waybar/menu-theme.css

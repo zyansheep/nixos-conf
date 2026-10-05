@@ -28,7 +28,8 @@
     # development.shell.zsh
 
     services.printing
-    # services.ssh
+    services.ssh
+    services.tailscale
     services.syncthing
     services.containers
     services.zfs-snapshots
