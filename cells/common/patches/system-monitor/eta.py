@@ -322,6 +322,16 @@ def clock(hours):
     return f'{minutes // 60}:{minutes % 60:02d}'
 
 
+# Font Awesome glyphs as escapes: private-use characters are invisible in most
+# editors and were once silently lost, leaving the charging bolt blank.
+BOLT, PLUG = '\uf0e7', '\uf1e6'
+APPROX = "<span size='small' alpha='70%'>~</span>"
+
+
+def icon(glyph):
+    return f"<span font_family='Font Awesome 7 Free' weight='heavy' size='small'>{glyph}</span>"
+
+
 def plus_minus(low, high):
     """Half the 80% interval as one ± figure (the interval is close to symmetric)."""
     return f"<span size='small' alpha='70%'>±{clock((high - low) / 2)}</span>"
@@ -428,15 +438,13 @@ class Live:
             result.update(banked=banked, banked_low=banked_low, banked_high=banked_high)
             classes.append('charging')
             # Both ranges are wide (≈±20% / ±30%), so the label shows ~ and leaves them to the menu.
-            text = (f"<span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span> "
-                    f"~{clock(banked)} <span size='small' alpha='70%'>full ~{clock(median / 60)}</span> "
+            text = (f"{icon(BOLT)} {APPROX}{clock(banked)} <span size='small' alpha='70%'>full ~{clock(median / 60)}</span> "
                     f"<span size='small' alpha='70%'>{abs(state['watts']):.0f}W</span>")
         else:
             classes.append('plugged')
             limit = state['limit'] or 100
             held = state['pct'] >= limit - 1.5
-            text = (f"<span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span> "
-                    + ('held at limit' if held else 'on AC'))
+            text = f"{icon(PLUG)} " + ('held at limit' if held else 'on AC')
         result['text'], result['classes'] = text, classes
         return {'text': text, 'class': classes, 'percentage': fill, 'detail': result}
 

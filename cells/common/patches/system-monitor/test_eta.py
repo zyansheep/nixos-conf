@@ -80,7 +80,9 @@ class EtaTests(unittest.TestCase):
             self.assertLess(fill, 33)                 # Energy fraction is below the charge fraction here.
             self.assertRegex(out['text'], r'^\d+:\d\d <span[^>]*>±\d+:\d\d</span> <span[^>]*>15\.0W</span>$')
             (battery / 'status').write_text('Not charging')
-            self.assertIn('plugged', live.estimate()['class'])
+            plugged = live.estimate()
+            self.assertIn('plugged', plugged['class'])
+            self.assertIn('\uf1e6', plugged['text'])
 
     def test_distribution_agrees_with_the_quantiles(self):
         median, low, high = eta.time_to_empty(self.params, 32.0, 20.0)
@@ -108,7 +110,8 @@ class EtaTests(unittest.TestCase):
             live = eta.Live(Path(tmp))
             live.params = dict(self.params)
             out = live.estimate()
-            self.assertRegex(out['text'], r'~\d+:\d\d <span[^>]*>full ~\d+:\d\d</span> <span[^>]*>32W</span>$')
+            self.assertRegex(out['text'], r'~</span>\d+:\d\d <span[^>]*>full ~\d+:\d\d</span> <span[^>]*>32W</span>$')
+            self.assertIn('', out['text'])                     # The bolt glyph is really there
             banked = out['detail']['banked']
             self.assertAlmostEqual(banked, eta.time_to_empty(live.params, out['detail']['energy_wh'], 16.0)[0])
             self.assertIn('charging', out['class'])
