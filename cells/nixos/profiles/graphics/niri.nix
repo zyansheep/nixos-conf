@@ -27,6 +27,7 @@ in {
     notificationCenter # GTK4 notification panel; background input passes through
     audio-sidebar # Audio devices, levels and per-app routing popup
     display-panel # Brightness, night light and grayscale popup
+    waybar-monitor # battery-panel and power-experiment CLIs (collector runs as a service)
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -119,19 +120,61 @@ in {
   ];
 
   systemd.user.services.waybar-monitor = {
-    description = "Rolling process and temperature statistics for Waybar";
+    description = "Rolling process, temperature and battery-use statistics for Waybar";
     wantedBy = [ "graphical-session.target" ];
     partOf = [ "graphical-session.target" ];
     after = [ "graphical-session.target" ];
+    # `iw` (Wi-Fi power save) and `niri msg` (output modes) for the power log.
+    environment.PATH = lib.mkForce
+      "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
     serviceConfig = {
       ExecStart = "${pkgs.waybar-monitor}/bin/waybar-monitor";
       Restart = "on-failure";
+      # Slow enough that a crash loop never trips the start limit and stops logging.
+      RestartSec = 5;
       RuntimeDirectory = "waybar-monitor";
       RuntimeDirectoryMode = "0700";
+      # Long-term power log in ~/.local/state/waybar-monitor/power.
+      StateDirectory = "waybar-monitor";
       NoNewPrivileges = true;
-      ProtectSystem = "strict";
-      ProtectHome = "read-only";
-      PrivateTmp = true;
+      # No ProtectSystem/ProtectHome/PrivateTmp: in a user manager they imply a
+      # private user namespace, which hides /proc/PID/{fd,fdinfo,io,exe} of the
+      # session's apps (per-app GPU time and disk IO for battery attribution).
+    };
+  };
+
+  # Resident battery panel (history timeline, sleep drain, what-if runtime,
+  # experiments), toggled over D-Bus from the battery menu like display-panel.
+  systemd.user.services.battery-panel = {
+    description = "Resident battery history and experiments panel";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    # Experiment descriptions query iw, niri and powerprofilesctl.
+    environment.PATH = lib.mkForce
+      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "org.zyansheep.BatteryPanel";
+      ExecStart = "${pkgs.waybar-monitor}/libexec/waybar-monitor/battery_panel.py";
+      Restart = "on-failure";
+    };
+  };
+
+  # Randomized A/B power experiment, started by `power-experiment start` (the
+  # panel's Experiments tab). Root settings go through `sudo -n power-lab`, so
+  # no NoNewPrivileges; the original value is restored on stop or crash, and
+  # power-lab's pre-sleep hook restores the s2idle crash workarounds.
+  systemd.user.services.power-experiment = {
+    description = "Randomized A/B battery experiment";
+    partOf = [ "graphical-session.target" ];
+    environment.PATH = lib.mkForce
+      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment run";
+      ExecStopPost = "${pkgs.waybar-monitor}/bin/power-experiment restore";
+      Restart = "no";
     };
   };
 

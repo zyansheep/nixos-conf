@@ -27,16 +27,35 @@ int main() {
   assert(waybar::powerMenuStats(root / "missing") == "Battery health: unavailable\nCycles: unavailable");
 
   const auto snapshot = root / "snapshot.json";
-  std::ofstream(snapshot) << R"({"timestamp": 1000, "cpu": [
-    {"name": "Floorp", "value": "4.0%"}, 3, {"name": "Niri"},
-    {"name": "Waybar", "value": "0.5%"}]})";
-  const auto rows = waybar::powerMenuProcesses(snapshot, 1005, 5);
-  assert(rows.size() == 2 && rows[0].first == "Floorp" && rows[1].second == "0.5%");
-  assert(waybar::powerMenuProcesses(snapshot, 1005, 1).size() == 1);
-  assert(waybar::powerMenuProcesses(snapshot, 1010).empty());  // stale
+  std::ofstream(snapshot) << R"({"timestamp": 1000, "battery": {
+    "title": "Battery use", "footer": "Power log: 3 samples", "rows": [
+    {"name": "Floorp", "value": "4.0 W"}, 3, {"name": "Niri"},
+    {"name": "Display", "value": "0.5 W"}]}})";
+  const auto use = waybar::powerMenuBattery(snapshot, 1005, 5);
+  assert(use.title == "Battery use" && use.footer == "Power log: 3 samples");
+  assert(use.rows.size() == 2 && use.rows[0].first == "Floorp" &&
+         use.rows[1].second == "0.5 W");
+  assert(waybar::powerMenuBattery(snapshot, 1005, 1).rows.size() == 1);
+  assert(waybar::powerMenuBattery(snapshot, 1010).title.empty());  // stale
+  std::ofstream(snapshot) << R"({"timestamp": 1000, "cpu": []})";   // older collector
+  assert(waybar::powerMenuBattery(snapshot, 1000).title.empty());
   std::ofstream(snapshot) << "not json";
-  assert(waybar::powerMenuProcesses(snapshot, 1000).empty());
-  assert(waybar::powerMenuProcesses(root / "missing", 1000).empty());
+  assert(waybar::powerMenuBattery(snapshot, 1000).rows.empty());
+  assert(waybar::powerMenuBattery(root / "missing", 1000).title.empty());
+  const auto eta = root / "eta.json";
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Discharging", "hours": 1.25, "low": 1.0,
+    "high": 1.5, "distribution": {"kind": "empty", "t": [0.5, 1.0, 1.5, 2.0], "p": [0, 1, 1, 0]}})";
+  auto estimate = waybar::powerMenuEta(eta, 1005);
+  assert(estimate.valid && estimate.kind == "empty" && estimate.hours.size() == 4);
+  assert(estimate.title == "Time left: 1:15   80%: 1:00–1:30");
+  assert(!waybar::powerMenuEta(eta, 1020).valid);  // stale
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Not charging"})";
+  estimate = waybar::powerMenuEta(eta, 1001);
+  assert(!estimate.valid && estimate.title == "Plugged in");
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Charging", "hours": 0.5, "low": 0.4, "high": 0.7,
+    "target": 90, "distribution": {"kind": "full", "t": [0.2, 0.5], "p": [1, 2, 3]}})";
+  assert(!waybar::powerMenuEta(eta, 1001).valid);  // mismatched arrays
+  assert(waybar::powerMenuClock(1.999) == "2:00" && waybar::powerMenuClock(-1) == "--");
   std::filesystem::remove_all(root);
-  std::cout << "Battery health/cycle and process checks passed\n";
+  std::cout << "Battery health/cycle, battery-use and time-left checks passed\n";
 }

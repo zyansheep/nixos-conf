@@ -16,20 +16,42 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 | Tray chevron | Hover to expand; move away to collapse. |
 | Idle inhibitor | Click to toggle whether the screen may sleep. |
 
-The battery contains its percentage, live wattage (updated every second), charging mark, and active profile in one
-outline. A green leaf means Power saver, blue scales mean Balanced, and an amber
-speedometer means Performance. Below 20% the battery turns red; charging makes
-it green with a bolt. A plug means connected to power without charging, such as
-when a charge limit is reached. Open the power selector for battery health,
+The battery outline shows the estimated time left, ± half its 80% interval and
+live wattage (for example `1:17 ±0:15 14.2W`), plus the active profile. While
+charging it shows a bolt and the time to the charge limit instead; a plug means
+connected without charging (“held at limit” at the charge limit). The fill is
+remaining *energy* at 1% resolution, not the EC's charge percentage: the gauge
+counts charge linearly, but loaded voltage falls from ~17 V near full to ~14 V
+near empty, so the bottom percents hold ~15% less energy and drain faster at the
+same draw. The outline turns red below 30 minutes or 10% energy and green while
+charging. A green leaf means Power saver, blue scales mean Balanced, and an
+amber speedometer means Performance. Open the power selector for battery health,
 cycle count and the active profile.
+
+`battery-eta` (waybar-monitor) produces the label. Time to empty is remaining
+energy (∫ loaded voltage × charge, from the power log's voltage curve) divided
+by the forecast average draw over the remaining time, solved jointly. Draw is
+modelled as an Ornstein–Uhlenbeck process on minute means (long-run mean,
+variance and decay time ≈15 min fitted from history; the recent 10-minute draw
+decays toward the mean), giving a log-normal 80% interval that also covers
+uncertainty in the long-run mean; current readings are scaled by the charge
+counter (~5% under-read). Backtested, the 80% interval for the average draw
+covered 82–88% of outcomes at 10–90 minute horizons. Time to full integrates the
+learned minutes-per-percent charge curve (constant current, then taper above
+~80%), scaled by the last five minutes' rate; its interval is the spread of
+10-minute charge rates around that curve. Models refit every 15 minutes.
 
 The profile popup centers its three buttons beneath the battery. A highlighted button
 marks the active profile. Battery health and cycle count appear below the
 buttons and refresh whenever the menu opens. Health is full capacity divided by design
 capacity; unsupported readings show “unavailable”, and zero cycles is valid.
-Below that, the five apps using the most CPU (grouped like the CPU hover panel,
-from the same `waybar-monitor` snapshot) stand in for battery use, since Linux
-has no per-process power meter.
+Below that, the time-left distribution: battery-eta's full forecast density
+(the battery is empty by t exactly when the average draw over t reaches the
+remaining energy / t, so P(T ≤ t) comes straight from the draw forecast), with
+the 80% interval shaded darker and the median marked; green and to the charge
+limit while charging. Below that, battery use over the last 30 minutes on battery ranks apps and
+hardware together in average watts and share, with the size of the long-term
+power log underneath (see [Battery use and the power log](#battery-use-and-the-power-log)).
 AC plug/unplug events still select Balanced / Power saver through udev rules.
 
 Wi-Fi lights another curved bar at 25%, 50%, and 75%; unlit bars stay faintly
@@ -62,10 +84,105 @@ other bar tooltips.
   with chip/channel names. Different interfaces can report the same sensor.
 
 `waybar-monitor.service` samples every two seconds and publishes an atomic cache
-under `$XDG_RUNTIME_DIR/waybar-monitor`. It stores no command lines or persistent
-history. CPU counters use PID plus process start time, so PID reuse cannot
-inherit another process's CPU time. A long sampling gap resets the window.
-Processes that finish entirely between samples cannot be measured.
+under `$XDG_RUNTIME_DIR/waybar-monitor`. It stores no command lines; its only
+persistent history is the power log below. CPU counters use PID plus process
+start time, so PID reuse cannot inherit another process's CPU time. A long
+sampling gap resets the window. Processes that finish entirely between samples
+cannot be measured. The service has no filesystem sandbox: in a user manager
+`ProtectSystem`/`ProtectHome` imply a private user namespace, which hides the
+session's `/proc/PID/fd`, `fdinfo`, `io` and `exe`.
+
+### Battery use and the power log
+
+Linux has no per-process power meter, but this laptop measures two totals:
+battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
+`PPT`, CPU + GPU). Both are sampled four times a second. The menu splits them:
+
+- **Chip power → apps.** Above a learned floor (“Processor baseline”), chip
+  power is divided by each app's load and GPU/video engine time (DRM `fdinfo`,
+  deduplicated by client id). Load is busy CPU time × clock² (GHz): dynamic
+  power grows with frequency and voltage, and busy time alone explained only
+  45% of chip power versus 73% with the clock term. Busy CPU time not owned by a
+  process goes to “Kernel”.
+- **Chip watts cost more than a watt of battery.** On one-minute means,
+  battery ≈ 0.3 + 1.39 × chip + 3.0 × backlight W (R² 0.945): conversion losses
+  and rails outside PPT follow chip load. On battery, app and baseline shares
+  are multiplied by that learned factor.
+- **Battery − k × chip → hardware.** Display (backlight), Wi-Fi (traffic),
+  storage (busy time), USB devices, audio and keyboard backlight use learned
+  watts per unit of activity; the unexplained remainder is “Rest of system”.
+
+Both are ridge regressions updated online, shrunk toward prior guesses so
+features that never vary keep plausible values, and fitted on battery time only
+(AC runs a hungrier power profile). The platform model sees one-minute means:
+the battery reading lags chip power by ~10 s. Coefficients persist in
+`models.json`. On AC the battery reading is charge, not consumption, so the
+menu shows the last 30 minutes on battery or, failing that, chip power only.
+
+Every 10 seconds the monitor appends one JSON line of **raw inputs** (not
+attributions) to `~/.local/state/waybar-monitor/power/YYYY-MM-DD.jsonl`; finished
+days become `.jsonl.zst`. Records hold measurements for offline model fitting
+and counterfactuals (“what if this app were closed / this setting changed”):
+
+| Key | Contents |
+| --- | --- |
+| `t0`, `t1`, `dt`, `boot` | wall-clock interval, its boottime length, boot id prefix |
+| `ac`, `status`, `bat` | mains, battery status; mean/min/max signed W (discharge positive), %, charge, volts |
+| `soc`, `gpu` | chip W (mean/min/max); GPU busy %, summed GPU/video engine seconds |
+| `cpu` | user/sys/irq/iowait/idle seconds, `busy_s`, mean/max MHz, C-state residency, `ctxt`, `intr` |
+| `irq` | top interrupt sources by count |
+| `apps` | per coarse app: processes `n`, `rss` MiB, `cpu`/`gpu`/`video` seconds, `io_r`/`io_w` bytes |
+| `net`, `wifi_dbm`, `disk` | per-interface byte/packet deltas; signal; per-disk bytes and busy seconds |
+| `usb`, `pci`, `audio` | runtime-active USB devices and PCI drivers; running PCM streams |
+| `display` | backlight and keyboard fractions, connectors, ABM level, niri modes, display-panel state |
+| `settings` | platform profile, EPP, governor, boost, pstate, ASPM, NVMe APST, charge limit, rfkill, Wi-Fi power save |
+| `temp`, `fan`, `lid`, `locked` | Tctl, fan RPM, lid state, swaylock running |
+
+Records also carry `exp` (run, experiment, block, arm, value, washout) while a
+power experiment is running.
+
+Events share the files: `start` (collector start) and `gap` (suspend or other
+sampling gap, with battery charge before and after, for sleep drain).
+`index.json` caches per-day record counts for the menu footer. App names are
+coarse (kernel threads are `Kernel`; no PIDs, command lines, browser origins or
+titles). Expect roughly 40 MB/day uncompressed; read with e.g.
+`duckdb -c "select * from read_json('~/.local/state/waybar-monitor/power/*.jsonl*')"`.
+
+### Battery panel and power experiments
+
+“History, what-if & experiments…” at the bottom of the battery menu (or
+`battery-panel [timeline|sleep|whatif|experiments]`) toggles a resident
+layer-shell panel. One row of controls scopes everything: 6 h / Day / Week,
+back / forward (or ← →), Now. Tabs:
+
+- **Timeline** — stacked average watts per moment by group (processor
+  baseline, rest of system, display, and stable app groups: browser, builds &
+  EDA, coding tools, chat & media, other apps, desktop & system), with a
+  separate battery-% strip. Faded columns are on AC (chip power only); shaded
+  bands are sleep. Hover lists the groups, the top apps and the battery level.
+- **Sleep drain** — one dot per suspend (size = length) at %/h, with the median
+  across all history.
+- **What-if runtime** — extra minutes per full charge, with 90% intervals.
+  Model estimates (outlined) remove an app's or group's activity, or dim the
+  display, and refit on 10-minute moving-block bootstrap resamples (residuals
+  stay correlated for minutes, so naive intervals would be ~3× too narrow).
+  Experiment results (solid) come from paired A/B blocks with a pair bootstrap.
+  Runtime = full-charge Wh ÷ typical draw, from this period or all history.
+- **Experiments** — randomized switchback tests: `power-experiment.service`
+  alternates a setting between A (current) and B in random-order 4-minute
+  blocks while on battery, discards each block's first minute, pauses (and
+  restores A) on AC, and restores A on stop or crash. Settings: ASPM, NVMe APST,
+  CPU boost, panel ABM, power profile, refresh rate, Wi-Fi power save, and
+  freezing an app scope (`systemctl --user freeze`, optionally only while the
+  screen is locked). Root settings go through `sudo -n power-lab`; power-lab's
+  `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe APST
+  limit (the s2idle crash workarounds) before every suspend, and the runner
+  starts a fresh block after resume. Profile and ABM are left to the AC udev
+  rules while plugged in.
+
+`report.py` caches per-minute aggregates in `~/.cache/battery-panel` (finished
+days whole, today up to its last complete minute). `battery_panel.py --render
+DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.
 
 ### Browser processes and readable labels
 
@@ -229,7 +346,7 @@ nix build path:.#packages.x86_64-linux.audio-sidebar \
 The monitor tests cover rolling CPU windows, PID reuse, exited tasks, memory
 ordering and sensor parsing. The audio package tests command handling, hotplug behavior, monitor-source
 classification, and resident-window behavior. The Waybar build tests battery
-capacity/cycle fallbacks against synthetic sysfs fixtures and the top-app snapshot parser. Apply using `nrb` to
+capacity/cycle fallbacks against synthetic sysfs fixtures and the battery-use snapshot parser. Apply using `nrb` to
 install the commands, CSS link, and patched packages. Niri reloads linked key
 bindings. `Alt+Shift+R` restarts Waybar and notifications using the system package;
 the managed Wi-Fi service is replaced by a rebuild.

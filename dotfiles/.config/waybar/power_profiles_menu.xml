@@ -106,11 +106,42 @@
       </packing>
     </child>
     <child>
+      <object class="GtkMenuItem" id="battery-eta">
+        <property name="name">battery-eta</property>
+        <property name="sensitive">False</property>
+        <child>
+          <!-- battery-eta's time-left distribution, refreshed each time the menu opens. -->
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">2</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="name">battery-eta-title</property>
+                <property name="xalign">0</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkDrawingArea">
+                <property name="name">battery-eta-chart</property>
+                <property name="height-request">60</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">2</property>
+        <property name="bottom-attach">3</property>
+      </packing>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="battery-top-apps">
         <property name="name">battery-top-apps</property>
         <property name="sensitive">False</property>
         <child>
-          <!-- Filled from the waybar-monitor snapshot each time the menu opens. -->
+          <!-- Battery use by app/hardware from the waybar-monitor snapshot, refilled on open. -->
           <object class="GtkBox">
             <property name="name">battery-processes</property>
             <property name="orientation">vertical</property>
@@ -121,8 +152,20 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">2</property>
-        <property name="bottom-attach">3</property>
+        <property name="top-attach">3</property>
+        <property name="bottom-attach">4</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="battery-panel">
+        <property name="name">battery-panel-item</property>
+        <property name="label">History, what-if &amp; experiments…</property>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">4</property>
+        <property name="bottom-attach">5</property>
       </packing>
     </child>
   </object>

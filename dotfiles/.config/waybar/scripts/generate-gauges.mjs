@@ -111,9 +111,12 @@ for (let level = 0; level < 4; level++) {
 }
 `;
 }
-// Lucide's battery outline, widened to make room for the live percentage and
-// wattage. BATTERY_WIDTH sets the outline; the fill spans its inner body.
-const BATTERY_WIDTH = 104;
+// Lucide's battery outline, widened to make room for the time estimate, live
+// wattage and ± interval. BATTERY_WIDTH sets the outline; the fill spans its
+// inner body. ETA_WIDTH fits the widest label measured in the bar font,
+// "⚡ 1:14 ±0:25 36.4W" (105px).
+const BATTERY_WIDTH = 132;
+const ETA_WIDTH = 106;
 const BATTERY_FILL = BATTERY_WIDTH - 10;
 // https://github.com/lucide-icons/lucide/blob/main/icons/battery.svg
 // See gauges/LUCIDE-LICENSE. The fill is CSS, so only three SVGs are needed.
@@ -127,9 +130,13 @@ for (const [name, color] of Object.entries({
 </svg>
 `);
 }
+// battery-eta (custom/battery-eta) mirrors its classes onto the group as
+// custom-battery-eta-*: fillN (remaining energy, 0–100), discharging,
+// charging, plugged and low.
+const eta = '#power.custom-battery-eta';
 css += `
-/* Both native labels sit inside one outline. Mirrored battery states let the
-   group retain capacity fill and charging/low colors across the whole body. */
+/* Both labels sit inside one outline; the estimator's mirrored classes give the
+   group its energy fill and charging/low colors across the whole body. */
 #power {
   min-width: ${BATTERY_WIDTH}px;
   min-height: 22px;
@@ -140,8 +147,8 @@ css += `
   background-position: center, 3px center;
   background-repeat: no-repeat;
 }
-#battery {
-  min-width: ${BATTERY_WIDTH - 24}px;
+#custom-battery-eta {
+  min-width: ${ETA_WIDTH}px;
   min-height: 22px;
   margin: 0 0 0 3px;
   padding: 0;
@@ -152,14 +159,14 @@ css += `
   animation: none;
   background: none;
 }
-#power.battery-level0, #power.battery-level10 {
+${eta}-low {
   background-image: url("gauges/battery-low.svg"), linear-gradient(rgba(239, 133, 133, 0.3), rgba(239, 133, 133, 0.3));
 }
-#power.battery-charging {
+${eta}-charging {
   background-image: url("gauges/battery-charging.svg"), linear-gradient(rgba(143, 223, 143, 0.25), rgba(143, 223, 143, 0.25));
 }
-#battery.level0, #battery.level10 { color: #ef8585; }
-#battery.charging { color: #8fdf8f; }
+#custom-battery-eta.low { color: #ef8585; }
+#custom-battery-eta.charging { color: #8fdf8f; }
 #power-profiles-daemon {
   min-width: 14px;
   min-height: 22px;
@@ -170,8 +177,8 @@ css += `
   font-size: 10px;
 }
 `;
-for (let capacity = 0; capacity <= 100; capacity += 10) {
-  css += `#power.battery-level${capacity} { background-size: ${BATTERY_WIDTH}px 18px, ${BATTERY_FILL * capacity / 100}px 12px; }\n`;
+for (let fill = 0; fill <= 100; fill++) {
+  css += `${eta}-fill${fill} { background-size: ${BATTERY_WIDTH}px 18px, ${(BATTERY_FILL * fill / 100).toFixed(1)}px 12px; }\n`;
 }
 css += endMarker;
 const stylesheet = new URL('style.css', root);

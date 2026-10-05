@@ -1,6 +1,6 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,38 @@
+@@ -12,9 +12,126 @@
  
  namespace waybar {
  
@@ -10,13 +10,13 @@
 +  g_list_free(old);
 +  const auto snapshot =
 +      std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "snapshot.json";
-+  const auto rows = powerMenuProcesses(snapshot, g_get_real_time() / 1e6);
-+  auto* title = gtk_label_new(rows.empty() ? "Top apps: waiting for the system monitor…"
-+                                           : "Top apps by CPU use");
++  const auto battery = powerMenuBattery(snapshot, g_get_real_time() / 1e6);
++  auto* title = gtk_label_new(battery.title.empty() ? "Battery use: waiting for the system monitor…"
++                                                    : battery.title.c_str());
 +  gtk_label_set_xalign(GTK_LABEL(title), 0);
 +  gtk_style_context_add_class(gtk_widget_get_style_context(title), "battery-processes-title");
 +  gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
-+  for (const auto& [name, value] : rows) {
++  for (const auto& [name, value] : battery.rows) {
 +    auto* line = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
 +    auto* label = gtk_label_new(name.c_str());
 +    gtk_label_set_xalign(GTK_LABEL(label), 0);
@@ -28,7 +28,78 @@
 +    gtk_box_pack_end(GTK_BOX(line), amount, FALSE, FALSE, 0);
 +    gtk_box_pack_start(GTK_BOX(box), line, FALSE, FALSE, 0);
 +  }
++  if (!battery.footer.empty()) {
++    auto* footer = gtk_label_new(battery.footer.c_str());
++    gtk_label_set_xalign(GTK_LABEL(footer), 0);
++    gtk_style_context_add_class(gtk_widget_get_style_context(footer), "battery-processes-footer");
++    gtk_box_pack_start(GTK_BOX(box), footer, FALSE, FALSE, 0);
++  }
 +  gtk_widget_show_all(box);
++}
++
++static std::filesystem::path powerMenuEtaPath() {
++  return std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "eta.json";
++}
++
++// battery-eta's time-left (or time-to-limit) density: the 80% interval drawn
++// darker, the median as a line, and an h:mm time axis.
++static gboolean drawPowerMenuEta(GtkWidget* widget, cairo_t* cr, gpointer) {
++  const auto* eta = static_cast<PowerMenuEta*>(g_object_get_data(G_OBJECT(widget), "eta"));
++  if (eta == nullptr || !eta->valid) return FALSE;
++  const double width = gtk_widget_get_allocated_width(widget);
++  const double height = gtk_widget_get_allocated_height(widget);
++  const double left = 6, right = width - 6, top = 4, bottom = height - 13;
++  const double first = eta->hours.front(), last = eta->hours.back();
++  double peak = 0;
++  for (double value : eta->density) peak = std::max(peak, value);
++  if (last <= first || peak <= 0) return FALSE;
++  auto x = [&](double hours) { return left + (hours - first) / (last - first) * (right - left); };
++  auto y = [&](double value) { return bottom - value / peak * (bottom - top); };
++  auto area = [&](double from, double to) {
++    cairo_move_to(cr, x(std::max(from, first)), bottom);
++    for (size_t i = 0; i < eta->hours.size(); i++)
++      if (eta->hours[i] >= from && eta->hours[i] <= to) cairo_line_to(cr, x(eta->hours[i]), y(eta->density[i]));
++    cairo_line_to(cr, x(std::min(to, last)), bottom);
++    cairo_close_path(cr);
++  };
++  // Blue for time left, green for time to the charge limit (the outline's colors).
++  const bool full = eta->kind == "full";
++  const double red = full ? 0.56 : 0.22, green = full ? 0.87 : 0.53, blue = full ? 0.56 : 0.90;
++  area(first, last);
++  cairo_set_source_rgba(cr, red, green, blue, 0.22);
++  cairo_fill(cr);
++  area(eta->low, eta->high);
++  cairo_set_source_rgba(cr, red, green, blue, 0.55);
++  cairo_fill(cr);
++  for (size_t i = 0; i < eta->hours.size(); i++)
++    (i ? cairo_line_to : cairo_move_to)(cr, x(eta->hours[i]), y(eta->density[i]));
++  cairo_set_source_rgba(cr, red, green, blue, 0.95);
++  cairo_set_line_width(cr, 1.5);
++  cairo_stroke(cr);
++  cairo_set_source_rgba(cr, 1, 1, 1, 0.85);
++  cairo_set_line_width(cr, 1);
++  cairo_move_to(cr, std::round(x(eta->median)) + 0.5, top);
++  cairo_line_to(cr, std::round(x(eta->median)) + 0.5, bottom);
++  cairo_stroke(cr);
++  // Recessive axis: at most five h:mm ticks on round steps.
++  double step = 4;
++  for (double candidate : {1.0 / 12, 0.25, 0.5, 1.0, 2.0, 4.0})
++    if ((last - first) / candidate <= 5) { step = candidate; break; }
++  auto* layout = pango_cairo_create_layout(cr);
++  auto* font = pango_font_description_from_string("DejaVu Sans 7");
++  pango_layout_set_font_description(layout, font);
++  cairo_set_source_rgba(cr, 1, 1, 1, 0.6);
++  for (double tick = std::ceil(first / step) * step; tick <= last; tick += step) {
++    pango_layout_set_text(layout, powerMenuClock(tick).c_str(), -1);
++    int text_width, text_height;
++    pango_layout_get_pixel_size(layout, &text_width, &text_height);
++    const double position = std::clamp(x(tick) - text_width / 2.0, 0.0, width - text_width);
++    cairo_move_to(cr, position, bottom + 1);
++    pango_cairo_show_layout(cr, layout);
++  }
++  pango_font_description_free(font);
++  g_object_unref(layout);
++  return FALSE;
 +}
 +
  static void updatePowerMenuStats(GtkWidget* widget) {
@@ -36,6 +107,23 @@
      gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
 +  } else if (GTK_IS_BOX(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-processes") == 0) {
 +    fillPowerMenuProcesses(widget);
++  } else if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-eta-title") == 0) {
++    const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
++    gtk_label_set_text(GTK_LABEL(widget), eta.title.empty() ? "Time left: waiting for battery-eta…"
++                                                              : eta.title.c_str());
++  } else if (GTK_IS_DRAWING_AREA(widget) &&
++             g_strcmp0(gtk_widget_get_name(widget), "battery-eta-chart") == 0) {
++    auto* eta = new PowerMenuEta(powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6));
++    // show_all must not resurrect the chart when there is no estimate.
++    gtk_widget_set_no_show_all(widget, TRUE);
++    gtk_widget_set_visible(widget, eta->valid);
++    g_object_set_data_full(G_OBJECT(widget), "eta", eta,
++                           [](gpointer data) { delete static_cast<PowerMenuEta*>(data); });
++    if (g_object_get_data(G_OBJECT(widget), "eta-draw") == nullptr) {
++      g_signal_connect(widget, "draw", G_CALLBACK(drawPowerMenuEta), nullptr);
++      g_object_set_data(G_OBJECT(widget), "eta-draw", GINT_TO_POINTER(1));
++    }
++    gtk_widget_queue_draw(widget);
    } else if (GTK_IS_CONTAINER(widget)) {
      GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
      for (GList* child = children; child; child = child->next)

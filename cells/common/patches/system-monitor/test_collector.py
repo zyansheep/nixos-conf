@@ -107,11 +107,25 @@ class MonitorTests(unittest.TestCase):
             fields[0] = 'S'; fields[11] = str(TICKS); fields[12] = str(TICKS)
             fields[19] = '123'; fields[21] = '4'
             (root/'12'/'stat').write_text('12 (name ) with spaces) '+' '.join(fields))
-            self.assertEqual(processes(root)[(12,123)], ('name ) with spaces',2,4*PAGE))
+            self.assertEqual(processes(root)[(12,123)], ('name ) with spaces',2,4*PAGE,'name ) with spaces'))
             chip=root/'hwmon0';chip.mkdir();(chip/'name').write_text('cpu')
             (chip/'temp1_input').write_text('42000');(chip/'temp1_label').write_text('Package')
             (chip/'temp2_input').write_text('invalid')
             self.assertEqual(temperatures(root,root), [{'name':'cpu · Package','value':'42.0 °C'}])
+
+    def test_power_log_groups_kernel_threads_and_drops_browser_detail(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            for pid, parent, name in [(2, 0, 'kthreadd'), (40, 2, 'kworker/u32:1-events'),
+                                      (42, 1, '.floorp-wrapped'), (43, 42, 'Isolated Web Co')]:
+                directory=root/str(pid); directory.mkdir()
+                fields=['0']*22; fields[0]='S'; fields[1]=str(parent); fields[19]='100'
+                (directory/'stat').write_text(f'{pid} ({name}) '+' '.join(fields))
+            result = processes(root)
+            self.assertEqual(result[(40,100)][3], 'Kernel')
+            self.assertEqual(result[(2,100)][3], 'Kernel')
+            self.assertEqual(result[(43,100)][0], 'Floorp web · PID 43')
+            self.assertEqual(result[(43,100)][3], 'Floorp')
 
 
 if __name__ == '__main__':

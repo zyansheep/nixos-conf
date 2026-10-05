@@ -4,7 +4,11 @@ import collections
 import json
 import os
 from pathlib import Path
+import signal
+import sys
 import time
+
+from power import Monitor
 
 TICKS = os.sysconf('SC_CLK_TCK')
 PAGE = os.sysconf('SC_PAGE_SIZE')
@@ -115,7 +119,10 @@ def processes(root=Path('/proc')):
 
     for key, (comm, seconds, rss) in list(result.items()):
         pid = key[0]
-        result[key] = (process_label(pid, comm, application(pid), metadata[pid][2]), seconds, rss)
+        app = application(pid)
+        # The coarse app (no PID or browser detail) is what the power log keeps.
+        coarse = 'Kernel' if 2 in (pid, metadata[pid][0]) else app or executable_name(comm)
+        result[key] = (process_label(pid, comm, app, metadata[pid][2]), seconds, rss, coarse)
     return result
 
 
@@ -158,7 +165,7 @@ class History:
             elapsed = now - self.last_time
             if 0 < elapsed <= 10:
                 usage = collections.defaultdict(float)
-                for key, (name, seconds, _) in current.items():
+                for key, (name, seconds, *_) in current.items():
                     if key in self.previous:
                         usage[name] += max(0, seconds - self.previous[key][1])
                     elif key[1] / TICKS >= self.last_time:
@@ -178,7 +185,7 @@ class History:
             for name, seconds in values.items():
                 usage[name] += seconds * duration / (end - start)
         memory = collections.defaultdict(int)
-        for name, _, rss in current.values():
+        for name, _, rss, *_ in current.values():
             memory[name] += rss
         cpu = [{'name': name, 'value': f'{seconds / covered / self.cores * 100:.1f}%'}
                for name, seconds in sorted(usage.items(), key=lambda row: (-row[1], row[0]))[:100]
@@ -222,18 +229,29 @@ def browser_labels(state, current, directory, now=None):
 def main():
     directory = Path(os.environ['XDG_RUNTIME_DIR']) / 'waybar-monitor'
     directory.mkdir(mode=0o700, exist_ok=True)
+    state_home = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
+    power = Monitor(Path(os.environ.get('STATE_DIRECTORY', state_home / 'waybar-monitor')) / 'power',
+                    experiment=directory / 'experiment.json')
+    signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     history = History()
-    while True:
-        began = time.clock_gettime(time.CLOCK_BOOTTIME)
-        state = history.sample(began, processes())
-        browser_labels(state, history.previous, directory.parent / 'floorp-monitor')
-        state['temperature'] = temperatures()
-        temporary = directory / 'snapshot.tmp'
-        temporary.write_text(json.dumps(state, ensure_ascii=True))
-        temporary.chmod(0o600)
-        temporary.replace(directory / 'snapshot.json')
-        elapsed = time.clock_gettime(time.CLOCK_BOOTTIME) - began
-        time.sleep(max(.1, 2 - elapsed))
+    try:
+        while True:
+            began = time.clock_gettime(time.CLOCK_BOOTTIME)
+            current = processes()
+            state = history.sample(began, current)
+            browser_labels(state, history.previous, directory.parent / 'floorp-monitor')
+            state['temperature'] = temperatures()
+            state['battery'] = power.update(began, time.time(), current)
+            temporary = directory / 'snapshot.tmp'
+            temporary.write_text(json.dumps(state, ensure_ascii=True))
+            temporary.chmod(0o600)
+            temporary.replace(directory / 'snapshot.json')
+            # Battery current and chip power change faster than the process scan.
+            while (remaining := began + 2 - time.clock_gettime(time.CLOCK_BOOTTIME)) > .1:
+                time.sleep(min(.5, remaining))
+                power.fast.sample()
+    finally:
+        power.close()
 
 
 if __name__ == '__main__':

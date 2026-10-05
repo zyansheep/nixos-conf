@@ -56,7 +56,7 @@
   "group/power": {
     "tooltip": false,
     "orientation": "horizontal",
-    "modules": [ "battery", "power-profiles-daemon" ]
+    "modules": [ "custom/battery-eta", "power-profiles-daemon" ]
   },
   "custom/display": {
     // Sun (moon while the night light is on); click for brightness, night light
@@ -233,32 +233,26 @@
       ""
     ]
   },
-  "battery": {
+  // Time to empty (discharging) or to the charge limit (charging), ± half the
+  // 80% interval, then live watts.
+  // The outline fill is remaining energy, not charge: near empty each percent
+  // holds ~15% less energy than near full. battery-eta (waybar-monitor) fits
+  // its models from the power log.
+  "custom/battery-eta": {
+    "exec": "/run/current-system/sw/bin/battery-eta",
+    "return-type": "json",
+    "restart-interval": 10,
     "tooltip": false,
     "group-state": true,
-    // Battery states select the first threshold >= capacity (unlike CPU).
-    // Each ten-percent bucket uses a matching fill; only 100% looks full.
-    "states": {
-      "level0": 9, "level10": 19, "level20": 29, "level30": 39,
-      "level40": 49, "level50": 59, "level60": 69, "level70": 79,
-      "level80": 89, "level90": 99, "level100": 100
-    },
-    // Live draw (or charge rate) next to the percentage, refreshed every second.
-    "format": "{capacity}% <span alpha='75%'>{power:.1f}W</span>",
-    "format-charging": "{capacity}% <span alpha='75%'>{power:.1f}W</span> <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "format-plugged": "{capacity}% <span alpha='75%'>{power:.1f}W</span> <span font_family='Font Awesome 7 Free' weight='heavy' size='small'></span>",
-    "tooltip-format": "Battery: {capacity}% · {timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
-    "tooltip-format-charging": "Battery: {capacity}% · Charging\n{timeTo}\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
-    "tooltip-format-plugged": "Battery: {capacity}% · Plugged in (not charging)\nPower: {power:.2f} W\nHealth: {health}% · Cycles: {cycles}\nClick for power profiles and battery health",
     "menu": "on-click",
     "menu-anchor": "group-bottom",
     "menu-file": "$HOME/.config/waybar/power_profiles_menu.xml",
     "menu-actions": {
       "power-saver": "powerprofilesctl set power-saver",
       "balanced": "powerprofilesctl set balanced",
-      "performance": "powerprofilesctl set performance"
-    },
-    "interval": 1
+      "performance": "powerprofilesctl set performance",
+      "battery-panel": "/run/current-system/sw/bin/battery-panel"
+    }
   },
   "power-profiles-daemon": {
     "group-state": true,
@@ -271,7 +265,8 @@
     "menu-actions": {
       "power-saver": "powerprofilesctl set power-saver",
       "balanced": "powerprofilesctl set balanced",
-      "performance": "powerprofilesctl set performance"
+      "performance": "powerprofilesctl set performance",
+      "battery-panel": "/run/current-system/sw/bin/battery-panel"
     },
     "format-icons": {
       "default": "",
