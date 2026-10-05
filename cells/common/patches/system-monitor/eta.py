@@ -302,6 +302,7 @@ class Live:
         minutes, events = report.load_range(time.time() - 30 * 86400, time.time() + 60)
         self.params = fit(minutes)
         self.params['sleep'] = report.sleep_model(report.sleep_drain(events))
+        report.prune_cache()
         # Seed the recent window from the log so a restart is not blind.
         if not self.samples:
             for m in minutes[-15:]:

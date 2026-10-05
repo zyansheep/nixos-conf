@@ -196,7 +196,12 @@ back / forward (or ← →), Now. Tabs:
   bootstrap over whole boots, once each arm has two boots with battery time.
 
 `report.py` caches per-minute aggregates in `~/.cache/battery-panel` (finished
-days whole, today up to its last complete minute). `battery_panel.py --render
+days whole, today up to its last complete minute). Caches older than 60 days are
+pruned (readers use the last 30). Scale: a record is ~5 KB raw and ~250 B
+zstd-compressed, so 1M records (≈4 months awake) is ~250 MB of log; the panel
+and battery-eta cost stays bounded by the 30-day window (~1 s at most), and a
+full-history scan takes ~1–1.5 min (Python or `duckdb ... read_json('*.jsonl*',
+format = 'newline_delimited', union_by_name = true)`). `battery_panel.py --render
 DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.
 
 ### Browser processes and readable labels

@@ -239,6 +239,18 @@ def load_day(day, log=LOG, cache=CACHE):
     return minutes, events
 
 
+def prune_cache(keep_days=60, cache=CACHE, now=None):
+    """Delete per-minute caches older than `keep_days` (rebuilt from the log on
+    demand); readers only use the last 30 days, so the cache stays bounded."""
+    cutoff = datetime.date.fromtimestamp(now or time.time()) - datetime.timedelta(days=keep_days)
+    for path in cache.glob('????-??-??.json'):
+        try:
+            if datetime.date.fromisoformat(path.stem) < cutoff:
+                path.unlink()
+        except (ValueError, OSError):
+            continue
+
+
 def days_between(start, end):
     day = datetime.date.fromtimestamp(start)
     while time.mktime(day.timetuple()) < end:
