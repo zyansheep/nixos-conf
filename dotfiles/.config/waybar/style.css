@@ -177,9 +177,9 @@ label:focus {
 #wireplumber.muted {}
 
 #custom-power {
-  margin-right: 5px;
-  /* Bottom padding lifts the centred glyph ~2px. */
-  padding-bottom: 4px;
+  margin-right: 4px;
+  /* Bottom padding lifts the centred glyph ~1px to sit level with its neighbours. */
+  padding-bottom: 2px;
   font-size: 15px;
 }
 
@@ -288,7 +288,7 @@ label:focus {
   font-size: 12px;
   min-width: 16px;
   /* Even gaps between the battery outline and the notification bell. */
-  padding: 0 0 0 4px;
+  padding: 0 0 0 1px;
   color: #ffffff;
 }
 #custom-display.night { color: #f0a54a; }
@@ -296,7 +296,7 @@ label:focus {
 #custom-display.night.grayscale { color: #d9c3a3; }
 
 #custom-notification {
-  padding: 0 0 0 4px;
+  padding: 0 1px 0 3px;
   color: #ffffff;
 }
 
