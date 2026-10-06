@@ -179,8 +179,8 @@ label:focus {
 #custom-power {
   /* Negative: the glyph's own side bearing already leaves space at the edge. */
   margin-right: -1px;
-  /* Bottom padding lifts the centred glyph ~1px to sit level with its neighbours. */
-  padding-bottom: 2px;
+  /* 2px either side; the bottom padding lifts the glyph ~1px. */
+  padding: 0 2px 2px 2px;
   font-size: 15px;
 }
 
