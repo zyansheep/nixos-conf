@@ -449,6 +449,7 @@ binds {
     // no kaomoji. See cells/home/profiles/emoji.nix.
     Mod+Semicolon hotkey-overlay-title="😀 Emoji & Kaomoji Picker: Vicinae" { spawn "emoji-picker"; }
     Mod+Shift+W hotkey-overlay-title="📶 Network Sidebar" { spawn "nm-sidebar" "--toggle"; }
+    Mod+Shift+B hotkey-overlay-title="🔋 Battery Panel" { spawn "battery-panel"; }
 
     // Recording and screenshot bindings from sway
     Mod+Shift+S hotkey-overlay-title="📸 Screenshot Region to Clipboard" { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }

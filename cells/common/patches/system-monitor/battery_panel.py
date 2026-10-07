@@ -468,9 +468,34 @@ class WhatIfChart(Chart):
         return lines
 
 
-def gather(start, end):
+class History:
+    """The last 30 days of minutes and events. While the panel is open, a reload
+    (range switch, paging, the minute tick) fetches only minutes from the newest
+    one on, which may still have been filling."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.minutes, self.events, self.since = [], [], None
+
+    def get(self):
+        with self.lock:
+            now = time.time()
+            start = now - 30 * 86400
+            if self.since is None:
+                self.minutes, self.events = report.load_range(start, now + 60)
+            else:
+                minutes, events = report.load_range(self.since, now + 60)
+                known = {(e.get('event'), e.get('t1')) for e in self.events}
+                self.minutes = [m for m in self.minutes if start <= m['t'] < self.since] + minutes
+                self.events = ([e for e in self.events if e.get('t1', 0) >= start]
+                               + [e for e in events if (e.get('event'), e.get('t1')) not in known])
+            self.since = self.minutes[-1]['t'] if self.minutes else None
+            return list(self.minutes), list(self.events)
+
+
+def gather(start, end, history=None):
     """Everything the panel shows for one period (runs off the UI thread)."""
-    history, events = report.load_range(time.time() - 30 * 86400, time.time() + 60)
+    history, events = (history or History()).get()
     rows_all = report.battery_rows(history)
     # battery-eta trains every model; fit here only if its models.json is missing or stale.
     shared = eta.load_models()
@@ -561,6 +586,7 @@ class BatteryPanel(Adw.Application):
         self.focused_once = False
         self.generation = 0
         self.loaded = None
+        self.history = History()
         self.poll = 0
         self.catalog, self.units, self.effects = [], [], []
         self.psr, self.psr_arm = None, None
@@ -604,8 +630,11 @@ class BatteryPanel(Adw.Application):
         keys = Gtk.EventControllerKey()
         keys.connect('key-pressed', self.key)
         self.window.add_controller(keys)
-        # Close on focus loss only once the pointer has been inside: a freshly
-        # mapped layer surface can report active→inactive before niri focuses it.
+        # Close on focus loss once the panel has had focus: niri focuses an
+        # on-demand panel when it opens, so a click on another window dismisses
+        # it, like Audio and Wi-Fi. (A freshly mapped surface can report
+        # inactive before niri focuses it, hence waiting for the first focus.)
+        # The pointer entering also counts, for BATTERY_PANEL_PASSIVE.
         engaged = Gtk.EventControllerMotion()
         engaged.connect('enter', lambda *_: setattr(self, 'focused_once', True))
         self.window.add_controller(engaged)
@@ -757,6 +786,7 @@ class BatteryPanel(Adw.Application):
 
     def close(self, *_):
         self.window.set_visible(False)
+        self.history = History()  # Free the 30 days of rows; the next open reloads them.
         if self.poll:
             GLib.source_remove(self.poll)
             self.poll = 0
@@ -765,7 +795,10 @@ class BatteryPanel(Adw.Application):
     def focus_changed(self, window, *_):
         if not window.get_visible():
             return
-        if not window.is_active() and self.focused_once:
+        if window.is_active():
+            self.focused_once = True
+        elif self.focused_once:
+            # A dropdown's popover briefly takes focus within the panel.
             GLib.timeout_add(150, lambda: (window.get_visible() and not window.is_active() and self.close()) and False)
 
     def tick(self):
@@ -817,7 +850,7 @@ class BatteryPanel(Adw.Application):
 
     def load(self, generation, start, end):
         try:
-            result = gather(start, end)
+            result = gather(start, end, self.history)
         except Exception as error:  # noqa: BLE001 - surfaced in the panel
             result = {'error': f'{type(error).__name__}: {error}'}
         GLib.idle_add(self.apply, generation, result)
