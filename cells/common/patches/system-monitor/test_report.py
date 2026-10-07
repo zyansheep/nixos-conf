@@ -1,12 +1,9 @@
-import json
-import tempfile
-import time
 import unittest
-from pathlib import Path
 
 import numpy as np
 
 import report
+import store
 
 
 def record(t1, bat=15.0, soc=8.0, busy=2.0, mhz=2000, apps=None, exp=None, status='Discharging', bl=.5):
@@ -22,7 +19,7 @@ def record(t1, bat=15.0, soc=8.0, busy=2.0, mhz=2000, apps=None, exp=None, statu
 class ReportTests(unittest.TestCase):
     def test_minute_means_app_load_and_experiment_washout(self):
         exp = {'run': 'r', 'name': 'aspm', 'block': 1, 'arm': 'B', 'value': 'x', 'washout': False}
-        minutes, _ = report.aggregate([
+        minutes, _ = store.aggregate([
             record(60 * 100 + 10, bat=10, apps={'Floorp': {'cpu': 5.0}}, exp=dict(exp, washout=True)),
             record(60 * 100 + 20, bat=20, apps={'Floorp': {'cpu': 5.0}}, exp=exp)])
         self.assertEqual(len(minutes), 1)
@@ -99,9 +96,9 @@ class ReportTests(unittest.TestCase):
         self.assertEqual((effect['a_watts'], effect['b_watts']), (16, 14))   # Frozen floor = B blocks
 
     def test_psr_flag_and_boot_effect(self):
-        self.assertTrue(report.psr_enabled('0'))
-        self.assertFalse(report.psr_enabled('16'))
-        self.assertFalse(report.psr_enabled(None))          # Before logging: nixos-hardware's 0x10
+        self.assertTrue(store.psr_enabled('0'))
+        self.assertFalse(store.psr_enabled('16'))
+        self.assertFalse(store.psr_enabled(None))          # Before logging: nixos-hardware's 0x10
         rng = np.random.default_rng(5)
         minutes, t = [], 0
         for boot in range(6):
@@ -140,22 +137,6 @@ class ReportTests(unittest.TestCase):
         noisy = report.sleep_runtime(sleeps + [{'watts': 3.0, 'hours': 1}], 24.0)
         self.assertGreater(noisy['high'] - noisy['low'], estimate['high'] - estimate['low'])
 
-    def test_incremental_day_cache_matches_full_parse(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            log, cache = Path(tmp) / 'log', Path(tmp) / 'cache'
-            log.mkdir()
-            now = time.time()
-            day = time.strftime('%Y-%m-%d', time.localtime(now))
-            base = int(time.mktime(time.strptime(day, '%Y-%m-%d'))) + 3600
-            records = [record(base + 10 * i, bat=10 + i % 7) for i in range(40)]
-            path = log / f'{day}.jsonl'
-            path.write_text(''.join(json.dumps(r) + '\n' for r in records[:23]))
-            report.load_day(day, log, cache)
-            with open(path, 'a') as handle:
-                handle.write(''.join(json.dumps(r) + '\n' for r in records[23:]))
-            incremental, _ = report.load_day(day, log, cache)
-            full, _ = report.aggregate(records)
-            self.assertEqual(incremental, full)
 
 
 if __name__ == '__main__':

@@ -132,10 +132,11 @@ breakdown reloads that file when it changes, and the battery panel uses it
 battery reading is charge, not consumption, so the menu shows the last 30
 minutes on battery or, failing that, chip power only.
 
-Every 10 seconds the monitor appends one JSON line of **raw inputs** (not
-attributions) to `~/.local/state/waybar-monitor/power/YYYY-MM-DD.jsonl`; finished
-days become `.jsonl.zst`. Records hold measurements for offline model fitting
-and counterfactuals (“what if this app were closed / this setting changed”):
+Every 10 seconds the monitor records **raw inputs** (not attributions) for
+model fitting and counterfactuals (“what if this app were closed / this setting
+changed”) in two places: the power database (below), which everything reads,
+and one JSON line in `~/.local/state/waybar-monitor/power/YYYY-MM-DD.jsonl`, the
+raw archive (finished days become `.jsonl.zst`). An archive record:
 
 | Key | Contents |
 | --- | --- |
@@ -158,8 +159,32 @@ Events share the files: `start` (collector start) and `gap` (suspend or other
 sampling gap, with battery charge before and after, for sleep drain).
 `index.json` caches per-day record counts for the menu footer. App names are
 coarse (kernel threads are `Kernel`; no PIDs, command lines, browser origins or
-titles). Expect roughly 40 MB/day uncompressed; read with e.g.
+titles). Expect roughly 40 MB/day uncompressed (~2.3 MB as `.zst`); read with e.g.
 `duckdb -c "select * from read_json('~/.local/state/waybar-monitor/power/*.jsonl*')"`.
+
+**Power database.** `~/.local/state/waybar-monitor/power.sqlite3` (`store.py`) is
+written by the collector as it measures, one transaction per record:
+
+| Table | Contents |
+| --- | --- |
+| `records` | one row per 10 s record: every scalar above as typed columns, NULL where absent (battery and chip W with min/max, CPU seconds and MHz, C1–C3 residency, IPI counts, GPU/video, Wi-Fi vs other network bytes and signal, disk bytes/busy, USB/PCI/audio, backlight, refresh rate, display-panel state, every power setting, thermals, lid/lock, experiment arm) |
+| `record_apps`, `app_names` | per record × app that did something: CPU, GPU and video seconds, disk bytes |
+| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings and experiment as JSON) |
+| `events` | starts and suspend gaps |
+
+Only the archive keeps idle apps' process counts and memory, the per-interrupt
+and per-interface breakdowns and display layouts. On startup the collector
+reads in any archive day the database has never seen (the first run, or after
+deleting it, ~1.7 s per day); `waybar-monitor import` re-reads every day,
+keeping what is stored. The panel and battery-eta only run queries (30 days of
+minutes ≈ 0.1 s); so can analysis:
+
+    sqlite3 ~/.local/state/waybar-monitor/power.sqlite3 "select avg(bat_w) from records where status = 'Discharging'"
+    duckdb -c "select * from sqlite_scan('~/.local/state/waybar-monitor/power.sqlite3', 'records')"
+
+Scale: ~1.4 KB per record (~420 B the record, ~650 B its apps, ~280 B its share
+of `minutes`), ~12 MB per day awake; ZFS compresses that about 2.5× on disk.
+SQLite itself never compresses (pages are rewritten in place).
 
 ### Battery panel and power experiments
 
@@ -204,22 +229,6 @@ back / forward (or ← →), Now. Tabs:
   boots are compared by least squares on workload plus a PSR indicator, with a
   bootstrap over whole boots, once each arm has two boots with battery time.
 
-**Parquet layer.** The JSONL log stays the source of truth (Parquet files are
-immutable and schema-bound, so they cannot be the 10-second crash-safe
-journal). `store.py` derives tidy Parquet tables per day under
-`~/.cache/waybar-monitor/parquet/`: `records` (one row per 10 s record, map
-columns for C-states, interrupts, settings), `apps` (record × app), `minutes`
-and `minute_apps` (what the models train on), and `events` (starts, suspends).
-Finished days convert once (~5 s each); today's tables extend from the last
-complete minute. The panel and battery-eta read them; so can any analysis:
-
-    duckdb -c "select avg(bat_w) from '~/.cache/waybar-monitor/parquet/records/*.parquet' where status = 'Discharging'"
-    pandas.read_parquet('~/.cache/waybar-monitor/parquet/minutes')
-
-Delete the directory to rebuild it. Scale: a record is ~5 KB raw JSON, ~250 B in
-the zstd log and ~300 B across the Parquet tables, so 1M records (≈4 months
-awake) is ~250–300 MB each; the panel and battery-eta cost stays bounded by the
-30-day window (~1 s).
 `battery_panel.py --render
 DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.
 

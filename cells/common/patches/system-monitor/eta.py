@@ -460,7 +460,7 @@ def report_number(path):
 def main():
     live = Live()
     # Start from the last trained models so the label appears at once; the
-    # first training (which may convert days of log to Parquet) follows.
+    # first training (which may read days of log into the SQLite store) follows.
     if (saved := load_models(max_age=float('inf'))) is not None:
         live.params = {**DEFAULTS, **saved}
     last_fit = 0.0

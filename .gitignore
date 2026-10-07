@@ -10,3 +10,6 @@ result
 .stignore
 
 .claude
+
+# Python bytecode from running tests in place
+__pycache__/

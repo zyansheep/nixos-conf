@@ -2,10 +2,10 @@
   glib, systemd, wrapGAppsHook4 }:
 let
   # The collector and experiment runner stay on plain Python; the battery
-  # estimator, panel and tests need NumPy/SciPy and pyarrow (the Parquet store),
+  # estimator, panel and tests need NumPy/SciPy (the SQLite store is stdlib),
   # and only the panel needs GTK.
-  panelPython = python3.withPackages (p: [ p.pygobject3 p.pycairo p.numpy p.scipy p.pyarrow ]);
-  analysisPython = python3.withPackages (p: [ p.numpy p.scipy p.pyarrow ]);
+  panelPython = python3.withPackages (p: [ p.pygobject3 p.pycairo p.numpy p.scipy ]);
+  analysisPython = python3.withPackages (p: [ p.numpy p.scipy ]);
   dir = "$out/libexec/waybar-monitor";
 in
 stdenvNoCC.mkDerivation {

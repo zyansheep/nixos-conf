@@ -8,6 +8,7 @@ import signal
 import sys
 import time
 
+import store
 from power import Monitor
 
 TICKS = os.sysconf('SC_CLK_TCK')
@@ -227,11 +228,16 @@ def browser_labels(state, current, directory, now=None):
 
 
 def main():
+    state_home = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
+    log = Path(os.environ.get('STATE_DIRECTORY', state_home / 'waybar-monitor')) / 'power'
+    if sys.argv[1:] == ['import']:
+        # Re-read every archive day into the power database, keeping what it has.
+        for day in store.import_logs(log, log.parent / 'power.sqlite3', force=True):
+            print(day)
+        return
     directory = Path(os.environ['XDG_RUNTIME_DIR']) / 'waybar-monitor'
     directory.mkdir(mode=0o700, exist_ok=True)
-    state_home = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
-    power = Monitor(Path(os.environ.get('STATE_DIRECTORY', state_home / 'waybar-monitor')) / 'power',
-                    experiment=directory / 'experiment.json')
+    power = Monitor(log, experiment=directory / 'experiment.json')
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     history = History()
     try:

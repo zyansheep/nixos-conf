@@ -1,10 +1,12 @@
 """Battery attribution for the power menu and a long-term raw power log.
 
-Every RECORD seconds one JSON line of raw measurements (battery and chip power,
-per-app CPU/GPU/IO, devices and power settings) is appended to
-`<state>/power/YYYY-MM-DD.jsonl`; earlier days are zstd-compressed. The menu
-splits measured power with two small online ridge models. The log keeps the
-model inputs rather than its outputs, so better models can be fitted later.
+Every RECORD seconds one record of raw measurements (battery and chip power,
+per-app CPU/GPU/IO, devices and power settings) goes into the power database
+(store.py: typed columns, what the models and panel read) and, as one JSON line,
+into the raw archive `<state>/power/YYYY-MM-DD.jsonl`; earlier days of the
+archive are zstd-compressed. The menu splits measured power with two small
+online ridge models. The log keeps the model inputs rather than its outputs,
+so better models can be fitted later.
 App names are coarse (no PIDs, command lines, browser origins or titles).
 """
 import collections
@@ -13,9 +15,13 @@ import gzip
 import json
 import os
 import shutil
+import sqlite3
 import subprocess
 import time
+from sys import stderr
 from pathlib import Path
+
+import store
 
 try:
     from compression import zstd
@@ -629,9 +635,7 @@ class PowerLog:
 
     @staticmethod
     def open(path):
-        if path.suffix == '.zst' and zstd is not None:
-            return zstd.open(path, 'rt')
-        return gzip.open(path, 'rt') if path.suffix == '.gz' else open(path)
+        return store.open_log(path)
 
     @staticmethod
     def count(stats, record):
@@ -746,9 +750,17 @@ def subtract(after, before):
 class Monitor:
     """Called every collector loop; writes a record every RECORD seconds."""
 
-    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None):
+    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None):
         self.sys, self.proc, self.experiment = sys, proc, experiment
         self.log = PowerLog(directory)
+        # The power database next to the archive (store.py). Read in any archive
+        # day it has never seen: the first run, or after it was deleted.
+        self.db = store.Writer(db or directory.parent / 'power.sqlite3')
+        try:
+            if days := store.import_logs(directory, self.db.db):
+                print(f'waybar-monitor: imported {", ".join(days)} into {self.db.db}', file=stderr)
+        except sqlite3.Error as error:
+            print(f'waybar-monitor: {self.db.db}: {error}', file=stderr)
         self.models_path, self.models_stamp, self.params = directory / 'models.json', None, dict(PRIOR)
         self.refresh_models()
         self.fast, self.idle_states, self.commands = FastSampler(sys), IdleStates(sys), Commands()
@@ -760,7 +772,7 @@ class Monitor:
                                 attribute(record, self.params)))
         self.boot = boot_id(proc)
         self.last_battery = None
-        self.log.write({'v': SCHEMA, 'event': 'start', 't1': now, 'boot': self.boot})
+        self.write({'v': SCHEMA, 'event': 'start', 't1': now, 'boot': self.boot})
         self.reset(None, None)
         self.menu = summarize(self.window, now, self.log.totals())
 
@@ -793,7 +805,7 @@ class Monitor:
         self.fast.sample()
         if self.start_boot is None or boot - self.last_boot > RECORD:
             if self.start_boot is not None:
-                self.log.write({'v': SCHEMA, 'event': 'gap', 't0': self.start_wall, 't1': wall,
+                self.write({'v': SCHEMA, 'event': 'gap', 't0': self.start_wall, 't1': wall,
                                 'gap_s': round(boot - self.last_boot, 1), 'boot': self.boot,
                                 'bat_before': self.last_battery, 'bat_after': self.battery_state()})
             self.reset(boot, wall)
@@ -816,7 +828,7 @@ class Monitor:
             self.frequencies.append((mean, peak))
         if boot - self.start_boot >= RECORD:
             record = self.record(boot, wall, processes)
-            self.log.write(record)
+            self.write(record)
             self.refresh_models()
             self.window.append((record['t1'], record['dt'], discharging(record),
                                 attribute(record, self.params)))
@@ -904,5 +916,10 @@ class Monitor:
             self.models_stamp = stamp
             self.params = load_attribution(self.models_path) or self.params
 
+    def write(self, record):
+        self.log.write(record)
+        self.db.write(record)
+
     def close(self):
         self.log.close()
+        self.db.close()

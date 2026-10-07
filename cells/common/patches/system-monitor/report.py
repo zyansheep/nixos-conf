@@ -1,7 +1,7 @@
 """Battery history analysis for the battery panel.
 
-Raw 10 s power-log records are folded into per-minute rows (cached per finished
-day), then:
+Per-minute rows from the power database (store.py, written by the collector),
+then:
 
 * battery-only models: chip W ~ floor + load (busy cores × GHz²) + GPU + video,
   and battery W ~ base + k·chip + backlight + radio/storage/USB/audio/keyboard,
@@ -17,21 +17,16 @@ import collections
 import datetime
 import json
 import math
-import os
 import re
-import time
 from pathlib import Path
 
 import numpy as np
 from scipy.optimize import nnls
 
 import power
-from power import PowerLog
+import store
 
-STATE_HOME = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
-LOG = STATE_HOME / 'waybar-monitor/power'
-NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
-STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
+LOG = store.STATE / 'power'  # The JSONL archive, models.json and index.json.
 
 # Stable groups so a color always means the same thing across periods.
 GROUPS = [
@@ -58,15 +53,6 @@ def display_name(app):
     return re.sub(r'-w(?:r(?:a(?:p(?:p(?:e(?:d)?)?)?)?)?)?$|\.bin$', '', app)
 
 
-def psr_enabled(mask):
-    """PSR on/off from amdgpu.dcdebugmask. Records before it was logged ran with
-    nixos-hardware's 0x10 on every boot, so a missing value means off."""
-    try:
-        return not int(mask, 0) & 0x10
-    except (TypeError, ValueError):
-        return False
-
-
 def group_of(app):
     for group, prefixes in GROUPS:
         if app.startswith(prefixes):
@@ -74,150 +60,9 @@ def group_of(app):
     return 'Other apps'
 
 
-# --- Per-minute aggregation ------------------------------------------------------
-
-class Minute:
-    def __init__(self, t):
-        self.t, self.dt, self.sums, self.weights = t, 0.0, collections.defaultdict(float), collections.defaultdict(float)
-        self.status, self.apps, self.last, self.exp, self.settings = collections.Counter(), {}, {}, None, {}
-        self.boot = None
-
-    def add(self, record):
-        dt = record['dt']
-        if dt <= 0:
-            return
-        self.dt += dt
-        self.status[STATUS.get(record.get('status'), 'U')] += dt
-        cpu, mhz = record.get('cpu', {}), record.get('cpu', {}).get('mhz')
-        ghz2 = (mhz / 1000) ** 2 if mhz else None
-        display = record.get('display', {})
-        values = {
-            'bat': record.get('bat', {}).get('w'), 'soc': record.get('soc', {}).get('w'),
-            'busy': cpu.get('busy_s', 0) / dt, 'load': cpu.get('busy_s', 0) / dt * ghz2 if ghz2 else None,
-            'gpu': record.get('gpu', {}).get('gpu', 0) / dt, 'video': record.get('gpu', {}).get('video', 0) / dt,
-            'bl': display.get('bl'), 'kbd': display.get('kbd'),
-            'wifi': sum(n.get('rx', 0) + n.get('tx', 0) for k, n in record.get('net', {}).items()
-                        if k.startswith('wl')) / dt / 1e6,
-            'disk': min(1.0, sum(d.get('busy', 0) for d in record.get('disk', {}).values()) / dt),
-            'usb': len(record.get('usb', [])), 'audio': min(1, sum(record.get('audio', {}).values())),
-        }
-        for key, value in values.items():
-            if value is not None:
-                self.sums[key] += value * dt
-                self.weights[key] += dt
-        for name, app in record.get('apps', {}).items():
-            if not (app.get('cpu') or app.get('gpu') or app.get('video')):
-                continue
-            entry = self.apps.setdefault(name, [0.0, 0.0, 0.0])
-            entry[0] += app.get('cpu', 0) * (ghz2 or 0)
-            entry[1] += app.get('gpu', 0)
-            entry[2] += app.get('video', 0)
-        battery = record.get('bat', {})
-        for key in ('pct', 'charge', 'volts', 'unit'):
-            if battery.get(key) is not None:
-                self.last[key] = battery[key]
-        settings = record.get('settings', {})
-        self.boot = record.get('boot')
-        self.settings = {'profile': settings.get('platform_profile'), 'aspm': settings.get('aspm'),
-                         'psr': psr_enabled(settings.get('dcdebugmask')),
-                         'boost': settings.get('boost'), 'abm': display.get('abm'),
-                         'wifi_ps': ','.join(sorted((settings.get('wifi_ps') or {}).values())) or None,
-                         'hz': next((o.get('hz') for o in display.get('niri', [])
-                                     if str(o.get('name', '')).startswith('eDP')), None)}
-        if (exp := record.get('exp')) is not None:
-            washout = exp.get('washout', True) or (self.exp is not None and self.exp[4])
-            if self.exp is not None and self.exp[:3] != [exp['run'], exp['name'], exp['block']]:
-                washout = True  # Two blocks inside one minute.
-            self.exp = [exp['run'], exp['name'], exp['block'], exp['arm'], washout, exp.get('value')]
-
-    def row(self):
-        row = {'t': self.t, 'dt': round(self.dt, 2), 'st': self.status.most_common(1)[0][0]}
-        for key in NUMERIC:
-            if self.weights.get(key):
-                row[key] = round(self.sums[key] / self.weights[key], 4)
-        if self.apps:
-            row['apps'] = {name: [round(v / self.dt, 4) for v in values] for name, values in self.apps.items()}
-        row.update({key: value for key, value in self.last.items()})
-        row['set'] = self.settings
-        if self.boot:
-            row['boot'] = self.boot
-        if self.exp is not None:
-            row['exp'] = self.exp
-        return row
-
-
-def aggregate(records):
-    """Fold records into per-minute rows plus the log's events, both sorted by time."""
-    minutes, events = {}, []
-    for record in records:
-        if 'event' in record:
-            events.append(record)
-            continue
-        if not isinstance(record.get('dt'), (int, float)) or 't1' not in record:
-            continue
-        t = int(record['t1'] // 60) * 60
-        minutes.setdefault(t, Minute(t)).add(record)
-    return [minutes[t].row() for t in sorted(minutes)], sorted(events, key=lambda e: e.get('t1', 0))
-
-
-def read_records(path):
-    try:
-        with PowerLog.open(path) as source:
-            for line in source:
-                try:
-                    yield json.loads(line)
-                except ValueError:
-                    continue
-    except (OSError, EOFError, ValueError):
-        return
-
-
-def read_from(path, offset):
-    """Records of a plain log after `offset`, each with the byte offset of its line."""
-    try:
-        with open(path, 'rb') as source:
-            source.seek(offset)
-            position = offset
-            for line in source:
-                start, position = position, position + len(line)
-                if not line.endswith(b'\n'):
-                    return  # Being written.
-                try:
-                    yield start, json.loads(line)
-                except ValueError:
-                    continue
-    except OSError:
-        return
-
-
-def load_day(day, log=LOG, cache=None):
-    """Per-minute rows and events for one day, from the Parquet tables (store.py)."""
-    import store  # store imports this module.
-    return store.load_day(day, log, cache or store.ROOT)
-
-
-def days_between(start, end):
-    day = datetime.date.fromtimestamp(start)
-    while time.mktime(day.timetuple()) < end:
-        yield day.isoformat()
-        day += datetime.timedelta(days=1)
-
-
-def load_range(start, end, log=LOG, cache=None):
-    minutes, events = [], []
-    days = available_days(log)
-    if not days:
-        return minutes, events
-    start = max(start, time.mktime(time.strptime(days[0], '%Y-%m-%d')))
-    for day in days_between(start, end):
-        m, e = load_day(day, log, cache)
-        minutes += [row for row in m if start <= row['t'] < end]
-        events += [ev for ev in e if start <= ev.get('t1', 0) < end]
-    return minutes, events
-
-
-def available_days(log=LOG):
-    return sorted({p.name.split('.')[0] for p in log.glob('*.jsonl*') if p.name[:4].isdigit()})
+def load_range(start, end, db=None):
+    """Per-minute rows and events with start <= t < end, from the power database."""
+    return store.load_range(start, end, db or store.DB)
 
 
 # --- Models -------------------------------------------------------------------
