@@ -138,6 +138,60 @@ class ReportTests(unittest.TestCase):
         self.assertGreater(noisy['high'] - noisy['low'], estimate['high'] - estimate['low'])
 
 
+def factorial_minutes(blocks=480, seed=7):
+    """Simulated factorial run over ASPM, APST and CPU boost with known effects."""
+    rng = np.random.default_rng(seed)
+    design = [dict(zip(('aspm', 'apst', 'boost'), combo)) for combo in np.ndindex(2, 2, 2)]
+    minutes, t = [], 1_000_000 * 60
+    for block in range(blocks):
+        x = design[rng.integers(len(design))]
+        drift = rng.normal(0, 1.5)  # Workload noise shared by a block's minutes.
+        for minute in range(4):
+            busy = max(0.2, rng.normal(2, 0.6))
+            load = busy * (2.0 if x['boost'] else 4.0)  # Boost off: lower GHz², so lower load.
+            bat = (12 + 0.8 * load - 2.0 * x['aspm'] - 0.5 * x['apst'] - 1.0 * x['aspm'] * x['apst']
+                   + drift + rng.normal(0, 0.8))
+            minutes.append({'t': t, 'dt': 60, 'st': 'D', 'bat': bat, 'soc': bat - 4, 'load': load, 'busy': busy,
+                            'gpu': 0, 'video': 0, 'bl': .5, 'kbd': 0, 'wifi': 0, 'disk': 0, 'usb': 0, 'audio': 0,
+                            'set': {'aspm': 'powersupersave' if x['aspm'] else 'performance',
+                                    'apst': '100000' if x['apst'] else '0', 'boost': '0' if x['boost'] else '1',
+                                    'hz': 60.0},
+                            'exp': ['run', 'aspm+apst+boost', block, '?', minute == 0, None]})
+            t += 60
+    return minutes
+
+
+class LeverTests(unittest.TestCase):
+    def test_factorial_recovers_main_effects_interaction_and_total_cpu_effect(self):
+        result = report.lever_effects(factorial_minutes(), energy=50, power=15, replicates=100)
+        effects, now = {e['experiment']: e for e in result['effects']}, result['current']
+        # Each setting's saving given the others as they are now (ASPM and APST save 1 W more together).
+        self.assertAlmostEqual(effects['aspm']['watts'], 2.0 + 1.0 * now['apst'], delta=0.6)
+        self.assertAlmostEqual(effects['apst']['watts'], 0.5 + 1.0 * now['aspm'], delta=0.6)
+        # Boost off saves through lower load: 0.8 W/load × (4 − 2) × busy 2 ≈ 3.2 W in total.
+        self.assertAlmostEqual(effects['boost']['watts'], 3.2, delta=0.6)
+        (pair,) = [i for i in result['interactions'] if set(i['pair']) == {'aspm', 'apst'}]
+        self.assertAlmostEqual(pair['watts'], 1.0, delta=0.5)
+        self.assertLess(effects['aspm']['watts_low'], effects['aspm']['watts'])
+
+    def test_best_combination_turns_on_what_saves(self):
+        result = report.lever_effects(factorial_minutes(), energy=50, power=15, replicates=50)
+        result['current'] = dict.fromkeys(result['current'], False)
+        best = report.best_config(result, {'aspm', 'apst'}, energy=50, power=15)
+        self.assertEqual(best['config'], {'aspm': True, 'apst': True})
+        self.assertGreater(best['watts'], 2.5)
+
+    def test_settings_read_both_value_formats_and_the_experiments_value_wins(self):
+        logged = {'apst': '0', 'abm': 3, 'hz': 48.0, 'profile': 'low-power', 'wifi_ps': 'off,on'}
+        states = report.lever_states(logged, 60.0, chosen={'apst': '100000', 'refresh': '2256x1504@59.999'})
+        self.assertEqual((states['apst'], states['abm'], states['refresh'], states['profile'], states['wifi-ps']),
+                         (True, True, False, True, False))
+        self.assertTrue(report.saving('profile', 'power-saver') and report.saving('abm', '3'))
+
+    def test_no_experiments_means_no_effects(self):
+        minutes = [dict(m, exp=None) for m in factorial_minutes(blocks=20)]
+        self.assertEqual(report.lever_effects(minutes, 50, 15)['effects'], [])
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -3,7 +3,9 @@ import random
 import tempfile
 import unittest
 from pathlib import Path
-from experiment import Setting, experiment, schedule, unit_label
+import itertools
+
+from experiment import Setting, design, experiment, unit_label
 
 
 class FakeClock:
@@ -24,14 +26,14 @@ class FakeClock:
 
 
 class FakeSetting(Setting):
-    def __init__(self, value='performance', ac_managed=False):
+    def __init__(self, value='performance', ac_managed=False, name='aspm', alternative='powersupersave'):
         self.value, self.history = value, []
 
         def set_value(v):
             self.history.append(v)
             self.value = v
-        super().__init__('aspm', 'ASPM', '', lambda: self.value, set_value,
-                         lambda cur: 'powersupersave', ac_managed=ac_managed)
+        super().__init__(name, name.upper(), '', lambda: self.value, set_value,
+                         lambda cur: alternative, ac_managed=ac_managed)
 
 
 class ExperimentTests(unittest.TestCase):
@@ -43,10 +45,24 @@ class ExperimentTests(unittest.TestCase):
                        state_path=path, rng=random.Random(1), **kwargs)
             return json.loads(path.read_text()), clock
 
-    def test_schedule_is_balanced_pairs(self):
-        arms = schedule(random.Random(3))
-        pairs = [sorted([next(arms), next(arms)]) for _ in range(20)]
+    def test_one_setting_is_shuffled_ab_pairs(self):
+        blocks = design(['aspm'], random.Random(3))
+        pairs = [sorted([next(blocks)['aspm'], next(blocks)['aspm']]) for _ in range(20)]
         self.assertTrue(all(pair == ['A', 'B'] for pair in pairs))
+
+    def test_up_to_four_settings_run_every_combination_each_cycle(self):
+        blocks = design(['a', 'b', 'c'], random.Random(4))
+        for _ in range(3):
+            cycle = {tuple(block[n] for n in 'abc') for block in (next(blocks) for _ in range(8))}
+            self.assertEqual(cycle, set(itertools.product('AB', repeat=3)))
+
+    def test_more_settings_stay_balanced_per_cycle(self):
+        names = ['a', 'b', 'c', 'd', 'e', 'f']
+        blocks = design(names, random.Random(5))
+        cycle = [next(blocks) for _ in range(16)]
+        for name in names:
+            self.assertEqual(sum(block[name] == 'B' for block in cycle), 8)
+        self.assertEqual(len({tuple(block[n] for n in 'abcd') for block in cycle}), 16)
 
     def test_blocks_alternate_and_the_original_is_restored(self):
         spec = FakeSetting()
@@ -62,7 +78,8 @@ class ExperimentTests(unittest.TestCase):
         battery = lambda: clock.now >= plugged['until']
         spec = FakeSetting()
         state, _ = self.run_experiment(spec, 18, battery=battery, clock=clock)
-        self.assertEqual(state['blocks'], 2)  # 8 min on battery out of 18.
+        self.assertEqual(state['blocks'], 5)  # 18 min of battery time after 10 on AC: 4 + 4 + 4 + 4 + 2.
+        self.assertAlmostEqual(state['collected'], 18 * 60)
         managed = FakeSetting(value='power-saver', ac_managed=True)
         managed.value = 'balanced'  # udev's AC value; the runner must leave it alone.
         clock = FakeClock()
@@ -76,6 +93,26 @@ class ExperimentTests(unittest.TestCase):
         state, _ = self.run_experiment(spec, 8, clock=clock)
         self.assertGreaterEqual(state['blocks'], 3)
         self.assertEqual(spec.value, 'performance')
+
+    def test_settings_randomized_together_are_tagged_and_all_restored(self):
+        clock = FakeClock()
+        aspm, apst = FakeSetting(name='aspm'), FakeSetting(value='0', name='apst', alternative='100000')
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'state.json'
+
+            def watch(_now):
+                state = json.loads(path.read_text()) if path.exists() else {}
+                if state.get('status') == 'running':
+                    seen.append((state['arm'], state['value'], {'aspm': aspm.value, 'apst': apst.value}))
+            clock.hooks.append(watch)
+            experiment([aspm, apst], 32, clock=clock, battery=lambda: True, locked=lambda: True,
+                       state_path=path, rng=random.Random(2))
+            final = json.loads(path.read_text())
+        self.assertEqual((final['name'], final['blocks']), ('aspm+apst', 8))
+        self.assertEqual((aspm.value, apst.value), ('performance', '0'))
+        self.assertEqual(sorted({arm for arm, _, _ in seen}), ['AA', 'AB', 'BA', 'BB'])
+        self.assertTrue(all(value == actual for _, value, actual in seen))
 
     def test_unit_labels(self):
         self.assertEqual(unit_label('app-niri-floorp-2329.scope'), 'floorp')

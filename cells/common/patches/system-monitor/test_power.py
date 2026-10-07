@@ -5,7 +5,7 @@ import time
 import unittest
 from pathlib import Path
 from power import (PRIOR, Deltas, GpuClients, PowerLog, attribute, battery_watts, experiment_assignment,
-                   interrupts, load_attribution, log_footer, parse_fdinfo, summarize, TICKS)
+                   interrupts, load_attribution, log_footer, parse_fdinfo, settings, summarize, TICKS)
 
 
 def put(path, text):
@@ -26,6 +26,14 @@ class PowerTests(unittest.TestCase):
             put(battery / 'power_now', '3000000')
             put(battery / 'status', 'Not charging')
             self.assertEqual(battery_watts(battery), ('Not charging', 0.0))
+
+    def test_apst_is_the_drives_runtime_limit_not_the_boot_default(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            put(sys / 'module/nvme_core/parameters/default_ps_max_latency_us', '0\n')
+            self.assertEqual(settings(sys)['nvme_apst_us'], '0')
+            put(sys / 'class/nvme/nvme0/power/pm_qos_latency_tolerance_us', '100000\n')
+            self.assertEqual(settings(sys)['nvme_apst_us'], '100000')
 
     def test_interrupt_names_skip_chip_columns(self):
         with tempfile.TemporaryDirectory() as tmp:

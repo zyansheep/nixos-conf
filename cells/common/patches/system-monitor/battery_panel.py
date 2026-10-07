@@ -35,6 +35,15 @@ STACK = list(COLORS)
 SURFACE, CARD = (0x22 / 255, 0x22 / 255, 0x26 / 255), (0x34 / 255, 0x34 / 255, 0x37 / 255)
 INK, MUTED, GRID = (1, 1, 1), (1, 1, 1, .68), (1, 1, 1, .08)
 RANGES = {'6 h': 6 * 3600, 'Day': 24 * 3600, 'Week': 7 * 24 * 3600}
+FREEZES = ('freeze', 'freeze-apps')
+# Checked for testing by default: nothing you would notice changes.
+DEFAULT_TEST = {'aspm', 'apst', 'wifi-ps', 'abm'}
+BATTERY_HOURS = [1, 2, 4, 8, 24]  # Experiment length choices, in hours of battery time.
+# How to say a setting is in its (power-saving, normal) state.
+PHRASES = {'aspm': ('ASPM on', 'ASPM off'), 'apst': ('APST on', 'APST off'),
+           'wifi-ps': ('Wi-Fi power saving on', 'Wi-Fi power saving off'), 'abm': ('ABM on', 'ABM off'),
+           'refresh': ('lower refresh rate', 'full refresh rate'), 'boost': ('CPU boost off', 'CPU boost on'),
+           'profile': ('power-saver profile', 'balanced profile')}
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 
 
@@ -512,44 +521,29 @@ def gather(start, end, history=None):
         rows, scope = rows_all, 'all history (too little battery time in this period)'
     energy = report.full_energy(history)
     estimates, info = report.what_if(rows, energy, model=model, train_rows=rows_all) if rows else ([], None)
-    power = info['power'] if info else None
+    power = info['power'] if info else (sum(m['bat'] for m in rows_all) / len(rows_all) if rows_all else None)
+    # App freezing runs only while locked, so it stays a separate paired A/B analysis.
+    freezes = [e for e in report.experiment_effects(history, energy, power)
+               if e['experiment'] in FREEZES] if power else []
     return dict(points=report.timeline(minutes, model), span=(start, end), sleeps=sleeps,
                 sleeps_all=report.sleep_drain(events), estimates=estimates, info=info, scope=scope,
-                effects=report.experiment_effects(history, energy, power) if power else [],
+                energy=energy, power=power, levers=report.lever_effects(history, energy, power), effects=freezes,
                 psr=report.boot_effect(history, energy, power), psr_arm=experiment.psr_arm(),
                 catalog=[experiment.describe(spec) for spec in experiment.catalog().values()],
                 units=experiment.freezable_units()[:12], model=model,
                 trained=shared['fitted'] if shared else None)
 
 
-def whatif_rows(result):
-    """Chart rows (experiments first, then model estimates), unmeasured settings, and the caption."""
-    rows, measured = [], set()
-    labels = {c['name']: c['label'] for c in result['catalog']}
-    for effect in result['effects']:
-        name = f"{labels.get(effect['experiment'], effect['experiment'])} → {effect['value']}"
-        measured.add(effect['experiment'])
-        rows.append(dict(effect, name=name) if 'minutes' in effect else
-                    {'name': name, 'pending': f"{effect['pairs']} clean pair(s) so far — results after 3"})
-    psr = result.get('psr') or {}
-    if 'minutes' in psr:
-        rows.append(dict(psr, name='Panel self-refresh (PSR) on'))
-    rows += result['estimates']
-    pending = [c['label'] for c in result['catalog']
-               if c['name'] not in measured and not c['error'] and c['alternative']]
-    if 'minutes' not in psr:
-        pending.append('panel self-refresh (boot-level)')
+def model_rows(result):
+    """Model estimates (apps, display) for the chart, and their caption."""
     info = result['info']
-    if info:
-        note = (f"Typical draw {info['power']:.1f} W from {result['scope']} → {info['runtime_h']:.1f} h per full "
-                f"charge ({info['energy']:.0f} Wh). Bars: extra minutes per full charge; whiskers: 90% interval. "
-                "Solid = measured by experiment; outlined = model estimate (assumes the activity simply "
-                "disappears and nothing else changes)."
-                + (f" Models trained {time.strftime('%H:%M', time.localtime(result['trained']))} by battery-eta."
-                   if result.get('trained') else ' Models fitted here (battery-eta has not trained recently).'))
-    else:
-        note = 'Not enough battery time logged yet for estimates.'
-    return rows, pending, note
+    if not info:
+        return [], 'Not enough battery time logged yet for model estimates.'
+    note = ("Model estimates: the battery model removes an app's or group's activity, or dims the display, and "
+            "assumes nothing else changes (outlined bars; whiskers are 90% intervals)."
+            + (f" Models trained {time.strftime('%H:%M', time.localtime(result['trained']))} by battery-eta."
+               if result.get('trained') else ' Models fitted here (battery-eta has not trained recently).'))
+    return result['estimates'], note
 
 
 def render(directory, range_name='Day', offset=0):
@@ -562,7 +556,7 @@ def render(directory, range_name='Day', offset=0):
     result = gather(end - length, end)
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
-    rows, _, _ = whatif_rows(result)
+    rows, _ = model_rows(result)
     drains = sorted(s['pct_per_hour'] for s in result['sleeps_all'])
     charts = {'timeline': (TimelineChart(), (result['points'], result['span'], result['sleeps']), 330),
               'sleep': (SleepChart(), (result['sleeps'], result['span'], drains[len(drains) // 2] if drains else None), 300),
@@ -578,6 +572,63 @@ def render(directory, range_name='Day', offset=0):
         print(directory / f'{name}.png')
 
 
+class GainBar(Gtk.DrawingArea):
+    """One saving (minutes per charge) and its 90% interval, on a scale shared down its column."""
+
+    def __init__(self):
+        super().__init__(content_width=190, content_height=18, valign=Gtk.Align.CENTER)
+        self.gain, self.scale = None, (-10, 10)
+        self.set_draw_func(self.draw)
+
+    def set_data(self, gain, scale):
+        self.gain, self.scale = gain, scale
+        self.queue_draw()
+
+    def draw(self, _area, cr, width, height):
+        low, high = self.scale
+        sx = lambda m: 1 + (min(max(m, low), high) - low) / (high - low) * (width - 2)
+        cr.set_source_rgba(1, 1, 1, .35)
+        cr.set_line_width(1)
+        cr.move_to(round(sx(0)) + .5, 1)
+        cr.line_to(round(sx(0)) + .5, height - 1)
+        cr.stroke()
+        if not self.gain or self.gain.get('minutes') is None or not math.isfinite(self.gain['minutes']):
+            return
+        color = COLORS['Coding tools'] if self.gain['minutes'] >= 0 else COLORS['Builds & EDA']
+        x0, x1 = sorted((sx(0), sx(self.gain['minutes'])))
+        rounded(cr, x0, 4, max(2, x1 - x0), height - 8, 3)
+        cr.set_source_rgba(*rgb(color))
+        cr.fill()
+        if self.gain.get('low') is not None and math.isfinite(self.gain['low']) and math.isfinite(self.gain['high']):
+            cr.set_source_rgba(1, 1, 1, .85)
+            cr.set_line_width(1.5)
+            cy = height / 2
+            cr.move_to(sx(self.gain['low']), cy)
+            cr.line_to(sx(self.gain['high']), cy)
+            for edge in (self.gain['low'], self.gain['high']):
+                cr.move_to(sx(edge), cy - 4)
+                cr.line_to(sx(edge), cy + 4)
+            cr.stroke()
+
+
+def gain_text(gain):
+    if not gain or gain.get('minutes') is None:
+        return ''
+    if not math.isfinite(gain['minutes']):
+        return 'unbounded'
+    interval = (f" ({gain['low']:+.0f} … {gain['high']:+.0f})"
+                if gain.get('low') is not None and math.isfinite(gain['low']) and math.isfinite(gain['high']) else '')
+    return f"{gain['minutes']:+.0f} min{interval}"
+
+
+def shared_scale(gains):
+    values = [v for g in gains if g for v in (g.get('minutes'), g.get('low'), g.get('high'))
+              if v is not None and math.isfinite(v)]
+    low, high = min(values + [-5]), max(values + [15])
+    step = nice_step(high - low, 4)
+    return math.floor(low / step) * step, math.ceil(high / step) * step
+
+
 class BatteryPanel(Adw.Application):
     def __init__(self):
         super().__init__(application_id='org.zyansheep.BatteryPanel', flags=Gio.ApplicationFlags.IS_SERVICE)
@@ -590,6 +641,8 @@ class BatteryPanel(Adw.Application):
         self.poll = 0
         self.catalog, self.units, self.effects = [], [], []
         self.psr, self.psr_arm = None, None
+        self.result, self.test_choice = None, {}  # test_choice: the user's Test checkboxes this session.
+        self.best = None
         self.note = ''
         self.connect('startup', self.startup)
         self.connect('activate', self.toggle)
@@ -714,50 +767,74 @@ class BatteryPanel(Adw.Application):
         page.append(self.sleep_note)
         self.stack.add_titled(page, 'sleep', 'Sleep drain')
 
-        self.whatif = WhatIfChart(lambda _row: self.stack.set_visible_child_name('experiments'))
-        self.whatif_note = wrapped()
-        self.whatif_note.add_css_class('muted')
-        page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        page.append(self.whatif_note)
-        self.pending_label = wrapped()
-        self.pending = Gtk.Button(halign=Gtk.Align.START, child=self.pending_label)
-        self.pending.add_css_class('flat')
-        self.pending.connect('clicked', lambda _b: self.stack.set_visible_child_name('experiments'))
-        page.append(self.pending)
-        scroller = Gtk.ScrolledWindow(vexpand=True, min_content_height=330,
-                                      hscrollbar_policy=Gtk.PolicyType.NEVER)
-        scroller.set_child(self.whatif)
-        page.append(scroller)
-        self.stack.add_titled(page, 'whatif', 'What-if runtime')
-
-        self.stack.add_titled(self.build_experiments(), 'experiments', 'Experiments')
+        self.stack.add_titled(self.build_savings(), 'savings', 'Savings')
         self.window.set_content(outer)
 
-    def build_experiments(self):
+    def build_savings(self):
+        """Settings (measured by randomized experiments, several at once), model
+        estimates for apps and the display, and the lock-screen and boot experiments."""
         page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
-        self.banner = wrapped()
+        self.savings_note = self.muted(wrapped())
+        page.append(self.savings_note)
+        status = Gtk.Box(spacing=8)
+        self.banner = wrapped(hexpand=True)
         self.banner.add_css_class('banner')
-        page.append(self.banner)
-        options = Gtk.Box(spacing=8)
-        options.append(Gtk.Label(label='Run for'))
-        self.minutes = Gtk.DropDown.new_from_strings(['30 min', '60 min', '2 h', '4 h'])
-        self.minutes.set_selected(1)
-        options.append(self.minutes)
-        explain = wrapped(hexpand=True, max_width_chars=70, label='Alternates A (current) and B in random '
-                            '4-minute blocks while on battery; pauses on AC. Each block’s first minute is ignored.')
-        explain.add_css_class('muted')
-        options.append(explain)
-        self.stop_button = Gtk.Button(label='Stop experiment')
+        status.append(self.banner)
+        self.stop_button = Gtk.Button(label='Stop experiment', valign=Gtk.Align.CENTER)
         self.stop_button.add_css_class('destructive-action')
         self.stop_button.connect('clicked', lambda _b: self.command(['power-experiment', 'stop']))
-        options.append(self.stop_button)
-        page.append(options)
+        status.append(self.stop_button)
+        page.append(status)
+
+        page.append(self.section('Settings'))
+        self.lever_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
+        self.lever_list.add_css_class('boxed-list')
+        page.append(self.lever_list)
+        self.together = self.muted(wrapped())
+        page.append(self.together)
+        best = Gtk.Box(spacing=8)
+        self.best_label = wrapped(hexpand=True)
+        self.best_label.add_css_class('result')
+        best.append(self.best_label)
+        self.apply_button = Gtk.Button(label='Apply', valign=Gtk.Align.CENTER)
+        self.apply_button.set_tooltip_text('Until reboot. ASPM and APST also revert at the next suspend (the '
+                                           'crash workaround), ABM and the profile at the next plug change.')
+        self.apply_button.connect('clicked', lambda _b: self.apply_best())
+        best.append(self.apply_button)
+        page.append(best)
+        run = Gtk.Box(spacing=8)
+        run.append(Gtk.Label(label='Test the checked settings for'))
+        self.minutes = Gtk.DropDown.new_from_strings([f'{h} h' for h in BATTERY_HOURS])
+        self.minutes.set_selected(BATTERY_HOURS.index(4))
+        run.append(self.minutes)
+        run.append(Gtk.Label(label='of battery time'))
+        self.start_button = Gtk.Button(label='Start experiment', hexpand=True, halign=Gtk.Align.END)
+        self.start_button.add_css_class('suggested-action')
+        self.start_button.connect('clicked', lambda _b: self.start(self.checked()))
+        run.append(self.start_button)
+        page.append(run)
+        self.run_note = self.muted(wrapped())
+        page.append(self.run_note)
+
+        page.append(self.section('Apps and display (model estimates)'))
+        self.whatif = WhatIfChart(lambda _row: None)
+        page.append(self.whatif)
+        self.whatif_note = self.muted(wrapped())
+        page.append(self.whatif_note)
+
+        page.append(self.section('On the lock screen and at boot'))
         self.experiment_list = Gtk.ListBox(selection_mode=Gtk.SelectionMode.NONE)
         self.experiment_list.add_css_class('boxed-list')
-        scroller = Gtk.ScrolledWindow(vexpand=True, min_content_height=300, hscrollbar_policy=Gtk.PolicyType.NEVER)
-        scroller.set_child(self.experiment_list)
-        page.append(scroller)
-        return page
+        page.append(self.experiment_list)
+        scroller = Gtk.ScrolledWindow(vexpand=True, min_content_height=430, hscrollbar_policy=Gtk.PolicyType.NEVER)
+        scroller.set_child(page)
+        return scroller
+
+    @staticmethod
+    def section(title):
+        label = Gtk.Label(label=title, xalign=0, margin_top=6)
+        label.add_css_class('heading')
+        return label
 
     def key(self, _controller, keyval, *_):
         if keyval == Gdk.KEY_Escape:
@@ -779,8 +856,9 @@ class BatteryPanel(Adw.Application):
         self.poll = self.poll or GLib.timeout_add_seconds(2, self.tick)
 
     def show_page(self, _action, page):
-        if self.stack.get_child_by_name(page.get_string()):
-            self.stack.set_visible_child_name(page.get_string())
+        name = {'whatif': 'savings', 'experiments': 'savings'}.get(page.get_string(), page.get_string())
+        if self.stack.get_child_by_name(name):
+            self.stack.set_visible_child_name(name)
         if not self.window.get_visible():
             self.toggle()
 
@@ -885,10 +963,10 @@ class BatteryPanel(Adw.Application):
         else:
             self.sleep_note.set_text('No suspends logged yet.')
         self.effects = result['effects']
-        self.fill_whatif(result)
         self.catalog, self.units = result['catalog'], result['units']
         self.psr, self.psr_arm = result.get('psr'), result.get('psr_arm')
-        self.fill_experiments()
+        self.result = result
+        self.fill_savings()
         return False
 
     def fill_legend(self, points):
@@ -908,34 +986,64 @@ class BatteryPanel(Adw.Application):
             box.append(label)
             self.legend.append(box)
 
-    def fill_whatif(self, result):
-        rows, pending, note = whatif_rows(result)
-        self.whatif.set_data(rows)
-        self.whatif_note.set_text(note)
-        self.pending_label.set_text(f"Not yet measured: {', '.join(pending)} — run them in Experiments →")
-        self.pending.set_visible(bool(pending))
-
-    # --- experiments ---------------------------------------------------------------------
+    # --- savings ---------------------------------------------------------------------------
     def experiment_state(self):
         try:
             return json.loads((RUNTIME / 'experiment.json').read_text())
         except (OSError, ValueError):
             return {}
 
-    def fill_experiments(self):
-        while (row := self.experiment_list.get_first_child()) is not None:
-            self.experiment_list.remove(row)
+    def settings(self):
+        return [c for c in self.catalog if c['name'] in report.SETTING]
+
+    def checked(self):
+        return [c['name'] for c in self.settings()
+                if not c['error'] and self.test_choice.get(c['name'], c['name'] in DEFAULT_TEST)]
+
+    def fill_savings(self):
+        result = self.result
+        levers = result['levers']
+        effects = {e['experiment']: e for e in levers['effects']}
         state = self.experiment_state()
         active = state.get('status') in ('running', 'paused')
-        effects = {e['experiment']: e for e in self.effects}
-        for spec in self.catalog:
-            self.experiment_list.append(self.experiment_row(spec, effects.get(spec['name']), active))
+        info = result['info']
+        draw = (f"Typical draw {result['power']:.1f} W ({result['scope'] if info else 'all history'}) → "
+                f"{result['energy'] / result['power']:.1f} h per full charge ({result['energy']:.0f} Wh). "
+                if result.get('power') and result.get('energy') else '')
+        self.savings_note.set_text(draw + 'Gains are extra minutes per full charge with 90% intervals, each for that '
+                                   'setting alone with the others as they are on battery now.')
+        while (row := self.lever_list.get_first_child()) is not None:
+            self.lever_list.remove(row)
+        scale = shared_scale(list(effects.values()) + [levers.get('best')])
+        for spec in self.settings():
+            self.lever_list.append(self.lever_row(spec, effects.get(spec['name']),
+                                                  levers['progress'].get(spec['name']), scale, active))
+        found = [i for i in levers['interactions'] if i['watts_low'] > 0 or i['watts_high'] < 0]
+        if found:
+            self.together.set_text('Together: ' + '; '.join(
+                f"{PHRASES.get(a, (a,))[0]} with {PHRASES.get(b, (b,))[0]} saves {i['watts']:+.2f} W "
+                f"({i['watts_low']:+.2f} … {i['watts_high']:+.2f}) more than the two apart" for (a, b), i in
+                ((i['pair'], i) for i in found)) + '.')
+        elif levers['interactions']:
+            self.together.set_text(f"{len(levers['interactions'])} pair(s) tested together; no interaction is clear "
+                                   'yet (their intervals still include zero).')
+        else:
+            self.together.set_text('Settings tested together also show whether they save more (or less) in '
+                                   'combination than apart.')
+        self.fill_best(effects, active)
+        self.fill_run_note(levers, active)
+        rows, note = model_rows(result)
+        self.whatif.set_data(rows)
+        self.whatif_note.set_text(note)
+        while (row := self.experiment_list.get_first_child()) is not None:
+            self.experiment_list.remove(row)
+        freezes = {e['experiment']: e for e in self.effects}
         if self.units:
             self.experiment_list.append(self.freeze_row(active))
-            self.experiment_list.append(self.freeze_all_row(effects.get('freeze-apps'), active))
+            self.experiment_list.append(self.freeze_all_row(freezes.get('freeze-apps'), active))
         self.experiment_list.append(self.psr_row())
 
-    def experiment_row(self, spec, effect, active):
+    def lever_row(self, spec, effect, progress, scale, active):
         row = Gtk.Box(spacing=10)
         row.add_css_class('experiment')
         info = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
@@ -945,27 +1053,79 @@ class BatteryPanel(Adw.Application):
         if spec['error']:
             detail = f"Unavailable: {spec['error']}"
         else:
-            detail = f"A: {spec['current']}   B: {spec['alternative']}   ·   {spec['description']}"
+            saving = spec['saving'] is not None and spec['current'] == spec['saving']
+            detail = f"Now {spec['current']}{' (power-saving)' if saving else ''} · B: {spec['alternative']}"
             if spec['visible']:
-                detail += f"  Noticeable: {spec['visible']}"
-        label = wrapped(label=detail)
-        label.add_css_class('muted')
-        info.append(label)
-        if effect:
-            if 'minutes' in effect:
-                text_ = (f"Result: B saves {effect['watts']:+.2f} W ({effect['watts_low']:+.2f} to "
-                         f"{effect['watts_high']:+.2f}) → {effect['minutes']:+.0f} min per charge · {effect['pairs']} pairs")
-            else:
-                text_ = f"{effect['pairs']} clean pair(s) so far; results after 3."
-            result = Gtk.Label(xalign=0, label=text_)
-            result.add_css_class('result')
-            info.append(result)
+                detail += f" · {spec['visible']}"
+        info.append(self.muted(wrapped(label=detail, max_width_chars=48)))
+        info.set_tooltip_text(spec['description'])
         row.append(info)
-        button = Gtk.Button(label='Start', valign=Gtk.Align.CENTER)
-        button.set_sensitive(not active and not spec['error'])
-        button.connect('clicked', lambda _b: self.start(spec['name']))
-        row.append(button)
+        bar = GainBar()
+        bar.set_data(effect, scale)
+        row.append(bar)
+        if effect:
+            evidence = f"{effect['blocks']['on']}+{effect['blocks']['off']} blocks, {effect['hours']:.1f} h"
+            value = gain_text(effect)
+        elif progress:
+            evidence, value = f"{progress['on']}+{progress['off']} blocks so far", 'needs more'
+        else:
+            evidence, value = ('CPU setting: needs ~4× the time' if spec['name'] in report.CPU_LEVERS else ''), \
+                'not measured'
+        numbers = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, valign=Gtk.Align.CENTER)
+        numbers.append(Gtk.Label(label=value, xalign=1, width_chars=17))
+        numbers.append(self.muted(Gtk.Label(label=evidence, xalign=1, width_chars=17)))
+        row.append(numbers)
+        check = Gtk.CheckButton(label='Test', valign=Gtk.Align.CENTER)
+        check.set_active(not spec['error'] and self.test_choice.get(spec['name'], spec['name'] in DEFAULT_TEST))
+        check.set_sensitive(not spec['error'] and not active)
+        check.connect('toggled', lambda b, n=spec['name']: (self.test_choice.__setitem__(n, b.get_active()),
+                                                             self.fill_run_note(self.result['levers'], False)))
+        row.append(check)
         return row
+
+    def fill_best(self, effects, active):
+        levers, result = self.result['levers'], self.result
+        noticeable = {c['name'] for c in self.settings() if c['visible']}
+        best = report.best_config(levers, set(effects), result.get('energy'), result.get('power'))
+        quiet = report.best_config(levers, set(effects) - noticeable, result.get('energy'), result.get('power'))
+        self.best = None
+        if not best:
+            self.best_label.set_text('Best combination: appears once settings have been measured.')
+        elif not best['changes']:
+            self.best_label.set_text('Your battery settings are already the best measured combination.')
+        else:
+            self.best = best
+            change = lambda c: ', '.join(PHRASES.get(n, (n, n))[0 if c['config'][n] else 1] for n in c['changes'])
+            text_ = f"Best measured combination: {change(best)} → {gain_text(best)} per charge."
+            if quiet and quiet['changes'] and set(quiet['changes']) != set(best['changes']):
+                text_ += f" Without noticeable changes: {change(quiet)} → {gain_text(quiet)}."
+            self.best_label.set_text(text_)
+        self.apply_button.set_visible(self.best is not None)
+        self.apply_button.set_sensitive(not active)
+
+    def apply_best(self):
+        if self.best:
+            self.command(['power-experiment', 'apply'] + [f"{n}={'saving' if self.best['config'][n] else 'normal'}"
+                                                          for n in self.best['changes']],
+                         done='Applied until reboot (ASPM/APST until the next suspend).')
+
+    def fill_run_note(self, levers, active):
+        names = self.checked()
+        self.start_button.set_sensitive(bool(names) and not active)
+        if not names:
+            self.run_note.set_text('Check the settings to test.')
+            return
+        sigma = levers.get('sigma') or 2.0  # W per block after the workload correction (measured here: ~2).
+        hours = report.hours_needed(sigma)
+        cpu = [n for n in names if n in report.CPU_LEVERS]
+        text_ = (f"Each 4-minute block sets every checked setting to A (now) or B at random, balanced so every "
+                 f"combination recurs: all {len(names)} are measured at once, and pairs that interact show up. The "
+                 f"first minute of a block is ignored; it pauses on AC. For ±0.5 W per setting: ~{hours:.0f} h on "
+                 f"battery")
+        if cpu:
+            text_ += (f", ~{report.hours_needed(levers.get('sigma_raw') or 2 * sigma):.0f} h for CPU settings "
+                      "(they change the CPU load the correction uses)")
+        self.run_note.set_text(text_ + '; pairs need about four times as long.')
 
     def freeze_row(self, active):
         row = Gtk.Box(spacing=10)
@@ -1082,9 +1242,10 @@ class BatteryPanel(Adw.Application):
         label.add_css_class('muted')
         return label
 
-    def start(self, name, unit=None, only_locked=False, extra=()):
-        minutes = [30, 60, 120, 240][self.minutes.get_selected()]
-        command = ['power-experiment', 'start', name, '--minutes', str(minutes)]
+    def start(self, names, unit=None, only_locked=False, extra=()):
+        minutes = 60 * BATTERY_HOURS[self.minutes.get_selected()]
+        names = [names] if isinstance(names, str) else list(names)
+        command = ['power-experiment', 'start', *names, '--minutes', str(minutes)]
         if unit:
             command += ['--unit', unit]
         if only_locked:
@@ -1104,8 +1265,8 @@ class BatteryPanel(Adw.Application):
             if message:
                 self.note = message  # Kept under the status line until the panel restarts.
                 self.refresh_status()
-            else:
-                GLib.timeout_add(800, lambda: (self.refresh_status(), self.fill_experiments()) and False)
+            # Settings changed: re-read them (and the rows) shortly.
+            GLib.timeout_add(800, lambda: (self.refresh_status(), self.reload()) and False)
         process.communicate_utf8_async(None, None, finished)
 
     @staticmethod
@@ -1149,16 +1310,19 @@ class BatteryPanel(Adw.Application):
             states = [experiment.freeze_get(u) for u in experiment.live_units(state['units'])]
             frozen = f" Apps frozen right now: {states.count('frozen')}/{len(states)}."
         if status == 'running':
-            left = max(0, state['ends_at'] - time.time()) / 3600
-            self.banner.set_text(f"Running: {state['label']} — block {state['block']} is {state['arm']} "
-                                 f"({state['value']}), {duration(left)} left. "
+            names = state.get('names') or [state.get('name')]
+            arms = ', '.join(f"{n} {state['config'][n]}" for n in names) if state.get('config') else state['arm']
+            progress = (f"{duration(state.get('collected', 0) / 3600)} of {duration(state['target_seconds'] / 3600)} "
+                        'on battery collected. ' if state.get('target_seconds') else '')
+            self.banner.set_text(f"Running: {state['label']} — block {state['block']}: {arms} (A = as before). "
+                                 + progress
                                  + ('Settling (first minute ignored).' if time.time() < state['washout_until'] else '')
                                  + frozen)
         elif status == 'paused':
             reason = state.get('reason')
             if reason == 'waiting for the screen to lock':
                 reason += ' (apps keep running until you lock with Ctrl+Alt+L)'
-            self.banner.set_text(f"Paused: {state['label']} — {reason}. Setting restored meanwhile." + frozen)
+            self.banner.set_text(f"Paused: {state['label']} — {reason}. Settings restored meanwhile." + frozen)
         elif status == 'finished':
             self.banner.set_text(f"Last run: {state.get('label')} finished after {state.get('blocks', 0)} blocks.")
         else:

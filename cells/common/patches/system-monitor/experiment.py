@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Randomized A/B ("switchback") battery experiments.
 
-A run alternates a setting between its current value (arm A) and an
-alternative (arm B) in blocks of BLOCK seconds, in random order within each
-pair, only while on battery. The first WASHOUT seconds of a block are marked
-so analysis can skip the battery reading's lag and the system settling.
-waybar-monitor tags every power-log record with the running arm (from the state
-file below); the battery panel estimates the effect from paired blocks.
+A run randomizes one or more settings, each between its current value (arm
+A) and an alternative (arm B), in blocks of BLOCK seconds, only while on
+battery. Several settings run as a factorial design (see `design`): every block
+informs every setting at once, and settings randomized together reveal whether
+they interact. The first WASHOUT seconds of a block are marked so analysis can
+skip the battery reading's lag and the system settling. waybar-monitor tags
+every record with the running arms (from the state file below); the battery
+panel's Savings tab fits all settings' effects together (report.lever_effects).
 
     power-experiment list | units | status
-    power-experiment start <name> [--minutes N] [--unit SCOPE] [--only-locked]
+    power-experiment start <name> [<name> ...] [--minutes N] [--unit SCOPE] [--only-locked]
+    power-experiment apply <name>=<value> ...   (set now, e.g. the panel's best combination)
     power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
     power-experiment stop | restore
     power-experiment next-boot default|psr | boot-status      (boot-level experiments)
@@ -25,6 +28,7 @@ s2idle crash workarounds (ASPM, NVMe APST) before every suspend, and the runner
 notices the drift after resume and starts a fresh block.
 """
 import argparse
+import itertools
 import json
 import os
 import random
@@ -38,6 +42,7 @@ from pathlib import Path
 
 BLOCK = 240
 WASHOUT = 60
+GIVE_UP = 7 * 86400  # A run that cannot collect its battery time in a week ends.
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 STATE = RUNTIME / 'experiment.json'
 REQUEST = RUNTIME / 'experiment-request.json'
@@ -90,6 +95,16 @@ def refresh_alternative(current):
     if target is None or abs(target - float(rate)) < 1:
         raise RuntimeError('panel has a single refresh rate')
     return f'{size}@{target:.3f}'
+
+
+def refresh_levels():
+    """(lowest, highest) refresh mode of the internal panel at its current size."""
+    output = niri_internal()
+    current = output['modes'][output['current_mode']]
+    modes = sorted((m for m in output['modes'] if (m['width'], m['height']) == (current['width'], current['height'])),
+                   key=lambda m: m['refresh_rate'])
+    mode = lambda m: f"{m['width']}x{m['height']}@{m['refresh_rate'] / 1000:.3f}"
+    return mode(modes[0]), mode(modes[-1])
 
 
 def aspm_get():
@@ -200,9 +215,11 @@ def psr_arm():
 
 class Setting:
     def __init__(self, name, label, description, get, set, alternative, root=False, visible='',
-                 sleep_restored=False, unit=None, ac_managed=False, units=None):
+                 sleep_restored=False, unit=None, ac_managed=False, units=None, levels=None):
         self.name, self.label, self.description = name, label, description
         self.get, self.set, self.alternative = get, set, alternative
+        # () → (power-saving value, normal value), for `apply name=saving|normal`.
+        self.levels = levels
         self.root, self.visible, self.sleep_restored, self.unit = root, visible, sleep_restored, unit
         # udev switches these on AC/battery changes; never fight it while plugged in.
         self.ac_managed = ac_managed
@@ -218,38 +235,41 @@ def catalog(unit=None, units=None):
                 'restored before every suspend.',
                 aspm_get, lambda v: run(POWER_LAB + ['aspm', v]),
                 lambda cur: 'powersupersave' if cur != 'powersupersave' else 'performance',
-                root=True, sleep_restored=True),
+                root=True, sleep_restored=True, levels=lambda: ('powersupersave', 'performance')),
         Setting('apst', 'NVMe autonomous power states (APST)',
                 'Lets the SSD drop into low-power states when idle. Disabled at boot as an s2idle crash '
                 'workaround; restored before every suspend.',
                 lambda: read(apst_paths()[0]) if apst_paths() else None,
                 lambda v: run(POWER_LAB + ['apst', v]),
-                lambda cur: '100000' if cur == '0' else '0', root=True, sleep_restored=True),
+                lambda cur: '100000' if cur == '0' else '0', root=True, sleep_restored=True,
+                levels=lambda: ('100000', '0')),
         Setting('boost', 'CPU boost', 'Clocks above base frequency for short bursts.',
                 lambda: read(SYS / 'devices/system/cpu/cpufreq/boost'),
                 lambda v: run(POWER_LAB + ['boost', v]),
-                lambda cur: '0' if cur == '1' else '1', root=True, visible='Bursty work gets slower.'),
+                lambda cur: '0' if cur == '1' else '1', root=True, visible='Bursty work gets slower.',
+                levels=lambda: ('0', '1')),
         Setting('abm', 'Panel adaptive backlight (ABM)',
                 'Dims the backlight and boosts pixel values to compensate.',
                 lambda: read(next(iter(sorted(SYS.glob('class/drm/card*-eDP-*/amdgpu/panel_power_savings'))), '/nonexistent')),
                 lambda v: run(POWER_LAB + ['abm', v]),
                 lambda cur: '0' if cur not in (None, '0') else '3', root=True, visible='Slight contrast change.',
-                ac_managed=True),
+                ac_managed=True, levels=lambda: ('3', '0')),
         Setting('profile', 'Power profile', 'power-profiles-daemon profile (platform profile and EPP).',
                 lambda: run(['powerprofilesctl', 'get']),
                 lambda v: run(['powerprofilesctl', 'set', v]),
                 lambda cur: 'balanced' if cur == 'power-saver' else 'power-saver',
-                visible='Responsiveness changes.', ac_managed=True),
+                visible='Responsiveness changes.', ac_managed=True, levels=lambda: ('power-saver', 'balanced')),
         Setting('refresh', 'Display refresh rate', 'Lower internal-panel refresh rate.',
                 refresh_get, lambda v: run(['niri', 'msg', 'output', niri_internal()['name'], 'mode', v]),
-                refresh_alternative, visible='Motion looks slightly less smooth.'),
+                refresh_alternative, visible='Motion looks slightly less smooth.', levels=refresh_levels),
     ]
     if wifi:
         specs.append(Setting(
             'wifi-ps', 'Wi-Fi power saving', 'Radio sleeps between beacons (adds latency).',
             lambda: run(['iw', 'dev', wifi, 'get', 'power_save']).split(':')[-1].strip(),
             lambda v: run(POWER_LAB + ['wifips', v]),
-            lambda cur: 'off' if cur == 'on' else 'on', root=True, visible='Network latency changes.'))
+            lambda cur: 'off' if cur == 'on' else 'on', root=True, visible='Network latency changes.',
+            levels=lambda: ('on', 'off')))
     if unit:
         specs.append(Setting(
             'freeze', f'Close {unit_label(unit)}', 'Freezes the app (cgroup freezer) to measure its cost.',
@@ -317,12 +337,24 @@ def write_state(state, path=None):
     temporary.replace(path)
 
 
-def schedule(rng):
-    """Arms in randomly ordered A/B pairs, so interruptions stay roughly balanced."""
+def design(names, rng):
+    """Arms per block, {name: 'A' | 'B'}, in shuffled cycles.
+
+    Up to four settings: every combination once per cycle (a full factorial,
+    so each setting is B in half the blocks and pairs separate cleanly). More:
+    the first four are crossed and every other setting is B in a random half
+    of each cycle. One setting is plain A/B pairs in random order.
+    """
+    crossed, rest = names[:4], names[4:]
     while True:
-        pair = ['A', 'B']
-        rng.shuffle(pair)
-        yield from pair
+        combos = [dict(zip(crossed, arms)) for arms in itertools.product('AB', repeat=len(crossed))]
+        for name in rest:
+            column = ['A', 'B'] * (len(combos) // 2)
+            rng.shuffle(column)
+            for combo, arm in zip(combos, column):
+                combo[name] = arm
+        rng.shuffle(combos)
+        yield from combos
 
 
 class Clock:
@@ -337,65 +369,88 @@ class Clock:
         return mark is not None and (now[0] - mark[0]) - (now[1] - mark[1]) > 2, now
 
 
-def experiment(spec, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, clock=Clock,
+def experiment(specs, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, clock=Clock,
                battery=on_battery, locked=screen_locked, state_path=None, rng=None):
-    original = spec.get()
-    if original is None:
-        raise RuntimeError(f'{spec.name}: setting is not available here')
-    arms = {'A': original, 'B': spec.alternative(original)}
+    """Randomize `specs` (one Setting or several) together in blocks until `minutes`
+    of battery time are collected (AC and, with `only_locked`, unlocked time don't count)."""
+    specs = [specs] if isinstance(specs, Setting) else list(specs)
+    names = [spec.name for spec in specs]
+    originals = {}
+    for spec in specs:
+        if (originals.setdefault(spec.name, spec.get())) is None:
+            raise RuntimeError(f'{spec.name}: setting is not available here')
+    arms = {spec.name: {'A': originals[spec.name], 'B': spec.alternative(originals[spec.name])} for spec in specs}
     started = clock.time()
-    base = {'run': f'{spec.name}-{int(started)}', 'name': spec.name, 'label': spec.label,
-            'arms': arms, 'original': original, 'unit': spec.unit, 'units': spec.units, 'started': started,
-            'ends_at': started + minutes * 60, 'block_seconds': block, 'washout_seconds': washout}
-    arms_order = schedule(rng or random.Random())
-    number, mark = 0, None
+    # `name`, `arm` and `value` are what waybar-monitor tags records with:
+    # 'aspm+apst', 'BA' and {'aspm': …, 'apst': …} (a single setting: 'B' and its value).
+    base = {'run': f"{'+'.join(names)}-{int(started)}", 'name': '+'.join(names), 'names': names,
+            'label': ' + '.join(spec.label for spec in specs), 'arms': arms, 'originals': originals,
+            'unit': specs[0].unit, 'units': specs[0].units, 'started': started, 'target_seconds': minutes * 60,
+            'gives_up_at': started + GIVE_UP, 'block_seconds': block, 'washout_seconds': washout}
+    configs = design(names, rng or random.Random())
+    number, mark, collected = 0, None, 0.0
 
     def restore():
-        if spec.ac_managed and not battery():
-            return  # udev already applied the AC value.
-        if spec.get() != original:
-            spec.set(original)
+        failures = []
+        for spec in specs:
+            if spec.ac_managed and not battery():
+                continue  # udev already applied the AC value.
+            try:
+                if spec.get() != originals[spec.name]:
+                    spec.set(originals[spec.name])
+            except Exception as error:  # noqa: BLE001 - restore the rest first
+                failures.append(error)
+        if failures:
+            raise failures[0]
     try:
-        while clock.time() < base['ends_at']:
+        while collected < base['target_seconds'] and clock.time() < base['gives_up_at']:
             reason = ('on AC power' if not battery() else
                       'waiting for the screen to lock' if only_locked and not locked() else None)
             if reason:
                 restore()
-                write_state(dict(base, status='paused', reason=reason, blocks=number), state_path)
+                write_state(dict(base, status='paused', reason=reason, blocks=number, collected=collected), state_path)
                 clock.sleep(15)
                 continue
-            arm = next(arms_order)
-            if spec.get() != arms[arm]:
-                spec.set(arms[arm])
+            config = next(configs)
+            values = {name: arms[name][config[name]] for name in names}
+            for spec in specs:
+                if spec.get() != values[spec.name]:
+                    spec.set(values[spec.name])
             begin = clock.time()
             number += 1
-            state = dict(base, status='running', block=number, arm=arm, value=arms[arm], block_start=begin,
-                         washout_until=begin + washout, block_end=begin + block, blocks=number)
+            state = dict(base, status='running', block=number, config=config,
+                         arm=''.join(config[name] for name in names),
+                         value=values[names[0]] if len(names) == 1 else values, block_start=begin,
+                         washout_until=begin + washout, block_end=begin + min(block, base['target_seconds'] - collected),
+                         blocks=number, collected=collected)
             write_state(state, state_path)
             _, mark = clock.suspended_since(None)
-            while clock.time() < state['block_end'] and clock.time() < base['ends_at']:
+            while clock.time() < state['block_end']:
                 clock.sleep(5)
                 suspended, mark = clock.suspended_since(mark)
                 interrupted = (suspended or not battery() or (only_locked and not locked())
-                               or spec.get() != arms[arm])
+                               or any(spec.get() != values[spec.name] for spec in specs))
                 if interrupted:
                     break
+            collected += clock.time() - begin
             if clock.time() < state['block_end']:
-                write_state(dict(state, block_end=clock.time()), state_path)  # Ended early.
+                write_state(dict(state, block_end=clock.time(), collected=collected), state_path)  # Ended early.
     finally:
         try:
             restore()
         finally:
-            write_state(dict(base, status='finished', finished=clock.time(), blocks=number), state_path)
+            write_state(dict(base, status='finished', finished=clock.time(), blocks=number, collected=collected),
+                        state_path)
 
 
 def command_run():
     request = json.loads(REQUEST.read_text())
-    spec = catalog(request.get('unit'), request.get('units'))[request['name']]
+    specs = catalog(request.get('unit'), request.get('units'))
+    names = request.get('names') or [request['name']]
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     # Freezing every app is only acceptable while nobody is using them.
-    only_locked = request.get('only_locked', False) or spec.name == 'freeze-apps'
-    experiment(spec, request.get('minutes', 60), only_locked)
+    only_locked = request.get('only_locked', False) or 'freeze-apps' in names
+    experiment([specs[name] for name in names], request.get('minutes', 60), only_locked)
 
 
 def command_restore():
@@ -404,23 +459,51 @@ def command_restore():
     except (OSError, ValueError):
         return
     if state.get('status') in ('running', 'paused'):
-        spec = catalog(state.get('unit'), state.get('units')).get(state['name'])
-        if spec and spec.get() != state['original']:
-            spec.set(state['original'])
+        specs = catalog(state.get('unit'), state.get('units'))
+        for name, original in (state.get('originals') or {state['name']: state['original']}).items():
+            spec = specs.get(name)
+            if spec and spec.get() != original:
+                spec.set(original)
         write_state(dict(state, status='finished', finished=time.time()))
 
 
+def command_apply(assignments):
+    """Set settings now (`name=value`), e.g. the panel's best combination.
+    Runtime only: a reboot, and for ASPM/APST a suspend, restores the defaults."""
+    try:
+        state = json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        state = {}
+    if state.get('status') in ('running', 'paused'):
+        raise SystemExit('an experiment is running; stop it first')
+    specs = catalog()
+    for assignment in assignments:
+        name, _, value = assignment.partition('=')
+        if name not in specs or not value:
+            raise SystemExit(f'expected NAME=VALUE with NAME one of {", ".join(specs)}, got {assignment!r}')
+        spec = specs[name]
+        if value in ('saving', 'normal'):
+            if spec.levels is None:
+                raise SystemExit(f'{name} has no {value} value')
+            value = spec.levels()[0 if value == 'saving' else 1]
+        if spec.get() != value:
+            spec.set(value)
+
+
 def describe(spec):
+    saving = normal = None
     try:
         current = spec.get()
         alternative = spec.alternative(current) if current is not None else None
         error = None if current is not None else 'not available'
+        if spec.levels and current is not None:
+            saving, normal = spec.levels()
     except Exception as exc:  # noqa: BLE001 - shown to the user, never fatal
         current = alternative = None
         error = str(exc)
     return {'name': spec.name, 'label': spec.label, 'description': spec.description, 'root': spec.root,
-            'visible': spec.visible, 'sleep_restored': spec.sleep_restored, 'current': current,
-            'alternative': alternative, 'error': error}
+            'visible': spec.visible, 'sleep_restored': spec.sleep_restored, 'ac_managed': spec.ac_managed,
+            'current': current, 'alternative': alternative, 'saving': saving, 'normal': normal, 'error': error}
 
 
 def main(argv=None):
@@ -429,14 +512,16 @@ def main(argv=None):
     sub.add_parser('list')
     sub.add_parser('units')
     sub.add_parser('status')
-    start = sub.add_parser('start')
-    start.add_argument('name')
+    start = sub.add_parser('start', help='randomize one setting, or several together')
+    start.add_argument('names', nargs='+', metavar='name')
     start.add_argument('--minutes', type=int, default=60)
     start.add_argument('--unit')
     start.add_argument('--only-locked', action='store_true')
     start.add_argument('--keep', action='append',
                        help='freeze-apps: leave scopes matching this (default: t3code, so agents keep running)')
     sub.add_parser('stop')
+    apply = sub.add_parser('apply', help='set settings now, e.g. aspm=powersupersave (until reboot)')
+    apply.add_argument('assignments', nargs='+', metavar='name=value')
     boot = sub.add_parser('next-boot')
     boot.add_argument('arm', choices=['default', 'psr'])
     sub.add_parser('boot-status')
@@ -464,15 +549,22 @@ def main(argv=None):
                           'uncovered': uncovered()}, indent=1))
     elif args.command == 'start':
         units = None
-        if args.name == 'freeze-apps':
+        names = list(dict.fromkeys(args.names))
+        if {'freeze', 'freeze-apps'} & set(names) and len(names) > 1:
+            parser.error('app-freezing experiments run on their own (they need the screen locked)')
+        if names == ['freeze-apps']:
             units = freeze_targets(args.keep if args.keep is not None else ['t3code'])
             if not units:
                 parser.error('no app scopes to freeze')
-        if args.name not in catalog(args.unit, units):
-            parser.error(f'unknown experiment {args.name!r}' + (' (needs --unit)' if args.name == 'freeze' else ''))
-        write_state({'name': args.name, 'minutes': max(8, min(args.minutes, 600)), 'unit': args.unit,
+        known = catalog(args.unit, units)
+        for name in names:
+            if name not in known:
+                parser.error(f'unknown experiment {name!r}' + (' (needs --unit)' if name == 'freeze' else ''))
+        write_state({'names': names, 'minutes': max(8, min(args.minutes, 24 * 60)), 'unit': args.unit,
                      'units': units, 'only_locked': args.only_locked}, REQUEST)
         run(['systemctl', '--user', 'restart', 'power-experiment.service'])
+    elif args.command == 'apply':
+        command_apply(args.assignments)
     elif args.command == 'stop':
         run(['systemctl', '--user', 'stop', 'power-experiment.service'], check=False)
     elif args.command == 'restore':

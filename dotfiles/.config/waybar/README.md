@@ -188,10 +188,12 @@ SQLite itself never compresses (pages are rewritten in place).
 
 ### Battery panel and power experiments
 
-“History, what-if & experiments…” at the bottom of the battery menu (or
-`battery-panel [timeline|sleep|whatif|experiments]`) toggles a resident
-layer-shell panel. One row of controls scopes everything: 6 h / Day / Week,
-back / forward (or ← →), Now. Tabs:
+“History, what-if & experiments…” at the bottom of the battery menu,
+`Mod+Shift+B`, or `battery-panel [timeline|sleep|savings]` toggles a
+resident layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you
+click another window. One row of controls scopes everything: 6 h / Day / Week,
+back / forward (or ← →), Now. While it is open, switching periods reuses the
+loaded 30 days and fetches only new minutes. Tabs:
 
 - **Timeline** — stacked average watts per moment by group (processor
   baseline, rest of system, display, and stable app groups: browser, builds &
@@ -200,26 +202,38 @@ back / forward (or ← →), Now. Tabs:
   bands are sleep. Hover lists the groups, the top apps and the battery level.
 - **Sleep drain** — one dot per suspend (size = length) at %/h, with the median
   across all history.
-- **What-if runtime** — extra minutes per full charge, with 90% intervals.
-  Model estimates (outlined) remove an app's or group's activity, or dim the
-  display, and refit on 10-minute moving-block bootstrap resamples (residuals
-  stay correlated for minutes, so naive intervals would be ~3× too narrow).
-  Experiment results (solid) come from paired A/B blocks with a pair bootstrap.
-  Runtime = full-charge Wh ÷ typical draw, from this period or all history.
-- **Experiments** — randomized switchback tests: `power-experiment.service`
-  alternates a setting between A (current) and B in random-order 4-minute
-  blocks while on battery, discards each block's first minute, pauses (and
-  restores A) on AC, and restores A on stop or crash. Settings: ASPM, NVMe APST,
-  CPU boost, panel ABM, power profile, refresh rate, Wi-Fi power save, and
-  freezing an app scope (`systemctl --user freeze`, optionally only while the
-  screen is locked). Root settings go through `sudo -n power-lab`; power-lab's
-  `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe APST
-  limit (the s2idle crash workarounds) before every suspend, and the runner
-  starts a fresh block after resume. Profile and ABM are left to the AC udev
-  rules while plugged in. “Close every app” freezes all app scopes (keeping T3 Code
-  by default so agent sessions do not stall) and only runs while the screen is
-  locked: its frozen blocks measure the platform floor and A − B is the apps'
-  background cost.
+- **Savings** — one list of what could buy battery time, in extra minutes per
+  full charge with 90% intervals:
+  - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
+    CPU boost, power profile): each row shows the current value, the measured
+    saving (for that setting alone, the others as they are on battery now) and
+    a **Test** checkbox; invisible ones are checked by default. *Start
+    experiment* runs `power-experiment start <checked…> --minutes N` for N
+    minutes of battery time: every 4-minute block sets each checked setting to
+    A (current) or B at random — all combinations in shuffled cycles for up to
+    four settings, balanced halves beyond — so all are measured at once and
+    pairs that interact show up. Each block's first minute is ignored; it
+    pauses (restoring A) on AC, and restores A on stop or crash.
+    `report.lever_effects` fits every run together: battery W per clean block
+    on a baseline per run, workload, an indicator per setting (from the logged
+    settings) and per pair randomized together (shrunk toward zero), with a
+    moving-block bootstrap. CPU boost and profile change the CPU load the
+    workload correction uses, so they are fitted without it (and need more
+    time). The panel lists clear interactions, the best measured combination
+    (and the best without noticeable changes), and **Apply** sets it now
+    (`power-experiment apply name=saving|normal`, until reboot; ASPM/APST
+    revert at the next suspend). Root settings go through `sudo -n power-lab`;
+    its `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe
+    APST limit (the s2idle crash workarounds) before every suspend, and the
+    runner starts a fresh block after resume. Profile and ABM are left to the
+    AC udev rules while plugged in.
+  - **Apps and display** (model estimates, outlined): removing an app's or
+    group's activity, or dimming, refitted on 10-minute moving-block bootstrap
+    resamples.
+  - **On the lock screen and at boot**: freezing an app scope (`systemctl
+    --user freeze`, optionally only while locked), “Close every app” (all app
+    scopes, keeping T3 Code by default, only while locked: frozen blocks
+    measure the platform floor), analysed as paired A/B blocks; and PSR below.
 - **Boot-level: panel self-refresh.** PSR cannot change at runtime, so the
   `psr` specialisation (in `hosts/isomorph/power-conf.nix`) boots with
   `amdgpu.dcdebugmask=0x0` after nixos-hardware's `0x10`. The Experiments tab

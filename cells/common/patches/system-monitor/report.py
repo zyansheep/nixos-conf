@@ -14,8 +14,7 @@ then:
 * sleep drain per suspend from the log's gap events.
 """
 import collections
-import datetime
-import json
+import itertools
 import math
 import re
 from pathlib import Path
@@ -23,6 +22,7 @@ from pathlib import Path
 import numpy as np
 from scipy.optimize import nnls
 
+import experiment
 import power
 import store
 
@@ -342,6 +342,225 @@ def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_
         progress.update(minutes=runtime_gain(energy, power, saved), low=runtime_gain(energy, power, float(low)),
                         high=runtime_gain(energy, power, float(high)))
     return progress
+
+
+# --- Levers: settings measured together ----------------------------------------------
+
+# Settings measured by experiment (names match experiment.catalog()) → their
+# key in a minute's `set`.
+SETTING = {'aspm': 'aspm', 'apst': 'apst', 'wifi-ps': 'wifi_ps', 'abm': 'abm', 'refresh': 'hz',
+           'boost': 'boost', 'profile': 'profile'}
+
+
+def saving(name, value, top_hz=None):
+    """Is `value` — as a minute logs it, or as power-experiment sets it — the
+    setting's power-saving state?"""
+    if value is None:
+        return False
+    try:
+        if name == 'aspm':
+            return value in ('powersave', 'powersupersave')
+        if name == 'apst':
+            return str(value) != '0'
+        if name == 'wifi-ps':
+            return set(str(value).split(',')) == {'on'}
+        if name == 'abm':
+            return int(value) > 0
+        if name == 'refresh':  # 60.0 per minute, '2256x1504@47.998' from the runner
+            return top_hz is not None and float(str(value).rpartition('@')[2]) < top_hz - 1
+        if name == 'boost':
+            return str(value) == '0'
+        if name == 'profile':  # platform_profile per minute, power-profiles-daemon's name from the runner
+            return value in ('low-power', 'quiet', 'power-saver')
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
+# These change CPU frequency, and so the CPU load the workload correction
+# uses. A consequence of the setting must not be adjusted away, so they are
+# estimated without that correction and need more battery time.
+CPU_LEVERS = {'boost', 'profile'}
+COVARIATES = ('load', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
+PRIOR_SD = {'main': 5.0, 'pair': 1.0}  # W: interactions are shrunk (mildly) toward zero.
+BLOCK_MINUTES = experiment.BLOCK / 60
+
+
+def lever_states(settings, top_hz, chosen=None):
+    """{name: in its saving state}. `chosen` — the values an experiment set for the
+    settings it randomized — wins over what was logged: logging can lag, and
+    before 2026-10-07 the APST value logged was nvme_core's boot default."""
+    chosen = chosen or {}
+    return {name: saving(name, chosen[name] if name in chosen else settings.get(key), top_hz)
+            for name, key in SETTING.items()}
+
+
+def top_refresh(minutes):
+    return max((m['set'].get('hz') for m in minutes if m.get('set', {}).get('hz')), default=None)
+
+
+def lever_blocks(minutes):
+    """Clean blocks of setting experiments (single or combined): battery W and
+    workload means, and which settings were in their saving state."""
+    top = top_refresh(minutes)
+    acc = {}
+    for m in minutes:
+        exp = m.get('exp')
+        if not exp or exp[4] or m['st'] != 'D' or m.get('bat') is None or m.get('load') is None or m['dt'] < 40:
+            continue
+        levers = [name for name in str(exp[1]).split('+') if name in SETTING]
+        if not levers:
+            continue  # App-freezing runs are analysed as paired A/B blocks.
+        chosen = exp[5] if isinstance(exp[5], dict) else {levers[0]: exp[5]} if len(levers) == 1 else {}
+        block = acc.setdefault((exp[0], exp[2]), {'run': exp[0], 'levers': levers, 't': m['t'], 'seconds': 0.0,
+                                                  'sums': collections.defaultdict(float),
+                                                  'states': collections.Counter()})
+        block['seconds'] += m['dt']
+        for key in ('bat', *COVARIATES):
+            block['sums'][key] += (m.get(key) or 0) * m['dt']
+        block['states'][tuple(lever_states(m['set'], top, chosen).items())] += m['dt']
+    blocks = []
+    for block in acc.values():
+        if block['seconds'] < 90:
+            continue
+        row = {key: value / block['seconds'] for key, value in block['sums'].items()}
+        row.update(run=block['run'], levers=block['levers'], t=block['t'], seconds=block['seconds'],
+                   x=dict(block['states'].most_common(1)[0][0]))
+        blocks.append(row)
+    return sorted(blocks, key=lambda b: b['t'])
+
+
+def ridge(x, y, w, penalty):
+    sw = np.sqrt(w)
+    a = np.vstack([x * sw[:, None], np.diag(np.sqrt(penalty))])
+    return np.linalg.lstsq(a, np.concatenate([y * sw, np.zeros(len(penalty))]), rcond=None)[0]
+
+
+def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_blocks=3):
+    """Savings of each experimented setting, and of pairs of them together.
+
+    One regression over clean blocks of every setting experiment: battery W on
+    a baseline per run (so a setting is only ever compared within the run that
+    randomized it), workload, an indicator per setting (saving state) and per
+    pair of settings randomized together (shrunk toward zero: most pairs don't
+    interact). CPU settings come from a second fit without the CPU-load
+    correction. Effects are for the settings as they were in the latest
+    battery minute. Intervals: moving-block bootstrap over consecutive blocks.
+    """
+    blocks = lever_blocks(minutes)
+    runs = sorted({b['run'] for b in blocks})
+    randomized = {name for b in blocks for name in b['levers']}
+
+    def split(subset, name):
+        return {'on': sum(1 for b in subset if b['x'][name]), 'off': sum(1 for b in subset if not b['x'][name])}
+
+    def within(name):  # Varied inside some run, so a run baseline cannot absorb it.
+        return any(min(split([b for b in blocks if b['run'] == run], name).values()) >= min_blocks for run in runs)
+    varying = [n for n in SETTING if within(n)]
+    shown = [n for n in varying if n in randomized]
+    together = lambda a, c: [b for b in blocks if a in b['levers'] and c in b['levers']]
+    pairs = [(a, c) for i, a in enumerate(shown) for c in shown[i + 1:]
+             if all(sum(1 for b in together(a, c) if (b['x'][a], b['x'][c]) == combo) >= min_blocks
+                    for combo in ((False, False), (False, True), (True, False), (True, True)))]
+    battery = [m for m in minutes if m['st'] == 'D' and m.get('set')] or [m for m in minutes if m.get('set')]
+    current = lever_states(battery[-1]['set'] if battery else {}, top_refresh(minutes))
+    result = {'effects': [], 'interactions': [], 'blocks': len(blocks), 'current': current, 'coef': {},
+              'samples': {}, 'sigma': None, 'sigma_raw': None,
+              'progress': {n: split([b for b in blocks if n in b['levers']], n) for n in randomized}}
+    covariates = {False: COVARIATES, True: tuple(c for c in COVARIATES if c != 'load')}
+    if not shown or len(blocks) < len(runs) + len(COVARIATES) + len(varying) + len(pairs) + 5:
+        return result
+    y = np.array([b['bat'] for b in blocks])
+    w = np.array([b['seconds'] for b in blocks])
+    w = w / w.mean()
+
+    def design(cpu):
+        return np.array([[*(float(b['run'] == run) for run in runs), *(b[c] for c in covariates[cpu]),
+                          *(float(b['x'][n]) for n in varying), *(float(b['x'][a] and b['x'][c]) for a, c in pairs)]
+                         for b in blocks])
+    x = {cpu: design(cpu) for cpu in (False, True)}
+
+    def noise(cpu):  # Residual variance of the main-effects fit, per block.
+        k = x[cpu].shape[1] - len(pairs)
+        coef = ridge(x[cpu][:, :k], y, w, np.full(k, 1e-6))
+        resid = y - x[cpu][:, :k] @ coef
+        return float(np.sum(w * resid ** 2) / max(1, len(y) - k))
+    sigma2 = {cpu: noise(cpu) for cpu in (False, True)}
+
+    def fit(index):
+        coef = {}
+        for cpu in (False, True):
+            base = len(runs) + len(covariates[cpu])
+            penalty = np.array([1e-6] * base + [sigma2[cpu] / PRIOR_SD['main'] ** 2] * len(varying)
+                               + [sigma2[cpu] / PRIOR_SD['pair'] ** 2] * len(pairs))
+            beta = ridge(x[cpu][index], y[index], w[index], penalty)
+            for i, name in enumerate(varying):
+                if (name in CPU_LEVERS) == cpu:
+                    coef[name] = beta[base + i]
+            for i, pair in enumerate(pairs):
+                if bool(CPU_LEVERS & set(pair)) == cpu:
+                    coef[pair] = beta[base + len(varying) + i]
+        return coef
+    coef = fit(np.arange(len(blocks)))
+    rng = np.random.default_rng(seed)
+    draws = [fit(block_indices(len(blocks), block, rng)) for _ in range(replicates)]
+    samples = {key: np.array([d[key] for d in draws]) for key in coef}
+    hours = lambda name: sum(b['seconds'] for b in blocks if name in b['levers']) / 3600
+
+    def summary(saving, values):
+        low, high = np.percentile(values, [5, 95])
+        estimate = {'watts': float(saving), 'watts_low': float(low), 'watts_high': float(high)}
+        if energy and power:
+            estimate.update(minutes=runtime_gain(energy, power, estimate['watts']),
+                            low=runtime_gain(energy, power, estimate['watts_low']),
+                            high=runtime_gain(energy, power, estimate['watts_high']))
+        return estimate
+
+    def lever(c, name):
+        """W saved by a setting's saving state, the others as they are now."""
+        return predicted(c, dict(current, **{name: False})) - predicted(c, dict(current, **{name: True}))
+    draw = lambda i: {key: values[i] for key, values in samples.items()}
+    result['effects'] = [dict(summary(lever(coef, n), [lever(draw(i), n) for i in range(replicates)]),
+                              experiment=n, evidence='experiment', cpu=n in CPU_LEVERS,
+                              blocks=result['progress'][n], hours=hours(n), current=current[n]) for n in shown]
+    # Extra W saved with both of a pair on, beyond the two separately.
+    result['interactions'] = [dict(summary(-coef[pair], -samples[pair]), pair=pair) for pair in pairs]
+    result.update(coef=coef, samples=samples, sigma=math.sqrt(sigma2[False]), sigma_raw=math.sqrt(sigma2[True]))
+    return result
+
+
+def predicted(coef, config):
+    """Battery W relative to every measured setting off, for `config` {name: on}."""
+    return sum(value * (all(config.get(n) for n in key) if isinstance(key, tuple) else config.get(key, False))
+               for key, value in coef.items())
+
+
+def best_config(result, allowed, energy=None, power=None):
+    """The measured combination of `allowed` settings with the lowest predicted
+    draw (others stay as they are), and its saving against the current one."""
+    names = [e['experiment'] for e in result['effects'] if e['experiment'] in allowed]
+    if not names:
+        return None
+    current = dict(result['current'])
+    configs = [dict(current, **dict(zip(names, combo))) for combo in itertools.product((False, True), repeat=len(names))]
+    best = min(configs, key=lambda c: predicted(result['coef'], c))
+    saving = predicted(result['coef'], current) - predicted(result['coef'], best)
+    draws = [predicted({k: v[i] for k, v in result['samples'].items()}, current)
+             - predicted({k: v[i] for k, v in result['samples'].items()}, best)
+             for i in range(len(next(iter(result['samples'].values()))))]
+    low, high = np.percentile(draws, [5, 95])
+    out = {'config': {n: best[n] for n in names}, 'changes': [n for n in names if best[n] != current.get(n)],
+           'watts': saving, 'watts_low': float(low), 'watts_high': float(high)}
+    if energy and power:
+        out.update(minutes=runtime_gain(energy, power, saving), low=runtime_gain(energy, power, float(low)),
+                   high=runtime_gain(energy, power, float(high)))
+    return out
+
+
+def hours_needed(sigma, precision=0.5, block_minutes=BLOCK_MINUTES):
+    """Battery hours until each setting's 90% interval is ±`precision` W (balanced blocks)."""
+    blocks = (2 * 1.645 * sigma / precision) ** 2
+    return blocks * block_minutes / 60
 
 
 # --- Sleep ----------------------------------------------------------------------

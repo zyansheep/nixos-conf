@@ -37,7 +37,7 @@ stdenvNoCC.mkDerivation {
     cat > $out/bin/battery-panel <<'SCRIPT'
     #!${stdenvNoCC.shell}
     # Toggle the resident battery panel over D-Bus (starting it if needed);
-    # `battery-panel <timeline|sleep|whatif|experiments>` opens on that tab.
+    # `battery-panel <timeline|sleep|savings>` opens on that tab.
     ${systemd}/bin/systemctl --user start battery-panel.service || exit $?
     if [ -n "''${1:-}" ]; then
       action=show; parameter="[<'$1'>]"

@@ -292,7 +292,9 @@ def settings(sys=Path('/sys')):
         'amd_pstate': read(cpu / 'amd_pstate/status'),
         'aspm': next((w[1:-1] for w in (read(sys / 'module/pcie_aspm/parameters/policy') or '').split()
                       if w.startswith('[')), None),
-        'nvme_apst_us': read(sys / 'module/nvme_core/parameters/default_ps_max_latency_us'),
+        # The drive's runtime APST limit (what power-lab changes), not nvme_core's boot default.
+        'nvme_apst_us': next((read(path) for path in sorted(sys.glob('class/nvme/nvme*/power/pm_qos_latency_tolerance_us'))),
+                             read(sys / 'module/nvme_core/parameters/default_ps_max_latency_us')),
         # Boot-level: bit 0x10 disables panel self-refresh (see the psr specialisation).
         'dcdebugmask': read(sys / 'module/amdgpu/parameters/dcdebugmask'),
     }
