@@ -283,6 +283,20 @@ label:focus {
   background-color: #0069d4;
 }
 
+#custom-qol-up,
+#custom-qol-down {
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  font-size: 11px;
+  border-radius: 4px;
+}
+#custom-qol-up { color: #8fdf8f; padding: 0 3px 0 6px; }
+#custom-qol-down { color: #e5484d; padding: 0 3px; }
+#custom-qol-up:hover, #custom-qol-down:hover { background: rgba(255, 255, 255, 0.12); }
+/* Just voted: a brief tint. Resting after a 👎: the thumb stays filled in. */
+#custom-qol-up.recent { background: rgba(143, 223, 143, 0.22); }
+#custom-qol-down.recent, #custom-qol-down.resting { background: rgba(229, 72, 77, 0.22); }
+
 #custom-display {
   font-family: "Font Awesome 7 Free";
   font-weight: 900;

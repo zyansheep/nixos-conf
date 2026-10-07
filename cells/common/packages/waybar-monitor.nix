@@ -1,9 +1,9 @@
 { lib, stdenvNoCC, python3, gtk4, libadwaita, adwaita-icon-theme, gtk4-layer-shell, gobject-introspection,
   glib, systemd, wrapGAppsHook4 }:
 let
-  # The collector and experiment runner stay on plain Python; the battery
-  # estimator, panel and tests need NumPy/SciPy (the SQLite store is stdlib),
-  # and only the panel needs GTK.
+  # The collector and qol stay on plain Python; the battery estimator,
+  # experiment runner (its automatic mode plans with report.py), panel and tests
+  # need NumPy/SciPy (the SQLite store is stdlib), and only the panel needs GTK.
   panelPython = python3.withPackages (p: [ p.pygobject3 p.pycairo p.numpy p.scipy ]);
   analysisPython = python3.withPackages (p: [ p.numpy p.scipy ]);
   dir = "$out/libexec/waybar-monitor";
@@ -25,19 +25,20 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     install -Dm644 -t ${dir} power.py report.py store.py
-    install -Dm755 -t ${dir} collector.py experiment.py battery_panel.py eta.py
-    sed -i '1s|.*|#!${python3}/bin/python3|' ${dir}/collector.py ${dir}/experiment.py
+    install -Dm755 -t ${dir} collector.py experiment.py battery_panel.py eta.py qol.py
+    sed -i '1s|.*|#!${python3}/bin/python3|' ${dir}/collector.py ${dir}/qol.py
     sed -i '1s|.*|#!${panelPython}/bin/python3|' ${dir}/battery_panel.py
-    sed -i '1s|.*|#!${analysisPython}/bin/python3|' ${dir}/eta.py
+    sed -i '1s|.*|#!${analysisPython}/bin/python3|' ${dir}/eta.py ${dir}/experiment.py
     mkdir -p $out/bin
     ln -s ../libexec/waybar-monitor/collector.py $out/bin/waybar-monitor
     ln -s ../libexec/waybar-monitor/experiment.py $out/bin/power-experiment
     ln -s ../libexec/waybar-monitor/eta.py $out/bin/battery-eta
+    ln -s ../libexec/waybar-monitor/qol.py $out/bin/qol
     install -Dm644 ${../../../dotfiles/.config/waybar/menu-theme.css} $out/share/battery-panel/menu-theme.css
     cat > $out/bin/battery-panel <<'SCRIPT'
     #!${stdenvNoCC.shell}
     # Toggle the resident battery panel over D-Bus (starting it if needed);
-    # `battery-panel <timeline|sleep|savings>` opens on that tab.
+    # `battery-panel <timeline|experiments>` opens on that tab.
     ${systemd}/bin/systemctl --user start battery-panel.service || exit $?
     if [ -n "''${1:-}" ]; then
       action=show; parameter="[<'$1'>]"

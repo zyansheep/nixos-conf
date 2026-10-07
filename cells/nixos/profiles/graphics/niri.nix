@@ -175,8 +175,33 @@ in {
       "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
     serviceConfig = {
       ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment run";
-      ExecStopPost = "${pkgs.waybar-monitor}/bin/power-experiment restore";
+      ExecStopPost = [
+        "${pkgs.waybar-monitor}/bin/power-experiment restore"
+        # A manual run stops automatic experiments (Conflicts below); bring them back.
+        "${pkgs.waybar-monitor}/bin/power-experiment resume"
+      ];
       Restart = "no";
+    };
+  };
+
+  # Automatic experiments (the battery panel's Experiments switch, or
+  # `power-experiment enable`): each block tries the combination of settings
+  # the battery model expects to learn most from, among those unlikely to
+  # bother you; pauses on AC and while quality of life is below fine.
+  systemd.user.services.power-experiments = {
+    description = "Automatic battery experiments";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" "waybar-monitor.service" ];
+    conflicts = [ "power-experiment.service" ];
+    unitConfig.ConditionPathExists = "%S/waybar-monitor/experiments-enabled";
+    environment.PATH = lib.mkForce
+      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment auto";
+      ExecStopPost = "${pkgs.waybar-monitor}/bin/power-experiment restore";
+      Restart = "on-failure";
+      RestartSec = 30;
     };
   };
 

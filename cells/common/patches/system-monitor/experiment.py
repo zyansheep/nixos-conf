@@ -11,6 +11,8 @@ every record with the running arms (from the state file below); the battery
 panel's Savings tab fits all settings' effects together (report.lever_effects).
 
     power-experiment list | units | status
+    power-experiment enable | disable          (automatic experiments, see `automatic`)
+    power-experiment pool [<name> ...]         (the settings they may vary)
     power-experiment start <name> [<name> ...] [--minutes N] [--unit SCOPE] [--only-locked]
     power-experiment apply <name>=<value> ...   (set now, e.g. the panel's best combination)
     power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
@@ -40,9 +42,16 @@ import sys
 import time
 from pathlib import Path
 
+import qol
+
 BLOCK = 240
 WASHOUT = 60
 GIVE_UP = 7 * 86400  # A run that cannot collect its battery time in a week ends.
+# Automatic experiments: on while ENABLED exists (power-experiments.service's
+# condition), varying the settings listed in POOL.
+SAVED = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
+ENABLED, POOL = SAVED / 'experiments-enabled', SAVED / 'experiments.json'
+AUTO_UNIT = 'power-experiments.service'
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 STATE = RUNTIME / 'experiment.json'
 REQUEST = RUNTIME / 'experiment-request.json'
@@ -443,6 +452,97 @@ def experiment(specs, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, 
                         state_path)
 
 
+def pool(specs=None):
+    """Settings automatic experiments may vary (all with power-saving/normal values by default)."""
+    specs = specs if specs is not None else catalog()
+    try:
+        names = json.loads(POOL.read_text())['settings']
+    except (OSError, ValueError, KeyError, TypeError):
+        names = [name for name, spec in specs.items() if spec.levels]
+    return [name for name in names if name in specs and specs[name].levels]
+
+
+def next_block(names, present):
+    """report.plan's next combination (numpy: only the automatic runner needs it)."""
+    import report
+    now = time.time()
+    minutes, events = report.load_range(now - 30 * 86400, now + 60)
+    plan = report.plan(minutes, events, names, present=present)
+    return plan['choice'], {'accuracy': plan['accuracy'], 'allowed': plan['allowed'],
+                            'combinations': plan['combinations']}
+
+
+def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked, resting=qol.resting,
+              enabled=ENABLED.exists, names=pool, choose=next_block, block=BLOCK, washout=WASHOUT, state_path=None):
+    """Automatic experiments, for as long as they are enabled: each block, the
+    combination of the pool's settings report.plan expects to sharpen the
+    battery model most, among those unlikely to earn a 👎 while you are there.
+    Pauses (restoring the settings) on AC, and for qol.COOLDOWN after a 👎 (a
+    👍 resumes); a 👎 ends the block at once."""
+    specs = specs if specs is not None else catalog()
+    originals, number, mark = {}, 0, None
+    started = clock.time()
+    run_id = f'auto-{int(started)}'
+
+    def restore(names=None):
+        failures = []
+        for name in list(names if names is not None else originals):
+            spec = specs[name]
+            if spec.ac_managed and not battery():
+                continue  # udev already applied the AC value.
+            try:
+                if spec.get() != originals[name]:
+                    spec.set(originals[name])
+            except Exception as error:  # noqa: BLE001 - restore the rest first
+                failures.append(error)
+        if failures:
+            raise failures[0]
+    try:
+        while enabled():
+            current = names(specs)
+            for name in current:
+                originals.setdefault(name, specs[name].get())
+            restore([name for name in originals if name not in current])  # Dropped from the pool.
+            base = {'run': run_id, 'mode': 'auto', 'name': '+'.join(current), 'names': current,
+                    'label': 'Automatic experiments', 'originals': originals, 'started': started,
+                    'block_seconds': block, 'washout_seconds': washout, 'blocks': number}
+            here = not locked()
+            reason = ('no settings to test' if not current else 'on AC power' if not battery() else
+                      'resting after your 👎 (👍 resumes)' if resting() > 0 else None)
+            if reason:
+                restore()
+                write_state(dict(base, status='paused', reason=reason), state_path)
+                clock.sleep(15)
+                continue
+            choice, plan = choose(current, here)
+            values = {name: specs[name].levels()[0 if choice[name] else 1] for name in current}
+            for name in current:
+                if specs[name].get() != values[name]:
+                    specs[name].set(values[name])
+            begin = clock.time()
+            number += 1
+            state = dict(base, status='running', block=number, blocks=number, plan=plan,
+                         config={name: 'B' if choice[name] else 'A' for name in current},
+                         arm=''.join('B' if choice[name] else 'A' for name in current), value=values,
+                         block_start=begin, washout_until=begin + washout, block_end=begin + block)
+            write_state(state, state_path)
+            _, mark = clock.suspended_since(None)
+            while clock.time() < state['block_end']:
+                clock.sleep(5)
+                suspended, mark = clock.suspended_since(mark)
+                if (suspended or not battery() or not enabled() or names(specs) != current or resting() > 0
+                        or any(specs[name].get() != values[name] for name in current)):
+                    break
+            if clock.time() < state['block_end']:
+                write_state(dict(state, block_end=clock.time()), state_path)  # Ended early.
+    finally:
+        try:
+            restore()
+        finally:
+            write_state({'run': run_id, 'mode': 'auto', 'label': 'Automatic experiments', 'status': 'finished',
+                         'finished': clock.time(), 'blocks': number, 'originals': originals}, state_path)
+
+
 def command_run():
     request = json.loads(REQUEST.read_text())
     specs = catalog(request.get('unit'), request.get('units'))
@@ -512,6 +612,12 @@ def main(argv=None):
     sub.add_parser('list')
     sub.add_parser('units')
     sub.add_parser('status')
+    sub.add_parser('enable', help='start automatic experiments (they persist across logins)')
+    sub.add_parser('disable', help='stop automatic experiments and restore the settings')
+    chosen = sub.add_parser('pool', help='settings automatic experiments may vary')
+    chosen.add_argument('names', nargs='*', metavar='name')
+    sub.add_parser('auto', help='the power-experiments.service body')
+    sub.add_parser('resume', help='restart automatic experiments if enabled (after a manual run)')
     start = sub.add_parser('start', help='randomize one setting, or several together')
     start.add_argument('names', nargs='+', metavar='name')
     start.add_argument('--minutes', type=int, default=60)
@@ -541,7 +647,8 @@ def main(argv=None):
         except ValueError:
             state = {}
         state.update(locked=screen_locked(), on_battery=on_battery(), freezer=freezer_report(state.get('units')),
-                     uncovered=uncovered())
+                     uncovered=uncovered(), automatic={'enabled': ENABLED.exists(), 'settings': pool()},
+                     resting=qol.resting())
         print(json.dumps(state, indent=1))
     elif args.command == 'test-freeze':
         units = freeze_targets(args.keep if args.keep is not None else ['t3code'])
@@ -565,6 +672,27 @@ def main(argv=None):
         run(['systemctl', '--user', 'restart', 'power-experiment.service'])
     elif args.command == 'apply':
         command_apply(args.assignments)
+    elif args.command == 'enable':
+        SAVED.mkdir(parents=True, exist_ok=True)
+        ENABLED.touch()
+        run(['systemctl', '--user', 'start', AUTO_UNIT])
+    elif args.command == 'disable':
+        ENABLED.unlink(missing_ok=True)
+        run(['systemctl', '--user', 'stop', AUTO_UNIT], check=False)
+    elif args.command == 'pool':
+        if args.names:
+            eligible = [name for name, spec in catalog().items() if spec.levels]
+            unknown = [name for name in args.names if name not in eligible]
+            if unknown:
+                parser.error(f"not automatic settings: {', '.join(unknown)} (choose from {', '.join(eligible)})")
+            write_state({'settings': list(dict.fromkeys(args.names))}, POOL)
+        print(' '.join(pool()))
+    elif args.command == 'auto':
+        signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+        automatic()
+    elif args.command == 'resume':
+        if ENABLED.exists():
+            run(['systemctl', '--user', '--no-block', 'start', AUTO_UNIT], check=False)
     elif args.command == 'stop':
         run(['systemctl', '--user', 'stop', 'power-experiment.service'], check=False)
     elif args.command == 'restore':

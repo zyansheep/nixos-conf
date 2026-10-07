@@ -12,6 +12,7 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 | Speaker / microphone dials | Scroll to adjust that device; right-click to mute; click for the audio popup. `Alt+Shift+V` toggles the same popup. |
 | Wi-Fi name or icon | Click to open the network sidebar. `Alt+Shift+W` opens the same sidebar. |
 | Battery | Click either half to open the centered power profile selector with battery health and cycle count. |
+| 👍 / 👎 | Vote on how the laptop feels right now. 👎 makes automatic experiments restore your settings at once and rest 10 minutes (👍 resumes them); both are logged and teach them what to avoid. Right-click either for the battery panel's Experiments tab. |
 | Sun / moon | Scroll to adjust brightness; click for the display panel (brightness, night light with intensity, grayscale). The moon means the night light is on. |
 | Tray chevron | Hover to expand; move away to collapse. |
 | Idle inhibitor | Click to toggle whether the screen may sleep. |
@@ -151,12 +152,14 @@ raw archive (finished days become `.jsonl.zst`). An archive record:
 | `display` | backlight and keyboard fractions, connectors, ABM level, niri modes, display-panel state |
 | `settings` | platform profile, EPP, governor, boost, pstate, ASPM, NVMe APST, charge limit, rfkill, Wi-Fi power save |
 | `temp`, `fan`, `lid`, `locked` | Tctl, fan RPM, lid state, swaylock running |
+| `qol` | 👍/👎 votes in the record: +1, −1 (a 👎 wins), 0 none (schema 3; schema 2 logged a 0–3 level) |
 
 Records also carry `exp` (run, experiment, block, arm, value, washout) while a
 power experiment is running.
 
-Events share the files: `start` (collector start) and `gap` (suspend or other
-sampling gap, with battery charge before and after, for sleep drain).
+Events share the files: `start` (collector start), `gap` (suspend or other
+sampling gap, with battery charge before and after, for sleep drain) and `qol`
+(a 👍/👎: `vote` is `up` or `down`).
 `index.json` caches per-day record counts for the menu footer. App names are
 coarse (kernel threads are `Kernel`; no PIDs, command lines, browser origins or
 titles). Expect roughly 40 MB/day uncompressed (~2.3 MB as `.zst`); read with e.g.
@@ -189,44 +192,65 @@ SQLite itself never compresses (pages are rewritten in place).
 ### Battery panel and power experiments
 
 “History, what-if & experiments…” at the bottom of the battery menu,
-`Mod+Shift+B`, or `battery-panel [timeline|sleep|savings]` toggles a
-resident layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you
-click another window. One row of controls scopes everything: 6 h / Day / Week,
-back / forward (or ← →), Now. While it is open, switching periods reuses the
-loaded 30 days and fetches only new minutes. Tabs:
+`Mod+Shift+B`, or `battery-panel [timeline|experiments]` toggles a resident
+layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you click
+another window. One row of controls scopes everything: 6 h / Day / Week, back /
+forward (or ← →), Now. While it is open, switching periods reuses the loaded 30
+days and fetches only new minutes. Tabs:
 
 - **Timeline** — stacked average watts per moment by group (processor
   baseline, rest of system, display, and stable app groups: browser, builds &
   EDA, coding tools, chat & media, other apps, desktop & system), with a
   separate battery-% strip. Faded columns are on AC (chip power only); shaded
   bands are sleep. Hover lists the groups, the top apps and the battery level.
-- **Sleep drain** — one dot per suspend (size = length) at %/h, with the median
-  across all history.
-- **Savings** — one list of what could buy battery time, in extra minutes per
-  full charge with 90% intervals:
+  Below it, **sleep drain**: one dot per suspend in the period (size = length)
+  at %/h, with the median across all history.
+- **Experiments** — what could buy battery time, in extra minutes per full
+  charge with 90% intervals, and the switch for automatic experiments:
+  - **Automatic experiments** (`power-experiment enable|disable`, the
+    `power-experiments` user service, which starts with the session while
+    enabled). Every 4-minute block on battery sets the included settings
+    (`power-experiment pool`) to one combination, chosen by `report.plan`: the
+    setting model below is a Bayesian linear model (the ridge penalties are its
+    Gaussian prior), so for each allowed combination it computes how much
+    observing it would shrink the variance of the model's predictions across
+    all allowed combinations (a greedy integrated-variance design, with
+    today's baseline in the posterior) and samples one in proportion. While you
+    are there (unlocked), only combinations unlikely to bother you are allowed
+    — see quality of life below; while the screen is locked, any. Each block's
+    first minute is ignored. It pauses, restoring your settings, on AC and for
+    10 minutes after a 👎 (a 👍 resumes it); a 👎 ends the block at once. The
+    panel shows the model's accuracy over the allowed combinations and where
+    it is least certain. `power-experiment start <settings…> --minutes N` still
+    runs a fixed factorial run (it stops the automatic one meanwhile).
+  - **Quality of life** — 👍 / 👎 votes on how the laptop feels right now:
+    the two thumbs right of the battery (`custom/qol-up`, `custom/qol-down`),
+    the panel, or `qol up|down`. Votes are kept in
+    `~/.local/state/waybar-monitor/qol.json`; the collector logs each as a `qol`
+    event and in the record it falls in. `report.qol_model` is a noisy-OR
+    fitted to 4-minute windows you were there for (unlocked, screen on): each
+    setting in its saving state has its own chance per block of earning a 👎,
+    on top of a base chance (Beta priors, most likely 1% for quiet settings,
+    4% for noticeable ones, 2% base). A combination is allowed while you are
+    there, and counts as keeping quality of life fine, when that chance is at
+    most 10% per block.
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
     CPU boost, power profile): each row shows the current value, the measured
-    saving (for that setting alone, the others as they are on battery now) and
-    a **Test** checkbox; invisible ones are checked by default. *Start
-    experiment* runs `power-experiment start <checked…> --minutes N` for N
-    minutes of battery time: every 4-minute block sets each checked setting to
-    A (current) or B at random — all combinations in shuffled cycles for up to
-    four settings, balanced halves beyond — so all are measured at once and
-    pairs that interact show up. Each block's first minute is ignored; it
-    pauses (restoring A) on AC, and restores A on stop or crash.
-    `report.lever_effects` fits every run together: battery W per clean block
-    on a baseline per run, workload, an indicator per setting (from the logged
-    settings) and per pair randomized together (shrunk toward zero), with a
-    moving-block bootstrap. CPU boost and profile change the CPU load the
-    workload correction uses, so they are fitted without it (and need more
-    time). The panel lists clear interactions, the best measured combination
-    (and the best without noticeable changes), and **Apply** sets it now
-    (`power-experiment apply name=saving|normal`, until reboot; ASPM/APST
-    revert at the next suspend). Root settings go through `sudo -n power-lab`;
-    its `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe
-    APST limit (the s2idle crash workarounds) before every suspend, and the
-    runner starts a fresh block after resume. Profile and ABM are left to the
-    AC udev rules while plugged in.
+    saving (for that setting alone, the others as they are on battery now),
+    how often it lowered quality of life, and **Include**.
+    `report.lever_effects` fits every run, automatic or manual, together:
+    battery W per clean block on a baseline per run and day, workload, an
+    indicator per setting (from the values the experiment set) and per pair
+    randomized together (shrunk toward zero), with a moving-block bootstrap.
+    CPU boost and profile change the CPU load the workload correction uses, so
+    they are fitted without it (and need more time). The tab lists clear
+    interactions and the best measured combination that keeps quality of life
+    fine; **Apply** sets it now (`power-experiment apply name=saving|normal`,
+    until reboot; ASPM/APST revert at the next suspend). Root settings go
+    through `sudo -n power-lab`; its `sleep-safe` pre-sleep hook restores the
+    boot-time ASPM policy and NVMe APST limit (the s2idle crash workarounds)
+    before every suspend, and the runner starts a fresh block after resume.
+    Profile and ABM are left to the AC udev rules while plugged in.
   - **Apps and display** (model estimates, outlined): removing an app's or
     group's activity, or dimming, refitted on 10-minute moving-block bootstrap
     resamples.

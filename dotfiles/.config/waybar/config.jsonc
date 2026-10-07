@@ -26,6 +26,8 @@
     // "backlight",
     "custom/services",
     "group/power",
+    "custom/qol-up",
+    "custom/qol-down",
     "custom/display",
     "custom/notification",
     // "battery#bat2",
@@ -57,6 +59,26 @@
     "tooltip": false,
     "orientation": "horizontal",
     "modules": [ "custom/battery-eta", "power-profiles-daemon" ]
+  },
+  // Quality of life, as thumbs (qol.py): 👍 the laptop is fine right now, 👎 it is
+  // worse than it should be — automatic experiments then restore your settings,
+  // rest 10 minutes (a 👍 resumes them) and learn what to avoid. Right-click for
+  // the battery panel's Experiments tab. qol signals SIGRTMIN+12 on each vote.
+  "custom/qol-up": {
+    "exec": "/run/current-system/sw/bin/qol waybar up",
+    "return-type": "json",
+    "interval": 15,
+    "signal": 12,
+    "on-click": "/run/current-system/sw/bin/qol up",
+    "on-click-right": "/run/current-system/sw/bin/battery-panel experiments"
+  },
+  "custom/qol-down": {
+    "exec": "/run/current-system/sw/bin/qol waybar down",
+    "return-type": "json",
+    "interval": 15,
+    "signal": 12,
+    "on-click": "/run/current-system/sw/bin/qol down",
+    "on-click-right": "/run/current-system/sw/bin/battery-panel experiments"
   },
   "custom/display": {
     // Sun (moon while the night light is on); click for brightness, night light

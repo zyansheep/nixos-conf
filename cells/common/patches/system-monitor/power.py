@@ -21,6 +21,7 @@ import time
 from sys import stderr
 from pathlib import Path
 
+import qol
 import store
 
 try:
@@ -28,7 +29,7 @@ try:
 except ImportError:  # Python < 3.14
     zstd = None
 
-SCHEMA = 1
+SCHEMA = 3  # 3: `qol` is the record's 👍/👎 (+1/−1, 0 none) and each vote is a qol event (2: a 0–3 level).
 RECORD = 10        # seconds per log record
 WINDOW = 30 * 60   # seconds of history behind the menu
 TICKS = os.sysconf('SC_CLK_TCK')
@@ -774,6 +775,7 @@ class Monitor:
                                 attribute(record, self.params)))
         self.boot = boot_id(proc)
         self.last_battery = None
+        self.voted = max((t for t, _ in qol.votes()), default=0.0)  # Votes up to here are already logged.
         self.write({'v': SCHEMA, 'event': 'start', 't1': now, 'boot': self.boot})
         self.reset(None, None)
         self.menu = summarize(self.window, now, self.log.totals())
@@ -830,6 +832,11 @@ class Monitor:
             self.frequencies.append((mean, peak))
         if boot - self.start_boot >= RECORD:
             record = self.record(boot, wall, processes)
+            fresh = [(t, v) for t, v in qol.votes() if t > self.voted]
+            for t, choice in fresh:
+                self.write({'v': SCHEMA, 'event': 'qol', 't1': t, 'boot': self.boot, 'vote': choice})
+            self.voted = max([self.voted] + [t for t, _ in fresh])
+            record['qol'] = -1 if any(v == 'down' for _, v in fresh) else 1 if fresh else 0
             self.write(record)
             self.refresh_models()
             self.window.append((record['t1'], record['dt'], discharging(record),

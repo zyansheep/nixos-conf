@@ -107,6 +107,33 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(minutes, store.aggregate(self.records)[0])
         self.assertIn('apst', minutes[0]['set'])
 
+    def test_layout_two_gains_quality_of_life_columns(self):
+        writer = store.Writer(self.db)
+        for r in self.records:
+            writer.write(dict(r, qol=2) if 'event' not in r else r)  # Schema 2's levels, which nothing reads.
+        writer.close()
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            for table, column in (('records', 'qol'), ('minutes', 'qol'), ('minutes', 'present')):
+                conn.execute(f'ALTER TABLE {table} DROP COLUMN {column}')
+            conn.execute('PRAGMA user_version = 2')
+            conn.commit()
+        self.assertNotIn('qol', store.load_range(*self.span, self.db)[0][0])  # Readable before migrating.
+        store.connect(self.db).close()
+        minutes, _ = store.load_range(*self.span, self.db)
+        self.assertEqual((minutes[0].get('qol'), minutes[0]['present']), (None, 1.0))  # Old rows: no level.
+
+    def test_votes_are_kept_and_minutes_say_whether_any_was_a_thumbs_down(self):
+        voted = [dict(r, v=3, qol=1 if i == 3 else -1 if i == 4 else 0) if 'event' not in r else r
+                 for i, r in enumerate(self.records)]
+        writer = store.Writer(self.db)
+        for r in voted:
+            writer.write(r)
+        writer.close()
+        minutes, _ = store.load_range(*self.span, self.db)
+        self.assertEqual(minutes, store.aggregate(voted)[0])
+        self.assertEqual(minutes[0]['qol'], -1)  # 👍 and 👎 in one minute: the 👎 counts.
+        self.assertEqual(minutes[1]['qol'], 0)
+
     def test_a_newer_layout_is_refused_not_dropped(self):
         writer = store.Writer(self.db)
         writer.write(self.records[0])

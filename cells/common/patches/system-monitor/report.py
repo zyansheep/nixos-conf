@@ -13,16 +13,18 @@ then:
   based (paired A/B blocks from power-experiment) with pair-bootstrap intervals;
 * sleep drain per suspend from the log's gap events.
 """
+import bisect
 import collections
+import datetime
 import itertools
 import math
 import re
 from pathlib import Path
 
 import numpy as np
-from scipy.optimize import nnls
+from scipy.optimize import minimize, nnls
+from scipy.special import expit
 
-import experiment
 import power
 import store
 
@@ -383,7 +385,7 @@ def saving(name, value, top_hz=None):
 CPU_LEVERS = {'boost', 'profile'}
 COVARIATES = ('load', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 PRIOR_SD = {'main': 5.0, 'pair': 1.0}  # W: interactions are shrunk (mildly) toward zero.
-BLOCK_MINUTES = experiment.BLOCK / 60
+BLOCK_MINUTES = 4  # power-experiment's blocks (experiment.BLOCK); the first minute is washout.
 
 
 def lever_states(settings, top_hz, chosen=None):
@@ -393,6 +395,11 @@ def lever_states(settings, top_hz, chosen=None):
     chosen = chosen or {}
     return {name: saving(name, chosen[name] if name in chosen else settings.get(key), top_hz)
             for name, key in SETTING.items()}
+
+
+def experiment_values(exp, levers):
+    """The values a minute's experiment set: a dict for several settings, a value for one."""
+    return exp[5] if isinstance(exp[5], dict) else {levers[0]: exp[5]} if len(levers) == 1 else {}
 
 
 def top_refresh(minutes):
@@ -411,8 +418,10 @@ def lever_blocks(minutes):
         levers = [name for name in str(exp[1]).split('+') if name in SETTING]
         if not levers:
             continue  # App-freezing runs are analysed as paired A/B blocks.
-        chosen = exp[5] if isinstance(exp[5], dict) else {levers[0]: exp[5]} if len(levers) == 1 else {}
-        block = acc.setdefault((exp[0], exp[2]), {'run': exp[0], 'levers': levers, 't': m['t'], 'seconds': 0.0,
+        chosen = experiment_values(exp, levers)
+        # Baselines are per run and day: an automatic run goes on for weeks.
+        group = f"{exp[0]}@{datetime.date.fromtimestamp(m['t']).isoformat()}"
+        block = acc.setdefault((exp[0], exp[2]), {'run': group, 'levers': levers, 't': m['t'], 'seconds': 0.0,
                                                   'sums': collections.defaultdict(float),
                                                   'states': collections.Counter()})
         block['seconds'] += m['dt']
@@ -535,14 +544,16 @@ def predicted(coef, config):
                for key, value in coef.items())
 
 
-def best_config(result, allowed, energy=None, power=None):
+def best_config(result, allowed, energy=None, power=None, feasible=None):
     """The measured combination of `allowed` settings with the lowest predicted
-    draw (others stay as they are), and its saving against the current one."""
+    draw (others stay as they are) among those `feasible` accepts, and its
+    saving against the current one."""
     names = [e['experiment'] for e in result['effects'] if e['experiment'] in allowed]
     if not names:
         return None
     current = dict(result['current'])
     configs = [dict(current, **dict(zip(names, combo))) for combo in itertools.product((False, True), repeat=len(names))]
+    configs = [c for c in configs if feasible is None or feasible(c) or c == current]
     best = min(configs, key=lambda c: predicted(result['coef'], c))
     saving = predicted(result['coef'], current) - predicted(result['coef'], best)
     draws = [predicted({k: v[i] for k, v in result['samples'].items()}, current)
@@ -555,6 +566,133 @@ def best_config(result, allowed, energy=None, power=None):
         out.update(minutes=runtime_gain(energy, power, saving), low=runtime_gain(energy, power, float(low)),
                    high=runtime_gain(energy, power, float(high)))
     return out
+
+
+# --- Quality of life --------------------------------------------------------------------
+
+QOL_RISK = 0.1  # Acceptable chance per 4-minute block that a combination earns a 👎.
+# Settings you might notice (experiment.catalog()'s `visible`), and Beta priors on
+# the chance per block that each earns a 👎, most likely 1% quiet,
+# 4% noticeable, 2% for reasons that have nothing to do with the settings — worth
+# 10-20 blocks of evidence, so a few complaints outweigh them.
+NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps'}
+QOL_PRIOR = {'quiet': (1.2, 20.8), 'noticeable': (1.4, 10.6), 'base': (1.4, 20.6)}
+
+
+def qol_drops(events):
+    """Times of 👎 votes."""
+    return sorted(e['t1'] for e in events if e.get('event') == 'qol' and e.get('vote') == 'down')
+
+
+def qol_windows(minutes, events):
+    """(setting states, whether you gave a 👎) per 4-minute window — an
+    experiment block, or a stretch outside experiments — that you were there for."""
+    drops, top = qol_drops(events), top_refresh(minutes)
+    windows = {}
+    for m in minutes:
+        if m.get('qol') is None:
+            continue  # Before votes were logged.
+        exp = m.get('exp')
+        levers = [n for n in str(exp[1]).split('+') if n in SETTING] if exp else []
+        w = windows.setdefault((exp[0], exp[2]) if levers else ('-', int(m['t'] // 240)),
+                               {'t0': m['t'], 'present': 0.0, 'n': 0, 'states': collections.Counter()})
+        w['t1'], w['n'] = m['t'] + 60, w['n'] + 1
+        w['present'] += m.get('present', 0)
+        w['states'][tuple(lever_states(m['set'], top, experiment_values(exp, levers) if levers else None).items())] += 1
+    out = []
+    for w in windows.values():
+        if w['present'] / w['n'] < 0.5:
+            continue  # Nobody there to notice.
+        dropped = bisect.bisect_left(drops, w['t0']) < bisect.bisect_left(drops, w['t1'])
+        out.append((dict(w['states'].most_common(1)[0][0]), dropped))
+    return out
+
+
+def qol_model(minutes, events, noticeable=NOTICEABLE):
+    """Noisy-OR: each setting in its saving state has its own chance per block of
+    earning a 👎, on top of a base chance; fitted by maximum a posteriori over
+    the windows, so it starts from the priors."""
+    windows = qol_windows(minutes, events)
+    names = list(SETTING)
+    priors = np.array([QOL_PRIOR['base']] + [QOL_PRIOR['noticeable' if n in noticeable else 'quiet'] for n in names])
+    x = np.array([[1.0] + [float(states[n]) for n in names] for states, _ in windows]).reshape(-1, 1 + len(names))
+    y = np.array([float(dropped) for _, dropped in windows])
+
+    def loss(theta):
+        p = np.clip(expit(theta), 1e-9, 1 - 1e-9)
+        fine = x @ np.log1p(-p)  # log P(fine) per window
+        ll = np.sum((1 - y) * fine + y * np.log(-np.expm1(np.minimum(fine, -1e-12))))
+        return -(ll + np.sum((priors[:, 0] - 1) * np.log(p) + (priors[:, 1] - 1) * np.log1p(-p)))
+    mode = (priors[:, 0] - 1) / (priors.sum(axis=1) - 2)  # Without windows the fit is the prior's mode.
+    p = expit(minimize(loss, np.log(mode / (1 - mode)), method='L-BFGS-B').x)
+    count = lambda n, flag: sum(1 for states, dropped in windows if states[n] and (dropped or not flag))
+    return {'base': float(p[0]), 'p': {n: float(p[1 + i]) for i, n in enumerate(names)}, 'windows': len(windows),
+            'drops': int(y.sum()), 'tally': {n: {'drops': count(n, True), 'windows': count(n, False)} for n in names}}
+
+
+def qol_risk(model, config):
+    """Chance per block that `config` ({name: saving state}) earns a 👎."""
+    fine = (1 - model['base']) * math.prod(1 - model['p'][n] for n, on in config.items() if on and n in model['p'])
+    return 1 - fine
+
+
+# --- Automatic experiments: where to look next ------------------------------------------------
+
+def features(config, names):
+    pairs = itertools.combinations(names, 2)
+    return [float(config[n]) for n in names] + [float(config[a] and config[b]) for a, b in pairs]
+
+
+def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=NOTICEABLE):
+    """The next block's combination of `names` ({name: saving state}) for automatic experiments.
+
+    The setting model's ridge fit is a Bayesian linear model (its penalties are
+    the Gaussian prior), so its posterior is closed-form. Candidates are the
+    combinations whose quality-of-life risk is acceptable (all of them while
+    nobody is there). For each, the expected reduction in the variance of the
+    model's predictions across all candidates if it were observed next —
+    Σ_c Cov(c, x)² / (σ² + Var x), a greedy integrated-variance design — and
+    one is sampled in proportion to it. Today's baseline is part of the
+    posterior, so a block that would only pin it down earns nothing.
+    """
+    rng = rng or np.random.default_rng()
+    blocks = lever_blocks(minutes)
+    sigma = sigma or block_sigma(blocks) or 2.0
+    groups = sorted({b['run'] for b in blocks} | {'next'})
+    k = len(groups) + len(COVARIATES)
+    rows = np.array([[*(float(b['run'] == g) for g in groups), *(b[c] for c in COVARIATES), *features(b['x'], names)]
+                     for b in blocks]).reshape(-1, k + len(features(dict.fromkeys(names, False), names)))
+    weights = np.array([b['seconds'] / 180 for b in blocks])  # A clean block is 3 minutes.
+    prior_sd = ([100.0] * len(groups) + [10.0] * len(COVARIATES) + [PRIOR_SD['main']] * len(names)
+                + [PRIOR_SD['pair']] * (len(names) * (len(names) - 1) // 2))
+    precision = rows.T @ (rows * weights[:, None]) / sigma ** 2 + np.diag(1 / np.array(prior_sd) ** 2)
+    cov = np.linalg.inv(precision)
+    qol = qol_model(minutes, events, noticeable)
+    configs = [dict(zip(names, combo)) for combo in itertools.product((False, True), repeat=len(names))]
+    allowed = [c for c in configs if not present or qol_risk(qol, c) <= QOL_RISK] or [dict.fromkeys(names, False)]
+    recent = [m for m in minutes[-30:] if m['st'] == 'D'] or minutes[-30:]
+    workload = [float(np.mean([m.get(c) or 0 for m in recent])) if recent else 0.0 for c in COVARIATES]
+    # A prediction of interest is a contrast (no baseline); an observation includes today's.
+    contrast = np.array([[0.0] * k + features(c, names) for c in allowed])
+    observed = np.array([[float(g == 'next') for g in groups] + workload + features(c, names) for c in allowed])
+    cross = contrast @ cov @ observed.T
+    gain = (cross ** 2).sum(axis=0) / (sigma ** 2 + np.einsum('ij,jk,ik->i', observed, cov, observed))
+    chance = gain / gain.sum() if gain.sum() > 0 else np.full(len(allowed), 1 / len(allowed))
+    choice = allowed[rng.choice(len(allowed), p=chance)]
+    spread = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', contrast, cov, contrast), 0))
+    return {'choice': choice, 'allowed': len(allowed), 'combinations': len(configs),
+            'accuracy': float(1.645 * spread.mean()) if len(spread) else None,
+            'least_certain': allowed[int(np.argmax(spread))] if len(spread) else None, 'qol': qol, 'sigma': sigma}
+
+
+def block_sigma(blocks):
+    """Block-to-block noise after the workload correction (W), from the blocks so far."""
+    if len(blocks) < len(COVARIATES) + 10:
+        return None
+    x = np.array([[1.0, *(b[c] for c in COVARIATES)] for b in blocks])
+    y = np.array([b['bat'] for b in blocks])
+    resid = y - x @ np.linalg.lstsq(x, y, rcond=None)[0]
+    return float(np.sqrt(np.sum(resid ** 2) / (len(y) - x.shape[1])))
 
 
 def hours_needed(sigma, precision=0.5, block_minutes=BLOCK_MINUTES):

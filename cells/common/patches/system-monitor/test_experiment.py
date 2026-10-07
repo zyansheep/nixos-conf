@@ -114,6 +114,37 @@ class ExperimentTests(unittest.TestCase):
         self.assertEqual(sorted({arm for arm, _, _ in seen}), ['AA', 'AB', 'BA', 'BB'])
         self.assertTrue(all(value == actual for _, value, actual in seen))
 
+    def test_automatic_blocks_follow_the_plan_rest_after_a_thumbs_down_and_restore(self):
+        clock = FakeClock()
+        aspm = FakeSetting(name='aspm')
+        aspm.levels = lambda: ('powersupersave', 'performance')
+        apst = FakeSetting(value='0', name='apst', alternative='100000')
+        apst.levels = lambda: ('100000', '0')
+        specs = {'aspm': aspm, 'apst': apst}
+        # A 👎 5 minutes in (mid second block) rests experiments until 12; they are disabled at 30.
+        rest = lambda: max(0.0, 1720 - clock.now) if clock.now >= 1300 else 0.0
+        plans = []
+
+        def choose(names, present):
+            plans.append(present)
+            return {name: len(plans) % 2 == 1 for name in names}, {}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'state.json'
+            states = []
+            clock.hooks.append(lambda now: states.append(json.loads(path.read_text())) if path.exists() else None)
+            from experiment import automatic
+            automatic(specs, clock=clock, battery=lambda: True, locked=lambda: False,
+                      resting=rest, enabled=lambda: clock.now < 1000 + 30 * 60,
+                      names=lambda _specs: ['aspm', 'apst'], choose=choose, state_path=path)
+            final = json.loads(path.read_text())
+        self.assertEqual(final['status'], 'finished')
+        self.assertEqual((aspm.value, apst.value), ('performance', '0'))  # Restored.
+        self.assertIn('resting after your 👎 (👍 resumes)', {s.get('reason') for s in states})
+        running = [s for s in states if s['status'] == 'running']
+        self.assertEqual(running[0]['value'], {'aspm': 'powersupersave', 'apst': '100000'})
+        self.assertTrue(all(plans))
+        self.assertGreaterEqual(final['blocks'], 5)
+
     def test_unit_labels(self):
         self.assertEqual(unit_label('app-niri-floorp-2329.scope'), 'floorp')
         self.assertEqual(unit_label('app-niri-signal\\x2ddesktop-2342.scope'), 'signal-desktop')

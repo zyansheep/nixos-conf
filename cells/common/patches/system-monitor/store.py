@@ -43,7 +43,7 @@ except ImportError:  # Python < 3.14
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 2  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+VERSION = 4  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
@@ -175,6 +175,9 @@ COLUMNS = (
     ('exp_arm', 'TEXT', lambda r: part(r, 'exp').get('arm')),
     ('exp_value', 'TEXT', lambda r: text(part(r, 'exp').get('value'))),
     ('exp_washout', 'INTEGER', lambda r: part(r, 'exp').get('washout', True) if r.get('exp') else None),
+    # Quality-of-life votes in the record (qol.py): −1 a 👎, +1 a 👍, 0 none
+    # (schema 2 logged a 0–3 level instead, which nothing reads)
+    ('qol', 'INTEGER', lambda r: r.get('qol') if (r.get('v') or 0) >= 3 else None),
 )
 NAMES = [name for name, _, _ in COLUMNS]
 APP_FIELDS = (('cpu_s', 'cpu'), ('gpu_s', 'gpu'), ('video_s', 'video'), ('io_read', 'io_r'), ('io_write', 'io_w'))
@@ -223,7 +226,7 @@ class Minute:
     def __init__(self, t):
         self.t, self.dt, self.sums, self.weights = t, 0.0, collections.defaultdict(float), collections.defaultdict(float)
         self.status, self.apps, self.last, self.exp, self.settings = collections.Counter(), {}, {}, None, {}
-        self.boot = None
+        self.boot, self.qol, self.present = None, None, 0.0
 
     def add(self, row, apps):
         """`apps`: (name, cpu_s, gpu_s, video_s, …) for the record's active apps."""
@@ -257,6 +260,10 @@ class Minute:
             if row[key] is not None:
                 self.last[key] = row[key]
         self.boot = row['boot']
+        if row['qol'] is not None:  # −1 if any 👎, else +1 for a 👍, else 0.
+            self.qol = row['qol'] if self.qol is None else -1 if -1 in (self.qol, row['qol']) else max(self.qol, row['qol'])
+        if not row['locked'] and row['screen_on'] is not False and row['screen_on'] != 0:
+            self.present += dt  # Someone could be using it: unlocked, screen on.
         self.settings = {'profile': row['profile'], 'aspm': row['aspm'], 'psr': psr_enabled(row['dcdebugmask']),
                          'boost': row['boost'], 'abm': row['abm'], 'wifi_ps': row['wifi_ps'], 'hz': row['hz'],
                          'apst': row['nvme_apst_us']}
@@ -279,6 +286,9 @@ class Minute:
         row['set'] = self.settings
         if self.boot:
             row['boot'] = self.boot
+        if self.qol is not None:
+            row['qol'] = self.qol
+        row['present'] = round(self.present / self.dt, 2)
         if self.exp is not None:
             row['exp'] = self.exp
         return row
@@ -299,7 +309,7 @@ def aggregate(records):
 
 # --- Database --------------------------------------------------------------------------------
 
-MINUTE_COLUMNS = ('t', 'dt', 'st', 'boot', *NUMERIC, 'pct', 'charge', 'volts', 'unit')
+MINUTE_COLUMNS = ('t', 'dt', 'st', 'boot', *NUMERIC, 'pct', 'charge', 'volts', 'unit', 'qol', 'present')
 MINUTE_TYPES = {'t': 'REAL PRIMARY KEY', 'st': 'TEXT', 'boot': 'TEXT', 'unit': 'TEXT'}  # The rest REAL.
 APP_TYPES = {'io_read': 'INTEGER', 'io_write': 'INTEGER'}  # The rest REAL.
 RECORD_SQL = ', '.join(f'{name} {kind}' for name, kind, _ in COLUMNS)
@@ -324,10 +334,29 @@ def recompute_minutes(conn):
     refresh_minutes(conn, -1e18, 1e18)
 
 
+def add_column(conn, table, column, kind):
+    if column not in {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}:
+        conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
+
+
+def votes_only(conn):
+    conn.execute('UPDATE records SET qol = NULL WHERE v IS NULL OR v < 3')
+    recompute_minutes(conn)
+
+
+def add_qol(conn):
+    add_column(conn, 'records', 'qol', 'INTEGER')
+    add_column(conn, 'minutes', 'qol', 'REAL')
+    add_column(conn, 'minutes', 'present', 'REAL')
+    recompute_minutes(conn)
+
+
 # MIGRATIONS[n] takes layout n to n + 1. Minutes are derived, so a change to
 # Minute is a migration that recomputes them.
 MIGRATIONS = {
     1: recompute_minutes,  # Minute settings gained NVMe APST.
+    2: add_qol,  # Records and minutes gained quality of life; minutes the share of time someone was there.
+    3: votes_only,  # Quality of life became 👍/👎 votes; drop the 0–3 levels schema 2 logged.
 }
 
 
@@ -431,7 +460,8 @@ def minute_values(m):
 
 def minute_from(row):
     """Back to the dict Minute.row() made (absent values stay absent)."""
-    m = {name: row[name] for name in MINUTE_COLUMNS if row[name] is not None}
+    keys = row.keys()  # A reader can meet an older layout until the collector migrates it.
+    m = {name: row[name] for name in MINUTE_COLUMNS if name in keys and row[name] is not None}
     if row['apps'] is not None:
         m['apps'] = json.loads(row['apps'])
     m['set'] = json.loads(row['settings']) if row['settings'] is not None else {}
