@@ -12,7 +12,7 @@ The Niri bar is configured in [config.jsonc](config.jsonc) and
 | Speaker / microphone dials | Scroll to adjust that device; right-click to mute; click for the audio popup. `Alt+Shift+V` toggles the same popup. |
 | Wi-Fi name or icon | Click to open the network sidebar. `Alt+Shift+W` opens the same sidebar. |
 | Battery | Click either half to open the centered power profile selector with battery health and cycle count. |
-| 👍 / 👎 | Vote on how the laptop feels right now. 👎 makes automatic experiments restore your settings at once and rest 10 minutes (👍 resumes them); both are logged and teach them what to avoid. Right-click either for the battery panel's Experiments tab. |
+| 👍 / 👎 | Vote on what stands out right now. 👍: something is especially good (unexpectedly smooth, quiet, snappy or long-lasting). 👎: worse than it should be — automatic experiments restore your settings at once and rest 10 minutes. Both are logged; they teach the experiments what to keep and what to avoid. Right-click either for the battery panel's Experiments tab. |
 | Sun / moon | Scroll to adjust brightness; click for the display panel (brightness, night light with intensity, grayscale). The moon means the night light is on. |
 | Tray chevron | Hover to expand; move away to collapse. |
 | Idle inhibitor | Click to toggle whether the screen may sleep. |
@@ -219,21 +219,28 @@ days and fetches only new minutes. Tabs:
     are there (unlocked), only combinations unlikely to bother you are allowed
     — see quality of life below; while the screen is locked, any. Each block's
     first minute is ignored. It pauses, restoring your settings, on AC and for
-    10 minutes after a 👎 (a 👍 resumes it); a 👎 ends the block at once. The
+    10 minutes after a 👎 (*Resume now*, or `qol resume`, ends that early); a
+    👎 ends the block at once. The
     panel shows the model's accuracy over the allowed combinations and where
     it is least certain. `power-experiment start <settings…> --minutes N` still
     runs a fixed factorial run (it stops the automatic one meanwhile).
-  - **Quality of life** — 👍 / 👎 votes on how the laptop feels right now:
-    the two thumbs right of the battery (`custom/qol-up`, `custom/qol-down`),
-    the panel, or `qol up|down`. Votes are kept in
-    `~/.local/state/waybar-monitor/qol.json`; the collector logs each as a `qol`
-    event and in the record it falls in. `report.qol_model` is a noisy-OR
-    fitted to 4-minute windows you were there for (unlocked, screen on): each
-    setting in its saving state has its own chance per block of earning a 👎,
-    on top of a base chance (Beta priors, most likely 1% for quiet settings,
-    4% for noticeable ones, 2% base). A combination is allowed while you are
-    there, and counts as keeping quality of life fine, when that chance is at
-    most 10% per block.
+  - **Quality of life** — 👍 / 👎 votes on what stands out right now: 👍 for
+    something especially good, 👎 for worse than it should be. The two thumbs
+    right of the battery (`custom/qol-up`, `custom/qol-down`), the panel, or
+    `qol up|down`. Votes are kept in `~/.local/state/waybar-monitor/qol.json`;
+    the collector logs each as a `qol` event and in the record it falls in.
+    `report.qol_model` fits two logistic models over 4-minute windows you were
+    there for (unlocked, screen on): the log-odds of a 👎, and of a 👍, per
+    block = a base + an effect for each setting in its saving state (either
+    sign: a setting's normal state can be the especially good one). Maximum a
+    posteriori from priors at 2% per block, no effect, and — for 👎 only —
+    noticeable settings starting out ~2.5× the odds, so experiments begin with
+    about one at a time. A combination is allowed while you are there when its
+    👎 chance is at most 10% per block.
+  - **Goal** — *Battery* recommends the measured combination with the lowest
+    draw among those allowed; *Comfort* the one most likely to earn a 👍 (then
+    the lowest draw), with what it costs in battery
+    (`power-experiment goal battery|comfort`).
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
     CPU boost, power profile): each row shows the current value, the measured
     saving (for that setting alone, the others as they are on battery now),
@@ -244,8 +251,8 @@ days and fetches only new minutes. Tabs:
     randomized together (shrunk toward zero), with a moving-block bootstrap.
     CPU boost and profile change the CPU load the workload correction uses, so
     they are fitted without it (and need more time). The tab lists clear
-    interactions and the best measured combination that keeps quality of life
-    fine; **Apply** sets it now (`power-experiment apply name=saving|normal`,
+    interactions and the best measured combination for the goal; **Apply**
+    sets it now (`power-experiment apply name=saving|normal`,
     until reboot; ASPM/APST revert at the next suspend). Root settings go
     through `sudo -n power-lab`; its `sleep-safe` pre-sleep hook restores the
     boot-time ASPM policy and NVMe APST limit (the s2idle crash workarounds)

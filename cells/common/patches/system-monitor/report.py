@@ -544,17 +544,17 @@ def predicted(coef, config):
                for key, value in coef.items())
 
 
-def best_config(result, allowed, energy=None, power=None, feasible=None):
-    """The measured combination of `allowed` settings with the lowest predicted
-    draw (others stay as they are) among those `feasible` accepts, and its
-    saving against the current one."""
+def best_config(result, allowed, energy=None, power=None, feasible=None, key=None):
+    """The measured combination of `allowed` settings (others stay as they are)
+    among those `feasible` accepts with the lowest `key` — by default the
+    predicted draw — and its battery saving against the current one."""
     names = [e['experiment'] for e in result['effects'] if e['experiment'] in allowed]
     if not names:
         return None
     current = dict(result['current'])
     configs = [dict(current, **dict(zip(names, combo))) for combo in itertools.product((False, True), repeat=len(names))]
     configs = [c for c in configs if feasible is None or feasible(c) or c == current]
-    best = min(configs, key=lambda c: predicted(result['coef'], c))
+    best = min(configs, key=key or (lambda c: predicted(result['coef'], c)))
     saving = predicted(result['coef'], current) - predicted(result['coef'], best)
     draws = [predicted({k: v[i] for k, v in result['samples'].items()}, current)
              - predicted({k: v[i] for k, v in result['samples'].items()}, best)
@@ -571,23 +571,25 @@ def best_config(result, allowed, energy=None, power=None, feasible=None):
 # --- Quality of life --------------------------------------------------------------------
 
 QOL_RISK = 0.1  # Acceptable chance per 4-minute block that a combination earns a 👎.
-# Settings you might notice (experiment.catalog()'s `visible`), and Beta priors on
-# the chance per block that each earns a 👎, most likely 1% quiet,
-# 4% noticeable, 2% for reasons that have nothing to do with the settings — worth
-# 10-20 blocks of evidence, so a few complaints outweigh them.
+# Settings you might notice (experiment.catalog()'s `visible`), and the priors of
+# the two vote models, (mean, sd) on the log-odds a setting's saving state adds:
+# either vote starts at 2% per block; for 👎 a noticeable setting starts out
+# multiplying the odds by ~2.5 (so experiments begin with about one at a time)
+# and a quiet one at no effect; for 👍 every setting starts at no effect, either way.
 NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps'}
-QOL_PRIOR = {'quiet': (1.2, 20.8), 'noticeable': (1.4, 10.6), 'base': (1.4, 20.6)}
+VOTE_BASE = 0.02
+VOTE_PRIOR = {'down': {'quiet': (0.0, 1.0), 'noticeable': (0.9, 2.0)},
+              'up': {'quiet': (0.0, 1.5), 'noticeable': (0.0, 2.0)}}
 
 
-def qol_drops(events):
-    """Times of 👎 votes."""
-    return sorted(e['t1'] for e in events if e.get('event') == 'qol' and e.get('vote') == 'down')
+def vote_times(events, vote):
+    return sorted(e['t1'] for e in events if e.get('event') == 'qol' and e.get('vote') == vote)
 
 
 def qol_windows(minutes, events):
-    """(setting states, whether you gave a 👎) per 4-minute window — an
-    experiment block, or a stretch outside experiments — that you were there for."""
-    drops, top = qol_drops(events), top_refresh(minutes)
+    """(setting states, {vote: given}) per 4-minute window — an experiment block,
+    or a stretch outside experiments — that you were there for."""
+    times, top = {v: vote_times(events, v) for v in VOTE_PRIOR}, top_refresh(minutes)
     windows = {}
     for m in minutes:
         if m.get('qol') is None:
@@ -603,37 +605,55 @@ def qol_windows(minutes, events):
     for w in windows.values():
         if w['present'] / w['n'] < 0.5:
             continue  # Nobody there to notice.
-        dropped = bisect.bisect_left(drops, w['t0']) < bisect.bisect_left(drops, w['t1'])
-        out.append((dict(w['states'].most_common(1)[0][0]), dropped))
+        given = {v: bisect.bisect_left(t, w['t0']) < bisect.bisect_left(t, w['t1']) for v, t in times.items()}
+        out.append((dict(w['states'].most_common(1)[0][0]), given))
     return out
 
 
-def qol_model(minutes, events, noticeable=NOTICEABLE):
-    """Noisy-OR: each setting in its saving state has its own chance per block of
-    earning a 👎, on top of a base chance; fitted by maximum a posteriori over
-    the windows, so it starts from the priors."""
-    windows = qol_windows(minutes, events)
+def vote_model(windows, vote, noticeable=NOTICEABLE):
+    """Logistic: log-odds of a `vote` per window = intercept + the effect of each
+    setting in its saving state; maximum a posteriori under VOTE_PRIOR, so it
+    starts from the priors. Effects can be either sign: a setting's normal state
+    can be the especially good one."""
     names = list(SETTING)
-    priors = np.array([QOL_PRIOR['base']] + [QOL_PRIOR['noticeable' if n in noticeable else 'quiet'] for n in names])
+    priors = [(math.log(VOTE_BASE / (1 - VOTE_BASE)), 1.5)] + [
+        VOTE_PRIOR[vote]['noticeable' if n in noticeable else 'quiet'] for n in names]
+    mean, sd = np.array([m for m, _ in priors]), np.array([s for _, s in priors])
     x = np.array([[1.0] + [float(states[n]) for n in names] for states, _ in windows]).reshape(-1, 1 + len(names))
-    y = np.array([float(dropped) for _, dropped in windows])
+    y = np.array([float(given[vote]) for _, given in windows])
 
     def loss(theta):
-        p = np.clip(expit(theta), 1e-9, 1 - 1e-9)
-        fine = x @ np.log1p(-p)  # log P(fine) per window
-        ll = np.sum((1 - y) * fine + y * np.log(-np.expm1(np.minimum(fine, -1e-12))))
-        return -(ll + np.sum((priors[:, 0] - 1) * np.log(p) + (priors[:, 1] - 1) * np.log1p(-p)))
-    mode = (priors[:, 0] - 1) / (priors.sum(axis=1) - 2)  # Without windows the fit is the prior's mode.
-    p = expit(minimize(loss, np.log(mode / (1 - mode)), method='L-BFGS-B').x)
-    count = lambda n, flag: sum(1 for states, dropped in windows if states[n] and (dropped or not flag))
-    return {'base': float(p[0]), 'p': {n: float(p[1 + i]) for i, n in enumerate(names)}, 'windows': len(windows),
-            'drops': int(y.sum()), 'tally': {n: {'drops': count(n, True), 'windows': count(n, False)} for n in names}}
+        z = x @ theta
+        nll = np.sum(np.logaddexp(0, z) - y * z) + np.sum((theta - mean) ** 2 / (2 * sd ** 2))
+        return nll, x.T @ (expit(z) - y) + (theta - mean) / sd ** 2
+    theta = minimize(loss, mean, jac=True, method='L-BFGS-B').x
+    tally = {n: {side: {'votes': sum(1 for states, given in windows if states[n] == on and given[vote]),
+                        'windows': sum(1 for states, _ in windows if states[n] == on)}
+                 for side, on in (('on', True), ('off', False))} for n in names}
+    return {'intercept': float(theta[0]), 'coef': {n: float(theta[1 + i]) for i, n in enumerate(names)},
+            'windows': len(windows), 'votes': int(y.sum()), 'tally': tally}
 
 
-def qol_risk(model, config):
-    """Chance per block that `config` ({name: saving state}) earns a 👎."""
-    fine = (1 - model['base']) * math.prod(1 - model['p'][n] for n, on in config.items() if on and n in model['p'])
-    return 1 - fine
+def qol_model(minutes, events, noticeable=NOTICEABLE):
+    """Both vote models over the same windows: {'down': …, 'up': …}."""
+    windows = qol_windows(minutes, events)
+    return {vote: vote_model(windows, vote, noticeable) for vote in VOTE_PRIOR}
+
+
+def vote_chance(model, config):
+    """Chance per block of the model's vote with `config` ({name: saving state})."""
+    return float(expit(model['intercept'] + sum(model['coef'][n] for n, on in config.items()
+                                                 if on and n in model['coef'])))
+
+
+def qol_risk(models, config):
+    """Chance per block that `config` earns a 👎."""
+    return vote_chance(models['down'], config)
+
+
+def delight(models, config):
+    """Chance per block that `config` earns a 👍."""
+    return vote_chance(models['up'], config)
 
 
 # --- Automatic experiments: where to look next ------------------------------------------------
@@ -668,8 +688,11 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     precision = rows.T @ (rows * weights[:, None]) / sigma ** 2 + np.diag(1 / np.array(prior_sd) ** 2)
     cov = np.linalg.inv(precision)
     qol = qol_model(minutes, events, noticeable)
+    battery = [m for m in minutes if m['st'] == 'D' and m.get('set')]
+    now = lever_states(battery[-1]['set'], top_refresh(minutes)) if battery else {}  # Settings outside `names`.
     configs = [dict(zip(names, combo)) for combo in itertools.product((False, True), repeat=len(names))]
-    allowed = [c for c in configs if not present or qol_risk(qol, c) <= QOL_RISK] or [dict.fromkeys(names, False)]
+    allowed = ([c for c in configs if not present or qol_risk(qol, dict(now, **c)) <= QOL_RISK]
+               or [dict.fromkeys(names, False)])
     recent = [m for m in minutes[-30:] if m['st'] == 'D'] or minutes[-30:]
     workload = [float(np.mean([m.get(c) or 0 for m in recent])) if recent else 0.0 for c in COVARIATES]
     # A prediction of interest is a contrast (no baseline); an observation includes today's.

@@ -116,7 +116,6 @@
       "/var/lib/tailscale" # tailscaled state — machine/node keys, login-server, peer cache. Without this, reboot = re-register.
       "/etc/openfortivpn" # VPN configs (host/cert details kept out of the public flake)
       "/etc/NetworkManager/system-connections" # saved Wi-Fi, wired and VPN profiles
-      "/etc/mullvad-vpn"
       "/var/lib/waydroid" # persist Waydroid data
       "/var/lib/immich" # immich media + state
       "/var/lib/postgresql" # immich database

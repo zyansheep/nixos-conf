@@ -14,6 +14,7 @@ import gi
 gi.require_version("Gtk", "4.0")
 gi.require_version("Adw", "1")
 gi.require_version("Gdk", "4.0")
+gi.require_version("Graphene", "1.0")  # compute_bounds() returns a Graphene.Rect.
 gi.require_version("Gtk4LayerShell", "1.0")
 gi.require_version("Pango", "1.0")
 gi.require_version("PangoCairo", "1.0")
@@ -528,7 +529,7 @@ def gather(start, end, history=None):
     return dict(points=report.timeline(minutes, model), span=(start, end), sleeps=sleeps,
                 sleeps_all=report.sleep_drain(events), estimates=estimates, info=info, scope=scope,
                 energy=energy, power=power, levers=report.lever_effects(history, energy, power), effects=freezes,
-                pool=pool, plan=report.plan(history, events, pool) if pool else None,
+                pool=pool, plan=report.plan(history, events, pool) if pool else None, goal=experiment.goal(),
                 psr=report.boot_effect(history, energy, power), psr_arm=experiment.psr_arm(),
                 catalog=[experiment.describe(spec) for spec in experiment.catalog().values()],
                 units=experiment.freezable_units()[:12], model=model,
@@ -642,7 +643,7 @@ class BatteryPanel(Adw.Application):
         self.poll = 0
         self.catalog, self.units, self.effects = [], [], []
         self.psr, self.psr_arm = None, None
-        self.result, self.best = None, None
+        self.result, self.best, self.quality = None, None, None
         self.syncing = False  # Set while widgets are updated from state, so they don't echo it back.
         self.note = ''
         self.connect('startup', self.startup)
@@ -701,6 +702,12 @@ class BatteryPanel(Adw.Application):
         outer = Gtk.Box()
         outer.set_name('battery-card')
         outer.append(clamp)
+        # GTK's tooltips wait half a second (fixed in GTK 4); hints show at once.
+        self.hint_anchor, self.hint_label = outer, wrapped(max_width_chars=60)
+        self.hint_popover = Gtk.Popover(autohide=False, can_focus=False, position=Gtk.PositionType.TOP,
+                                        child=self.hint_label)
+        self.hint_popover.add_css_class('hint')
+        self.hint_popover.set_parent(outer)
         header = Gtk.Box(spacing=8)
         title = Gtk.Label(label='Battery', xalign=0)
         title.add_css_class('title-2')
@@ -792,7 +799,7 @@ class BatteryPanel(Adw.Application):
         page.append(top)
         votes = Gtk.Box(spacing=8)
         votes.append(Gtk.Label(label='Right now the laptop is'))
-        for choice, label in (('up', 'Fine'), ('down', 'Worse than it should be')):
+        for choice, label in (('up', 'Especially good'), ('down', 'Worse than it should be')):
             content = Gtk.Box(spacing=6)
             thumb = Gtk.Label(label=qol.GLYPHS[choice])
             thumb.add_css_class('thumb')
@@ -804,6 +811,9 @@ class BatteryPanel(Adw.Application):
             votes.append(button)
         self.vote_note = self.muted(wrapped(hexpand=True))
         votes.append(self.vote_note)
+        self.resume_button = Gtk.Button(label='Resume now', valign=Gtk.Align.CENTER)
+        self.resume_button.connect('clicked', lambda _b: self.command(['qol', 'resume']))
+        votes.append(self.resume_button)
         page.append(votes)
         self.experiments_note = self.muted(wrapped())
         page.append(self.experiments_note)
@@ -817,12 +827,23 @@ class BatteryPanel(Adw.Application):
         self.together = self.muted(wrapped())
         page.append(self.together)
         best = Gtk.Box(spacing=8)
+        goals = Gtk.Box(valign=Gtk.Align.CENTER)
+        goals.add_css_class('linked')
+        self.goal_buttons, group = {}, None
+        for name, label in (('battery', 'Battery'), ('comfort', 'Comfort')):
+            button = Gtk.ToggleButton(label=label)
+            button.set_group(group)
+            group = group or button
+            button.connect('toggled', lambda b, n=name: b.get_active() and not self.syncing and self.set_goal(n))
+            goals.append(button)
+            self.goal_buttons[name] = button
+        best.append(goals)
         self.best_label = wrapped(hexpand=True)
         self.best_label.add_css_class('result')
         best.append(self.best_label)
         self.apply_button = Gtk.Button(label='Apply', valign=Gtk.Align.CENTER)
-        self.apply_button.set_tooltip_text('Until reboot. ASPM and APST also revert at the next suspend (the '
-                                           'crash workaround), ABM and the profile at the next plug change.')
+        self.hint(self.apply_button, 'Until reboot. ASPM and APST also revert at the next suspend (the crash '
+                                     'workaround), ABM and the profile at the next plug change.')
         self.apply_button.connect('clicked', lambda _b: self.apply_best())
         best.append(self.apply_button)
         page.append(best)
@@ -881,7 +902,25 @@ class BatteryPanel(Adw.Application):
         if not self.window.get_visible():
             self.toggle()
 
+    def hint(self, widget, text):
+        motion = Gtk.EventControllerMotion()
+        motion.connect('enter', lambda *_: self.show_hint(widget, text))
+        motion.connect('leave', lambda *_: self.hint_popover.popdown())
+        widget.add_controller(motion)
+
+    def show_hint(self, widget, text):
+        found, bounds = widget.compute_bounds(self.hint_anchor)
+        if not found:
+            return
+        rect = Gdk.Rectangle()
+        rect.x, rect.y = int(bounds.get_x()), int(bounds.get_y())
+        rect.width, rect.height = int(bounds.get_width()), int(bounds.get_height())
+        self.hint_label.set_text(text)
+        self.hint_popover.set_pointing_to(rect)
+        self.hint_popover.popup()
+
     def close(self, *_):
+        self.hint_popover.popdown()
         self.window.set_visible(False)
         self.history = History()  # Free the 30 days of rows; the next open reloads them.
         if self.poll:
@@ -1020,6 +1059,7 @@ class BatteryPanel(Adw.Application):
         return state.get('mode') != 'auto' and state.get('status') in ('running', 'paused')
 
     def fill_experiments(self):
+        self.hint_popover.popdown()  # Its widget may be about to go.
         result = self.result
         levers, plan = result['levers'], result.get('plan')
         effects = {e['experiment']: e for e in levers['effects']}
@@ -1030,7 +1070,8 @@ class BatteryPanel(Adw.Application):
         self.experiments_note.set_text(
             draw + 'While on, every 4-minute block on battery sets the included settings to the combination the '
             'battery model expects to learn most from — among those unlikely to bother you, or any while the screen '
-            'is locked — and learns from your 👎 which settings to avoid. Gains are minutes '
+            'is locked — and learns from your 👎 which settings to avoid and from your 👍 which are worth keeping '
+            '(the Comfort goal). Gains are minutes '
             'per full charge (90% intervals), each for that setting alone with the others as they are on battery.')
         while (row := self.lever_list.get_first_child()) is not None:
             self.lever_list.remove(row)
@@ -1086,14 +1127,15 @@ class BatteryPanel(Adw.Application):
             saving = spec['saving'] is not None and spec['current'] == spec['saving']
             other = (spec['normal'] if saving else spec['saving']) or spec['alternative']
             detail = f"Now {spec['current']}{' (power-saving)' if saving else ''} · or {other}"
-        tally = quality['tally'].get(spec['name'], {'drops': 0, 'windows': 0})
-        risk = quality['p'].get(spec['name'], 0)
-        detail += (f" · 👎 in {tally['drops']} of {tally['windows']} blocks" if tally['windows']
+        down, up = (quality[v]['tally'][spec['name']] for v in ('down', 'up'))
+        detail += (f" · 👎 {down['on']['votes']}/{down['on']['windows']} blocks on" if down['on']['windows']
                    else f" · {spec['visible'] or 'not noticeable'}")
-        if risk > report.QOL_RISK:
+        if quality['up']['votes']:
+            detail += f" · 👍 {up['on']['votes']}/{up['on']['windows']} on, {up['off']['votes']}/{up['off']['windows']} off"
+        if report.qol_risk(quality, {spec['name']: True}) > report.QOL_RISK:
             detail += ' — kept off while you are here'
         info.append(self.muted(wrapped(label=detail, max_width_chars=56)))
-        info.set_tooltip_text(spec['description'])
+        self.hint(info, spec['description'])
         row.append(info)
         bar = GainBar()
         bar.set_data(effect, scale)
@@ -1112,7 +1154,7 @@ class BatteryPanel(Adw.Application):
         row.append(numbers)
         check = Gtk.CheckButton(label='Include', valign=Gtk.Align.CENTER, active=included and not spec['error'])
         check.set_sensitive(not spec['error'] and spec['saving'] is not None)
-        check.set_tooltip_text('Let automatic experiments vary this setting')
+        self.hint(check, 'Let automatic experiments vary this setting')
         check.connect('toggled', lambda b, n=spec['name']: self.set_pool(n, b.get_active()))
         row.append(check)
         return row
@@ -1131,21 +1173,42 @@ class BatteryPanel(Adw.Application):
             self.command(['power-experiment', 'enable' if on else 'disable'])
         return False
 
+    def set_goal(self, goal):
+        self.result['goal'] = goal
+        self.fill_best({e['experiment']: e for e in self.result['levers']['effects']}, self.quality)
+        self.command(['power-experiment', 'goal', goal], done=None)
+
     def fill_best(self, effects, quality):
+        """The best measured combination for the goal, among those unlikely to earn a 👎: the
+        lowest draw (Battery), or the most likely to feel especially good, then the lowest draw (Comfort)."""
         levers, result = self.result['levers'], self.result
+        goal = result.get('goal', 'battery')
+        self.quality = quality
+        self.syncing = True
+        self.goal_buttons[goal].set_active(True)
+        self.syncing = False
         fine = lambda c: report.qol_risk(quality, c) <= report.QOL_RISK
-        best = report.best_config(levers, set(effects), result.get('energy'), result.get('power'), feasible=fine)
+        key = ((lambda c: (-report.delight(quality, c), report.predicted(levers['coef'], c)))
+               if goal == 'comfort' else None)
+        best = report.best_config(levers, set(effects), result.get('energy'), result.get('power'), feasible=fine, key=key)
         self.best = None
+        aim = 'feel especially good' if goal == 'comfort' else 'save battery'
         if not best:
-            self.best_label.set_text('Best combination: appears once settings have been measured.')
+            self.best_label.set_text('The best combination appears once settings have been measured.')
         elif not best['changes']:
-            self.best_label.set_text('Your battery settings are already the best measured combination that keeps '
-                                     'quality of life fine.')
+            self.best_label.set_text(f'Your battery settings already {aim} best of what has been measured'
+                                     + (' (no 👍 yet, so this is the same as Battery).'
+                                        if goal == 'comfort' and not quality['up']['votes'] else '.'))
         else:
             self.best = best
             change = ', '.join(PHRASES.get(n, (n, n))[0 if best['config'][n] else 1] for n in best['changes'])
-            self.best_label.set_text(f"Best measured combination that keeps quality of life fine: {change} → "
-                                     f"{gain_text(best)} per charge.")
+            if goal == 'comfort':
+                now, then = (report.delight(quality, c) for c in (levers['current'], {**levers['current'], **best['config']}))
+                self.best_label.set_text(f"Most likely to feel especially good: {change} → 👍 {100 * now:.0f}% → "
+                                         f"{100 * then:.0f}% per block, {gain_text(best)} of battery per charge.")
+            else:
+                self.best_label.set_text(f"Best for battery, without likely 👎s: {change} → {gain_text(best)} per "
+                                         'charge.')
         self.apply_button.set_visible(self.best is not None)
         self.apply_button.set_sensitive(self.experiment_state().get('status') not in ('running', 'paused'))
 
@@ -1207,7 +1270,7 @@ class BatteryPanel(Adw.Application):
         start.connect('clicked', lambda _b: self.start('freeze-apps', extra=keep()))
         buttons.append(start)
         test = Gtk.Button(label='Test now (5 s)')
-        test.set_tooltip_text('Freeze the same apps for 5 seconds right now, measure, and thaw')
+        self.hint(test, 'Freeze the same apps for 5 seconds right now, measure, and thaw')
         test.set_sensitive(not active)
         test.connect('clicked', lambda _b: (self.banner.set_text('Freezing apps for 5 seconds…'), self.command(
             ['power-experiment', 'test-freeze', '--seconds', '5'] + keep(), done=self.freeze_test_result)))
@@ -1340,8 +1403,10 @@ class BatteryPanel(Adw.Application):
         recent, rest = qol.votes(), qol.resting()
         last = (f"Last vote: {'👍' if recent[-1][1] == 'up' else '👎'} at "
                 f"{time.strftime('%H:%M', time.localtime(recent[-1][0]))}. " if recent else '')
-        self.vote_note.set_text(last + (f'Experiments rest {rest / 60:.0f} more min (👍 resumes).' if rest else
-                                        'Also the thumbs next to the battery. 👎 restores your settings at once.'))
+        self.vote_note.set_text(last + (f'Experiments rest {rest / 60:.0f} more min.' if rest else
+                                        '👍 for anything unexpectedly nice, 👎 when something is off (it restores '
+                                        'your settings at once); also next to the battery.'))
+        self.resume_button.set_visible(rest > 0)
         frozen = ''
         if state.get('units') and status in ('running', 'paused'):
             states = [experiment.freeze_get(u) for u in experiment.live_units(state['units'])]
@@ -1387,6 +1452,7 @@ window { background: transparent; }
 #battery-card list { background: @menu_card; border-radius: 10px; }
 #battery-card button:hover { background: @menu_hover; }
 #battery-card .thumb { font-family: "Font Awesome 7 Free"; font-weight: 900; }
+popover.hint > contents { background: @menu_card; color: @menu_fg; padding: 6px 9px; font-size: 12px; }
 #battery-card button.vote-up .thumb { color: #8fdf8f; }
 #battery-card button.vote-down .thumb { color: #e5484d; }
 """

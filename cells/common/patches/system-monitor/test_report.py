@@ -199,7 +199,7 @@ def block_minutes(t, config, block, run='auto-1', qol=0, present=1.0, bat=15.0):
     """One 4-minute experiment block of minutes (the first is washout) with `config` {name: saving}."""
     settings = {'aspm': 'powersupersave' if config.get('aspm') else 'performance',
                 'apst': '100000' if config.get('apst') else '0', 'wifi_ps': 'on' if config.get('wifi-ps') else 'off',
-                'boost': '0' if config.get('boost') else '1', 'hz': 60.0}
+                'boost': '0' if config.get('boost') else '1', 'hz': 48.0 if config.get('refresh') else 60.0}
     return [{'t': t + 60 * i, 'dt': 60, 'st': 'D', 'bat': bat, 'soc': 8, 'load': 4, 'busy': 2, 'gpu': 0, 'video': 0,
              'bl': .5, 'kbd': 0, 'wifi': 0, 'disk': 0, 'usb': 0, 'audio': 0, 'set': settings, 'qol': qol,
              'present': present, 'exp': [run, '+'.join(config), block, '', i == 0, None]} for i in range(4)]
@@ -208,20 +208,43 @@ def block_minutes(t, config, block, run='auto-1', qol=0, present=1.0, bat=15.0):
 class PlanTests(unittest.TestCase):
     def test_quality_of_life_model_starts_from_priors_and_learns_drops(self):
         model = report.qol_model([], [])
-        self.assertAlmostEqual(model['p']['boost'], 0.04, delta=0.005)
-        self.assertAlmostEqual(model['p']['aspm'], 0.01, delta=0.005)
+        self.assertAlmostEqual(report.qol_risk(model, {'boost': True}), 0.048, delta=0.005)
+        self.assertAlmostEqual(report.qol_risk(model, {'aspm': True}), 0.02, delta=0.003)
+        self.assertGreater(report.qol_risk(model, {'boost': True, 'refresh': True}), report.QOL_RISK)
         minutes, events, t = [], [], 600_000
         for block in range(40):
             config = {'boost': block % 2 == 0, 'aspm': block % 4 < 2}
             minutes += block_minutes(t, config, block)
-            if config['boost'] and block % 4 == 0:  # Boost off earns a 👎 half the time.
+            if config['boost'] and block % 8 in (0, 2):  # Boost off earns a 👎 half the time, ASPM or not.
                 events += [{'event': 'qol', 't1': t + 150, 'vote': 'down'}, {'event': 'qol', 't1': t + 230, 'vote': 'up'}]
             t += 240
         model = report.qol_model(minutes, events)
-        self.assertGreater(model['p']['boost'], 0.25)
-        self.assertLess(model['p']['aspm'], 0.05)
+        self.assertGreater(report.qol_risk(model, {'boost': True}), 0.3)
+        self.assertLess(report.qol_risk(model, {'aspm': True}), 0.05)
+        self.assertEqual(model['down']['tally']['boost']['on'], {'votes': 10, 'windows': 20})
         self.assertGreater(report.qol_risk(model, {'boost': True}), report.QOL_RISK)
         self.assertLess(report.qol_risk(model, {'aspm': True, 'boost': False}), report.QOL_RISK)
+
+    def test_thumbs_up_finds_what_is_especially_nice_and_the_goal_picks_between_that_and_battery(self):
+        minutes, events, t, rng = [], [], 600_000, np.random.default_rng(5)
+        for block in range(120):
+            config = {'refresh': block % 2 == 0, 'aspm': block % 4 < 2}
+            # Lower refresh saves 1 W and ASPM 2 W, but full refresh often feels especially smooth.
+            bat = 16 - 1.0 * config['refresh'] - 2.0 * config['aspm'] + rng.normal(0, 0.5)
+            minutes += block_minutes(t, config, block, run='r', bat=bat)
+            if not config['refresh'] and block % 6 == 1:
+                events.append({'event': 'qol', 't1': t + 150, 'vote': 'up'})
+            t += 240
+        models = report.qol_model(minutes, events)
+        self.assertGreater(report.delight(models, {'refresh': False}), 3 * report.delight(models, {'refresh': True}))
+        levers = report.lever_effects(minutes, energy=50, power=15, replicates=20)
+        levers['current'] = dict.fromkeys(levers['current'], False)
+        allowed = {'refresh', 'aspm'}
+        battery = report.best_config(levers, allowed)
+        comfort = report.best_config(levers, allowed, key=lambda c: (-report.delight(models, c),
+                                                                    report.predicted(levers['coef'], c)))
+        self.assertEqual(battery['config'], {'refresh': True, 'aspm': True})
+        self.assertEqual(comfort['config'], {'refresh': False, 'aspm': True})  # ASPM is free: keep its saving.
 
     def test_present_users_only_get_combinations_they_are_unlikely_to_mind(self):
         names = ['aspm', 'apst', 'boost', 'profile']

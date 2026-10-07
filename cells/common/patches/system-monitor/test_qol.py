@@ -8,7 +8,7 @@ import qol
 
 
 class QolTests(unittest.TestCase):
-    def test_votes_rest_after_a_thumbs_down_until_a_thumbs_up(self):
+    def test_a_thumbs_down_rests_experiments_until_it_runs_out_or_is_resumed(self):
         with tempfile.TemporaryDirectory() as tmp, mock.patch.object(qol.subprocess, 'run') as signal:
             path = Path(tmp) / 'qol.json'
             self.assertEqual((qol.votes(path), qol.resting(path, now=100)), ([], 0.0))
@@ -16,8 +16,10 @@ class QolTests(unittest.TestCase):
             self.assertIn('-RTMIN+12', signal.call_args.args[0])
             self.assertEqual(qol.resting(path, now=160), qol.COOLDOWN - 60)
             self.assertEqual(qol.resting(path, now=100 + qol.COOLDOWN + 1), 0)
-            qol.vote('up', path, now=200)
-            self.assertEqual(qol.resting(path, now=210), 0)
+            qol.vote('up', path, now=200)  # 👍 is about something especially good, not "resume".
+            self.assertEqual(qol.resting(path, now=210), qol.COOLDOWN - 110)
+            qol.resume(path, now=220)
+            self.assertEqual(qol.resting(path, now=230), 0)
             self.assertEqual(qol.votes(path), [(100.0, 'down'), (200.0, 'up')])
             with self.assertRaises(ValueError):
                 qol.vote('sideways', path)

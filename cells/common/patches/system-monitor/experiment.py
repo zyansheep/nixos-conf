@@ -13,6 +13,7 @@ panel's Savings tab fits all settings' effects together (report.lever_effects).
     power-experiment list | units | status
     power-experiment enable | disable          (automatic experiments, see `automatic`)
     power-experiment pool [<name> ...]         (the settings they may vary)
+    power-experiment goal [battery|comfort]    (what the best combination optimizes)
     power-experiment start <name> [<name> ...] [--minutes N] [--unit SCOPE] [--only-locked]
     power-experiment apply <name>=<value> ...   (set now, e.g. the panel's best combination)
     power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
@@ -452,14 +453,35 @@ def experiment(specs, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, 
                         state_path)
 
 
+GOALS = ('battery', 'comfort')  # What the panel's best combination optimizes.
+
+
+def preferences():
+    try:
+        saved = json.loads(POOL.read_text())
+        return saved if isinstance(saved, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def prefer(**changes):
+    write_state(dict(preferences(), **changes), POOL)
+
+
 def pool(specs=None):
     """Settings automatic experiments may vary (all with power-saving/normal values by default)."""
     specs = specs if specs is not None else catalog()
-    try:
-        names = json.loads(POOL.read_text())['settings']
-    except (OSError, ValueError, KeyError, TypeError):
+    names = preferences().get('settings')
+    if not isinstance(names, list):
         names = [name for name, spec in specs.items() if spec.levels]
     return [name for name in names if name in specs and specs[name].levels]
+
+
+def goal():
+    """'battery' (the lowest draw) or 'comfort' (the most likely to feel especially good);
+    both avoid combinations likely to earn a 👎."""
+    chosen = preferences().get('goal')
+    return chosen if chosen in GOALS else 'battery'
 
 
 def next_block(names, present):
@@ -616,6 +638,8 @@ def main(argv=None):
     sub.add_parser('disable', help='stop automatic experiments and restore the settings')
     chosen = sub.add_parser('pool', help='settings automatic experiments may vary')
     chosen.add_argument('names', nargs='*', metavar='name')
+    chosen_goal = sub.add_parser('goal', help='what the best combination optimizes: battery or comfort')
+    chosen_goal.add_argument('goal', nargs='?', choices=GOALS)
     sub.add_parser('auto', help='the power-experiments.service body')
     sub.add_parser('resume', help='restart automatic experiments if enabled (after a manual run)')
     start = sub.add_parser('start', help='randomize one setting, or several together')
@@ -647,7 +671,7 @@ def main(argv=None):
         except ValueError:
             state = {}
         state.update(locked=screen_locked(), on_battery=on_battery(), freezer=freezer_report(state.get('units')),
-                     uncovered=uncovered(), automatic={'enabled': ENABLED.exists(), 'settings': pool()},
+                     uncovered=uncovered(), automatic={'enabled': ENABLED.exists(), 'settings': pool(), 'goal': goal()},
                      resting=qol.resting())
         print(json.dumps(state, indent=1))
     elif args.command == 'test-freeze':
@@ -685,8 +709,12 @@ def main(argv=None):
             unknown = [name for name in args.names if name not in eligible]
             if unknown:
                 parser.error(f"not automatic settings: {', '.join(unknown)} (choose from {', '.join(eligible)})")
-            write_state({'settings': list(dict.fromkeys(args.names))}, POOL)
+            prefer(settings=list(dict.fromkeys(args.names)))
         print(' '.join(pool()))
+    elif args.command == 'goal':
+        if args.goal:
+            prefer(goal=args.goal)
+        print(goal())
     elif args.command == 'auto':
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
         automatic()
