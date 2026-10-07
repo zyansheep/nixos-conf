@@ -79,8 +79,10 @@ not a local script that repeatedly rewrites `resolv.conf`.
 
 ## Application launcher
 
-`Super+D` toggles the resident Vicinae launcher; `Super+Shift+D` opens Rofi as a
-fallback. Native/Flatpak subtitles come from desktop metadata. Window matching
+`Super+D` toggles the resident Vicinae launcher, `Super+C` opens its clipboard
+history and `Super+;` opens the emoji, kaomoji and math-symbol picker
+([emoji.nix](../../../home/profiles/emoji.nix)) as a Vicinae list. Native/Flatpak
+subtitles come from desktop metadata. Window matching
 uses process identity so two installations with the same window class remain
 separate. The package patch and regression tests are in
 [the Vicinae patch directory](../../../common/patches/vicinae).

@@ -35,7 +35,6 @@ in {
     awww # wallpaper daemon (LGFae/awww — successor to swww)
     brightnessctl # brightness control
     launcher # resident application launcher
-    rofi # clipboard/emoji menus and launcher fallback
     swaylock # lockscreen
     swayidle # idle manager
     xwayland-satellite # xwayland support

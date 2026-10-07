@@ -433,23 +433,21 @@ binds {
     // Same as the `nrb` alias, from the repo; the terminal stays open to show the result.
     Mod+Ctrl+Shift+R hotkey-overlay-title="🛠️ Rebuild NixOS (nrb) in a Terminal" { spawn "foot" "--title=nrb" "bash" "-c" "cd ~/nixos-conf && git add . && sudo rebuild; echo; read -rp 'Press Enter to close' _"; }
     Mod+D hotkey-overlay-title="🚀 Launcher: Vicinae" { spawn "vicinae" "toggle"; }
-    Mod+Shift+D hotkey-overlay-title="🚀 Launcher fallback: rofi" { spawn "rofi" "-show" "run"; }
     // Super+L is used for navigation below; lock with Ctrl+Alt+L.
     // Authentication is configured in cells/nixos/profiles/graphics/niri.nix.
     Ctrl+Alt+L hotkey-overlay-title="🔒 Lock the Screen: swaylock" { spawn "swaylock" "-f"; }
 
     // Clipboard and utility bindings from sway
     // Opens the resident Vicinae server's own clipboard history (~0.1 s, no
-    // per-open decode of every cliphist entry like the old rofi menu).
+    // per-open decode of every cliphist entry).
     Mod+C hotkey-overlay-title="📋 Clipboard History: Vicinae" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
     Mod+Shift+C hotkey-overlay-title="🖼️ Show Last Clipboard Image" { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
     // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
-    // emoji-picker wraps rofimoji with the same "emojis" + "kaomoji" file set
-    // (glob stems: "emojis" matches all emojis_*.csv, "kaomoji" adds the 1562
-    // bundled emoticons like (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯), but inserts via the
-    // clipboard — plain `rofimoji` types with wtype, which Electron/Firefox
-    // drop or garble. See cells/home/profiles/_files/emoji-picker.sh.
-    Mod+Semicolon hotkey-overlay-title="😀 Emoji & Emoticon Picker: rofimoji" { spawn "emoji-picker"; }
+    // emoji-picker lists emoji, kaomoji like (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯, and
+    // math symbols in a Vicinae dmenu, then inserts via the clipboard —
+    // Vicinae's own emoji grid can't paste without its input server and has
+    // no kaomoji. See cells/home/profiles/emoji.nix.
+    Mod+Semicolon hotkey-overlay-title="😀 Emoji & Kaomoji Picker: Vicinae" { spawn "emoji-picker"; }
     Mod+Shift+W hotkey-overlay-title="📶 Network Sidebar" { spawn "nm-sidebar" "--toggle"; }
 
     // Recording and screenshot bindings from sway
