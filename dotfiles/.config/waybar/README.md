@@ -172,7 +172,7 @@ written by the collector as it measures, one transaction per record:
 | --- | --- |
 | `records` | one row per 10 s record: every scalar above as typed columns, NULL where absent (battery and chip W with min/max, CPU seconds and MHz, C1–C3 residency, IPI counts, GPU/video, Wi-Fi vs other network bytes and signal, disk bytes/busy, USB/PCI/audio, backlight, refresh rate, display-panel state, every power setting, thermals, lid/lock, experiment arm) |
 | `record_apps`, `app_names` | per record × app that did something: CPU, GPU and video seconds, disk bytes |
-| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings and experiment as JSON) |
+| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings — including the CPU frequency cap `mhz` since layout 5, the CPU's own maximum `cpu_mhz` and the amdgpu DPM level `gpu_dpm` since layout 6 — and experiment as JSON) |
 | `events` | starts and suspend gaps |
 
 Only the archive keeps idle apps' process counts and memory, the per-interrupt
@@ -212,15 +212,24 @@ days and fetches only new minutes. Tabs:
     enabled). Every 4-minute block on battery sets the included settings
     (`power-experiment pool`) to one combination, chosen by `report.plan`: the
     setting model below is a Bayesian linear model (the ridge penalties are its
-    Gaussian prior), so for each allowed combination it computes how much
+    Gaussian prior). For each allowed combination it computes how much
     observing it would shrink the variance of the model's predictions across
-    all allowed combinations (a greedy integrated-variance design, with
-    today's baseline in the posterior) and samples one in proportion. While you
+    all allowed combinations (a greedy integrated-variance design; the block
+    shares today's baseline with the run's earlier blocks today) and what it
+    is expected to cost: the W it would draw above the best combination, over
+    draws from the posterior. As in information-directed sampling, it samples
+    one in proportion to information / (cost + 0.3 W)², so blocks stay with
+    combinations that might be best while still sharpening the model
+    (simulated: a setting that clearly costs 3 W gets ~13% of blocks instead of
+    half; with no effects at all, every setting still goes both ways). While you
     are there (unlocked), only combinations unlikely to bother you are allowed
     — see quality of life below; while the screen is locked, any. Each block's
-    first minute is ignored. It pauses, restoring your settings, on AC and for
-    10 minutes after a 👎 (*Resume now*, or `qol resume`, ends that early); a
-    👎 ends the block at once. The
+    first minute is ignored. It pauses, restoring your settings, on AC, for 10
+    minutes after a 👎 (*Resume now*, or `qol resume`, ends that early), and
+    while a setting can't be read or changed (the Wi-Fi interface gone,
+    power-profiles-daemon failing); a 👎 ends the block at once. Turning it off
+    (`disable`, the switch) restores your settings and then sets the goal's
+    best combination. The
     panel shows the model's accuracy over the allowed combinations and where
     it is least certain. `power-experiment start <settings…> --minutes N` still
     runs a fixed factorial run (it stops the automatic one meanwhile).
@@ -240,9 +249,11 @@ days and fetches only new minutes. Tabs:
   - **Goal** — *Battery* recommends the measured combination with the lowest
     draw among those allowed; *Comfort* the one most likely to earn a 👍 (then
     the lowest draw), with what it costs in battery
-    (`power-experiment goal battery|comfort`).
+    (`power-experiment goal battery|comfort`). Until something earns a 👍,
+    Comfort is Battery's combination.
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
-    CPU boost, power profile): each row shows the current value, the measured
+    CPU boost, power profile, GPU and memory clocks, CPU frequency cap): each
+    row shows the current value, the measured
     saving (for that setting alone, the others as they are on battery now),
     how often it lowered quality of life, and **Include**.
     `report.lever_effects` fits every run, automatic or manual, together:
@@ -250,13 +261,40 @@ days and fetches only new minutes. Tabs:
     indicator per setting (from the values the experiment set) and per pair
     randomized together (shrunk toward zero), with a moving-block bootstrap.
     CPU boost and profile change the CPU load the workload correction uses, so
-    they are fitted without it (and need more time). The tab lists clear
+    they are fitted without it (and need more time). Boost is read from the
+    CPU's frequency cap (`max_mhz`, 3501 MHz without boost, 4972 with), not the
+    global switch: power-profiles-daemon turns boost off per CPU for
+    power-saver and back on for balanced, leaving the switch on, so until
+    2026-10-08 most "boost on" blocks under power-saver ran without it — and
+    with the switch off, the daemon could not change profile at all, which
+    crashed the runner. `power-lab boost` now leaves the global switch on and
+    writes every CPU, and a profile change puts boost back as it was, so the
+    profile is the platform profile and EPP only. Added 2026-10-08 after a
+    survey of the machine's knobs (powertop's tunables were all already good):
+    **GPU and memory clocks** (`power-lab gpudpm low|auto`: amdgpu DPM `low`
+    pins GPU, memory and fabric clocks at their lowest, 800/1000/500 MHz; on
+    `auto` the fabric and memory idle at 1600 MHz with the GPU 0–2% busy;
+    power-profiles-daemon's amdgpu_dpm action, which would do this for
+    power-saver, is off here) and a **CPU frequency cap** (`power-lab cpucap
+    2000|none`, scaling_max_freq on every policy; `none` writes the boost
+    maximum, so the cap follows boost). Both slow some work, so both count as
+    noticeable and are fitted without the load correction. With a cap, boost
+    comes from the CPU's own maximum (`cpu_max_mhz`, logged since layout 6).
+    **ASPM on every link** (2026-10-08): `power-lab` sets the policy with every
+    PCI function awake. Changing it under a runtime-suspended function left
+    that function's link control as saved before the change (put back when it
+    resumed), and a multi-function link only enables what all its functions
+    enable, so the internal GPU/USB/audio (c1) and USB4 (c3) links never got
+    ASPM: the ASPM saving measured before then is Wi-Fi and NVMe only. The tab lists clear
     interactions and the best measured combination for the goal; **Apply**
-    sets it now (`power-experiment apply name=saving|normal`,
-    until reboot; ASPM/APST revert at the next suspend). Root settings go
-    through `sudo -n power-lab`; its `sleep-safe` pre-sleep hook restores the
-    boot-time ASPM policy and NVMe APST limit (the s2idle crash workarounds)
-    before every suspend, and the runner starts a fresh block after resume.
+    sets all of it now (`power-experiment apply name=saving|normal`,
+    until reboot). Root settings go through `sudo -n power-lab`; its
+    `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe
+    APST limit (the s2idle crash workarounds, which matter on the way into
+    s2idle) before every suspend, noting what was there in
+    /run/power-lab/pre-sleep, and its `sleep-restore` post-resume hook puts
+    that back, so an applied combination or a running block survives the
+    suspend; the runner still starts a fresh block after resume.
     Profile and ABM are left to the AC udev rules while plugged in.
   - **Apps and display** (model estimates, outlined): removing an app's or
     group's activity, or dimming, refitted on 10-minute moving-block bootstrap

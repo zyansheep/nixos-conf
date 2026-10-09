@@ -8,12 +8,12 @@ informs every setting at once, and settings randomized together reveal whether
 they interact. The first WASHOUT seconds of a block are marked so analysis can
 skip the battery reading's lag and the system settling. waybar-monitor tags
 every record with the running arms (from the state file below); the battery
-panel's Savings tab fits all settings' effects together (report.lever_effects).
+panel's Experiments tab fits all settings' effects together (report.lever_effects).
 
     power-experiment list | units | status
     power-experiment enable | disable          (automatic experiments, see `automatic`)
     power-experiment pool [<name> ...]         (the settings they may vary)
-    power-experiment goal [battery|comfort]    (what the best combination optimizes)
+    power-experiment goal [battery|comfort] [--apply]   (what the best combination optimizes)
     power-experiment start <name> [<name> ...] [--minutes N] [--unit SCOPE] [--only-locked]
     power-experiment apply <name>=<value> ...   (set now, e.g. the panel's best combination)
     power-experiment start freeze-apps [--keep PATTERN ...]   (always only while locked)
@@ -27,8 +27,9 @@ experiments: the `psr` specialisation boots with PSR enabled, `next-boot` picks
 the entry for the next restart only, and the panel compares boots by arm.
 
 Root settings go through `sudo -n power-lab`; its pre-sleep hook restores the
-s2idle crash workarounds (ASPM, NVMe APST) before every suspend, and the runner
-notices the drift after resume and starts a fresh block.
+s2idle crash workarounds (ASPM, NVMe APST) before every suspend and its
+post-resume hook puts back what was there; the runner starts a fresh block
+after resume.
 """
 import argparse
 import itertools
@@ -235,6 +236,56 @@ class Setting:
         self.ac_managed = ac_managed
         self.units = units
 
+    def read(self):
+        """The current value, or None while the setting is unavailable (no Wi-Fi
+        interface, power-profiles-daemon restarting)."""
+        try:
+            return self.get()
+        except Exception:  # noqa: BLE001 - unavailable is a state, not a crash
+            return None
+
+
+CPUFREQ = SYS / 'devices/system/cpu/cpufreq'
+
+
+def boost_get():
+    """'1' while CPU boost is on: globally and on every CPU. power-profiles-daemon
+    sets it per CPU on each profile change (off for power-saver) and leaves the
+    global switch on, so the global switch alone says on while it is off."""
+    overall = read(CPUFREQ / 'boost')
+    if overall is None:
+        return None
+    return '1' if overall == '1' and all(read(p) in (None, '1') for p in CPUFREQ.glob('policy*/boost')) else '0'
+
+
+def profile_set(value):
+    """powerprofilesctl set, keeping CPU boost as it was: the profile is the
+    platform profile and EPP, and boost is a setting of its own."""
+    boost = boost_get()
+    if read(CPUFREQ / 'boost') == '0' and boost is not None:
+        run(POWER_LAB + ['boost', boost])  # The daemon's per-CPU writes fail while boost is off globally.
+    run(['powerprofilesctl', 'set', value])
+    if boost is not None and boost_get() != boost:
+        run(POWER_LAB + ['boost', boost])
+
+
+def gpu_dpm_get():
+    return next((read(path) for path in sorted(SYS.glob('class/drm/card*/device/power_dpm_force_performance_level'))),
+                None)
+
+
+CPU_CAP = '2000'  # MHz: the CPU cap's power-saving value (base is 3501, boost 4972).
+
+
+def cpu_cap_get():
+    """The CPU frequency cap in MHz, or 'none' while the cap is the CPU's own
+    maximum (cpuinfo_max_freq, which boost raises)."""
+    policy = CPUFREQ / 'policy0'
+    cap, top = read(policy / 'scaling_max_freq'), read(policy / 'cpuinfo_max_freq')
+    if cap is None or top is None:
+        return None
+    return 'none' if int(cap) >= int(top) - 50_000 else str(round(int(cap) / 100_000) * 100)
+
 
 def catalog(unit=None, units=None):
     """Experiment specs; `unit` / `units` parameterize the app-freeze experiments."""
@@ -242,20 +293,19 @@ def catalog(unit=None, units=None):
     specs = [
         Setting('aspm', 'PCIe link power saving (ASPM)',
                 'Lets PCIe links (NVMe, Wi-Fi, GPU) sleep. Disabled at boot as an s2idle crash workaround; '
-                'restored before every suspend.',
+                'restored for every suspend (and back after it).',
                 aspm_get, lambda v: run(POWER_LAB + ['aspm', v]),
                 lambda cur: 'powersupersave' if cur != 'powersupersave' else 'performance',
                 root=True, sleep_restored=True, levels=lambda: ('powersupersave', 'performance')),
         Setting('apst', 'NVMe autonomous power states (APST)',
                 'Lets the SSD drop into low-power states when idle. Disabled at boot as an s2idle crash '
-                'workaround; restored before every suspend.',
+                'workaround; restored for every suspend (and back after it).',
                 lambda: read(apst_paths()[0]) if apst_paths() else None,
                 lambda v: run(POWER_LAB + ['apst', v]),
                 lambda cur: '100000' if cur == '0' else '0', root=True, sleep_restored=True,
                 levels=lambda: ('100000', '0')),
         Setting('boost', 'CPU boost', 'Clocks above base frequency for short bursts.',
-                lambda: read(SYS / 'devices/system/cpu/cpufreq/boost'),
-                lambda v: run(POWER_LAB + ['boost', v]),
+                boost_get, lambda v: run(POWER_LAB + ['boost', v]),
                 lambda cur: '0' if cur == '1' else '1', root=True, visible='Bursty work gets slower.',
                 levels=lambda: ('0', '1')),
         Setting('abm', 'Panel adaptive backlight (ABM)',
@@ -265,10 +315,18 @@ def catalog(unit=None, units=None):
                 lambda cur: '0' if cur not in (None, '0') else '3', root=True, visible='Slight contrast change.',
                 ac_managed=True, levels=lambda: ('3', '0')),
         Setting('profile', 'Power profile', 'power-profiles-daemon profile (platform profile and EPP).',
-                lambda: run(['powerprofilesctl', 'get']),
-                lambda v: run(['powerprofilesctl', 'set', v]),
+                lambda: run(['powerprofilesctl', 'get']), profile_set,
                 lambda cur: 'balanced' if cur == 'power-saver' else 'power-saver',
                 visible='Responsiveness changes.', ac_managed=True, levels=lambda: ('power-saver', 'balanced')),
+        Setting('gpu-dpm', 'GPU and memory clocks', 'amdgpu DPM low: pins the GPU, memory and fabric clocks at '
+                'their lowest (the fabric otherwise idles at 1600 MHz).',
+                gpu_dpm_get, lambda v: run(POWER_LAB + ['gpudpm', v]),
+                lambda cur: 'low' if cur != 'low' else 'auto', root=True,
+                visible='Video, WebGL and memory-heavy work get slower.', levels=lambda: ('low', 'auto')),
+        Setting('cpu-cap', 'CPU frequency cap', f'Caps every core at {CPU_CAP} MHz (base 3501, boost 4972).',
+                cpu_cap_get, lambda v: run(POWER_LAB + ['cpucap', v]),
+                lambda cur: CPU_CAP if cur == 'none' else 'none', root=True,
+                visible='Bursty work gets slower.', levels=lambda: (CPU_CAP, 'none')),
         Setting('refresh', 'Display refresh rate', 'Lower internal-panel refresh rate.',
                 refresh_get, lambda v: run(['niri', 'msg', 'output', niri_internal()['name'], 'mode', v]),
                 refresh_alternative, visible='Motion looks slightly less smooth.', levels=refresh_levels),
@@ -276,7 +334,7 @@ def catalog(unit=None, units=None):
     if wifi:
         specs.append(Setting(
             'wifi-ps', 'Wi-Fi power saving', 'Radio sleeps between beacons (adds latency).',
-            lambda: run(['iw', 'dev', wifi, 'get', 'power_save']).split(':')[-1].strip(),
+            lambda: run(['iw', 'dev', wifi, 'get', 'power_save']).split(':')[-1].strip(),  # Raises while gone.
             lambda v: run(POWER_LAB + ['wifips', v]),
             lambda cur: 'off' if cur == 'on' else 'on', root=True, visible='Network latency changes.',
             levels=lambda: ('on', 'off')))
@@ -454,6 +512,7 @@ def experiment(specs, minutes, only_locked=False, block=BLOCK, washout=WASHOUT, 
 
 
 GOALS = ('battery', 'comfort')  # What the panel's best combination optimizes.
+RECOMMEND = RUNTIME / 'recommend.json'  # Each goal's best combination, from battery-eta's latest fit.
 
 
 def preferences():
@@ -484,13 +543,14 @@ def goal():
     return chosen if chosen in GOALS else 'battery'
 
 
-def next_block(names, present):
-    """report.plan's next combination (numpy: only the automatic runner needs it)."""
+def next_block(names, present, run=None):
+    """report.plan's next combination for a block of `run` (numpy: only the
+    automatic runner needs it)."""
     import report
     now = time.time()
     minutes, events = report.load_range(now - 30 * 86400, now + 60)
-    plan = report.plan(minutes, events, names, present=present)
-    return plan['choice'], {'accuracy': plan['accuracy'], 'allowed': plan['allowed'],
+    plan = report.plan(minutes, events, names, present=present, group=report.block_group(run, now) if run else None)
+    return plan['choice'], {'accuracy': plan['accuracy'], 'cost': plan['cost'], 'allowed': plan['allowed'],
                             'combinations': plan['combinations']}
 
 
@@ -499,48 +559,56 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
     """Automatic experiments, for as long as they are enabled: each block, the
     combination of the pool's settings report.plan expects to sharpen the
     battery model most, among those unlikely to earn a 👎 while you are there.
-    Pauses (restoring the settings) on AC, and for qol.COOLDOWN after a 👎 (a
-    👍 resumes); a 👎 ends the block at once."""
+    Pauses (restoring the settings) on AC, for qol.COOLDOWN after a 👎
+    (`qol resume` ends that early), and while a setting can't be read or set
+    (no Wi-Fi interface, power-profiles-daemon failing); a 👎 ends the block at
+    once."""
     specs = specs if specs is not None else catalog()
     originals, number, mark = {}, 0, None
     started = clock.time()
     run_id = f'auto-{int(started)}'
 
     def restore(names=None):
-        failures = []
         for name in list(names if names is not None else originals):
             spec = specs[name]
             if spec.ac_managed and not battery():
                 continue  # udev already applied the AC value.
             try:
-                if spec.get() != originals[name]:
+                if spec.read() not in (None, originals[name]):
                     spec.set(originals[name])
-            except Exception as error:  # noqa: BLE001 - restore the rest first
-                failures.append(error)
-        if failures:
-            raise failures[0]
+            except Exception as error:  # noqa: BLE001 - restore the rest; the next pass retries
+                print(f'power-experiment: could not restore {name}: {error}', file=sys.stderr)
     try:
         while enabled():
             current = names(specs)
             for name in current:
-                originals.setdefault(name, specs[name].get())
+                if name not in originals and (value := specs[name].read()) is not None:
+                    originals[name] = value
             restore([name for name in originals if name not in current])  # Dropped from the pool.
             base = {'run': run_id, 'mode': 'auto', 'name': '+'.join(current), 'names': current,
                     'label': 'Automatic experiments', 'originals': originals, 'started': started,
                     'block_seconds': block, 'washout_seconds': washout, 'blocks': number}
             here = not locked()
+            missing = [specs[name].label for name in current if specs[name].read() is None]
             reason = ('no settings to test' if not current else 'on AC power' if not battery() else
-                      'resting after your 👎 (👍 resumes)' if resting() > 0 else None)
+                      'resting after your 👎' if resting() > 0 else f'{missing[0]} unavailable' if missing else None)
             if reason:
                 restore()
                 write_state(dict(base, status='paused', reason=reason), state_path)
                 clock.sleep(15)
                 continue
-            choice, plan = choose(current, here)
+            choice, plan = choose(current, here, run_id)
             values = {name: specs[name].levels()[0 if choice[name] else 1] for name in current}
-            for name in current:
-                if specs[name].get() != values[name]:
-                    specs[name].set(values[name])
+            try:
+                for name in current:
+                    if specs[name].read() != values[name]:
+                        specs[name].set(values[name])
+            except Exception as error:  # noqa: BLE001 - pause, put things back and retry
+                print(f'power-experiment: could not set {name}: {error}', file=sys.stderr)
+                restore()
+                write_state(dict(base, status='paused', reason=f'could not set {specs[name].label}'), state_path)
+                clock.sleep(60)
+                continue
             begin = clock.time()
             number += 1
             state = dict(base, status='running', block=number, blocks=number, plan=plan,
@@ -553,7 +621,7 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
                 clock.sleep(5)
                 suspended, mark = clock.suspended_since(mark)
                 if (suspended or not battery() or not enabled() or names(specs) != current or resting() > 0
-                        or any(specs[name].get() != values[name] for name in current)):
+                        or any(specs[name].read() != values[name] for name in current)):
                     break
             if clock.time() < state['block_end']:
                 write_state(dict(state, block_end=clock.time()), state_path)  # Ended early.
@@ -589,16 +657,45 @@ def command_restore():
         write_state(dict(state, status='finished', finished=time.time()))
 
 
+def recommendation(now=None):
+    """Each goal's best combination: battery-eta's recommend.json while under an
+    hour old, else computed now (numpy)."""
+    try:
+        recommend = json.loads(RECOMMEND.read_text())
+        if (now or time.time()) - recommend.get('updated', 0) <= 3600:
+            return recommend
+    except (OSError, ValueError):
+        pass
+    import eta
+    import report
+    now = time.time()
+    return eta.write_recommendations(*report.load_range(now - eta.WINDOW_DAYS * 86400, now + 60))
+
+
+def apply_goal(chosen, now=None, recommend=recommendation):
+    """Set `chosen`'s best measured combination — every setting in it, so it holds
+    whatever the settings are now — unless automatic experiments own them."""
+    if load_state().get('status') in ('running', 'paused'):
+        return
+    assignments = recommend(now).get(chosen, {}).get('apply')
+    if assignments:
+        command_apply(assignments)
+
+
+def load_state():
+    try:
+        return json.loads(STATE.read_text())
+    except (OSError, ValueError):
+        return {}
+
+
 def command_apply(assignments):
     """Set settings now (`name=value`), e.g. the panel's best combination.
-    Runtime only: a reboot, and for ASPM/APST a suspend, restores the defaults."""
-    try:
-        state = json.loads(STATE.read_text())
-    except (OSError, ValueError):
-        state = {}
-    if state.get('status') in ('running', 'paused'):
+    Runtime only: a reboot restores the defaults (ASPM/APST are off during each
+    suspend and come back after it)."""
+    if load_state().get('status') in ('running', 'paused'):
         raise SystemExit('an experiment is running; stop it first')
-    specs = catalog()
+    specs, failures = catalog(), []
     for assignment in assignments:
         name, _, value = assignment.partition('=')
         if name not in specs or not value:
@@ -608,8 +705,13 @@ def command_apply(assignments):
             if spec.levels is None:
                 raise SystemExit(f'{name} has no {value} value')
             value = spec.levels()[0 if value == 'saving' else 1]
-        if spec.get() != value:
-            spec.set(value)
+        try:
+            if spec.read() != value:
+                spec.set(value)
+        except Exception as error:  # noqa: BLE001 - set the others first
+            failures.append(f'{name}: {error}')
+    if failures:
+        raise SystemExit('could not set ' + '; '.join(failures))
 
 
 def describe(spec):
@@ -640,6 +742,8 @@ def main(argv=None):
     chosen.add_argument('names', nargs='*', metavar='name')
     chosen_goal = sub.add_parser('goal', help='what the best combination optimizes: battery or comfort')
     chosen_goal.add_argument('goal', nargs='?', choices=GOALS)
+    chosen_goal.add_argument('--apply', action='store_true',
+                             help="also set that goal's best measured combination now (not during experiments)")
     sub.add_parser('auto', help='the power-experiments.service body')
     sub.add_parser('resume', help='restart automatic experiments if enabled (after a manual run)')
     start = sub.add_parser('start', help='randomize one setting, or several together')
@@ -703,6 +807,7 @@ def main(argv=None):
     elif args.command == 'disable':
         ENABLED.unlink(missing_ok=True)
         run(['systemctl', '--user', 'stop', AUTO_UNIT], check=False)
+        apply_goal(goal())  # Back to the best combination for the goal (Battery unless Comfort is on).
     elif args.command == 'pool':
         if args.names:
             eligible = [name for name, spec in catalog().items() if spec.levels]
@@ -714,6 +819,8 @@ def main(argv=None):
     elif args.command == 'goal':
         if args.goal:
             prefer(goal=args.goal)
+            if args.apply:
+                apply_goal(args.goal)
         print(goal())
     elif args.command == 'auto':
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))

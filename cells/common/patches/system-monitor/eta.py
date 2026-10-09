@@ -337,6 +337,26 @@ def plus_minus(low, high):
     return f"<span size='small' alpha='70%'>±{clock((high - low) / 2)}</span>"
 
 
+RECOMMEND_KEYS = ('text', 'apply', 'change', 'gain', 'interval', 'delight')
+
+
+def write_recommendations(minutes, events, path=None):
+    """Each goal's best measured combination (report.recommendations) for the
+    battery menu and `power-experiment goal --apply`: recommend.json."""
+    rows = report.battery_rows(minutes)
+    power = sum(m['bat'] for m in rows) / len(rows) if rows else None
+    energy = report.full_energy(minutes)
+    levers = report.lever_effects(minutes, energy, power, replicates=100)
+    recs = report.recommendations(levers, report.qol_model(minutes, events), energy, power)
+    path = path or RUNTIME / 'recommend.json'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    written = {'updated': time.time(), **{goal: {k: r[k] for k in RECOMMEND_KEYS} for goal, r in recs.items()}}
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(written))
+    temporary.replace(path)
+    return written
+
+
 def read(path):
     try:
         return path.read_text().strip()
@@ -354,6 +374,10 @@ class Live:
         minutes, events = report.load_range(time.time() - WINDOW_DAYS * 86400, time.time() + 60)
         self.params = train(minutes, events)
         save_models(self.params)
+        try:
+            write_recommendations(minutes, events)
+        except Exception as error:  # noqa: BLE001 - the menu's lines must never stop the estimate
+            print(f'battery-eta: recommendations failed: {error}', file=sys.stderr)
         # Seed the recent window from the log so a restart is not blind.
         if not self.samples:
             for m in minutes[-15:]:

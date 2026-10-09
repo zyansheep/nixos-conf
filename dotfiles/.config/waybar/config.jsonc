@@ -60,9 +60,10 @@
     "orientation": "horizontal",
     "modules": [ "custom/battery-eta", "power-profiles-daemon" ]
   },
-  // Quality of life, as thumbs (qol.py): 👍 the laptop is fine right now, 👎 it is
-  // worse than it should be — automatic experiments then restore your settings,
-  // rest 10 minutes (a 👍 resumes them) and learn what to avoid. Right-click for
+  // Quality of life, as thumbs (qol.py): 👍 something is especially good right
+  // now, 👎 the laptop is worse than it should be — automatic experiments then
+  // restore your settings, rest 10 minutes (`qol resume` ends that early) and
+  // learn what to avoid. Right-click for
   // the battery panel's Experiments tab. qol signals SIGRTMIN+12 on each vote.
   "custom/qol-up": {
     "exec": "/run/current-system/sw/bin/qol waybar up",

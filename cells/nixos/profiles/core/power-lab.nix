@@ -26,14 +26,38 @@ _: {
       lspci [args...]        lspci (root: full capability dump)
       abm <0-4>              amdgpu panel_power_savings (ABM) on the internal panel
       aspm <policy>          pcie_aspm policy: default|performance|powersave|powersupersave
-      boost <0|1>            cpufreq boost (global + per-policy)
+      boost <0|1>            cpufreq boost per CPU (the global switch stays on)
       apst <microseconds>    NVMe APST at runtime via pm_qos_latency_tolerance_us (0 = off)
       wifips <on|off>        Wi-Fi power save on the wireless interface
+      gpudpm <auto|low>      amdgpu DPM level: low pins the GPU, memory and fabric clocks at their lowest
+      cpucap <MHz|none>      CPU frequency cap (scaling_max_freq on every policy)
       sleep-safe             restore the boot-time ASPM policy and NVMe APST limit (pre-sleep hook)
+      sleep-restore          put back what sleep-safe changed (post-resume hook)
       next-boot <default|psr|list>  boot the default or a specialisation entry on the next restart only
       sysfs <path> <value>   write <value> to a file under /sys
     USAGE
       exit 2
+    }
+    # Set the ASPM policy with every PCI function awake. A runtime-suspended
+    # function puts back the link control it saved before the change when it
+    # next resumes, and a multi-function link only enables what all of its
+    # functions enable, so changing it under suspended functions left the
+    # internal GPU/USB/audio and USB4 links without ASPM. The kernel ignores a
+    # write of the current policy, so a reapply goes through another one.
+    set_aspm() {
+      local controls now c value
+      controls=$(mktemp)
+      for c in /sys/bus/pci/devices/*/power/control; do
+        echo "$c $(cat "$c")" >> "$controls"
+        echo on > "$c" 2>/dev/null || true
+      done
+      now=$(grep -o '\[[a-z]*\]' /sys/module/pcie_aspm/parameters/policy | tr -d '[]')
+      if [ "$now" = "$1" ]; then
+        if [ "$1" = performance ]; then echo default; else echo performance; fi > /sys/module/pcie_aspm/parameters/policy
+      fi
+      echo "$1" > /sys/module/pcie_aspm/parameters/policy
+      while read -r c value; do echo "$value" > "$c" 2>/dev/null || true; done < "$controls"
+      rm -f "$controls"
     }
     cmd=''${1:-}; shift || true
     case "$cmd" in
@@ -67,13 +91,16 @@ _: {
         ;;
       aspm)
         [ $# -eq 1 ] && [[ "$1" =~ ^(default|performance|powersave|powersupersave)$ ]] || usage
-        echo "$1" > /sys/module/pcie_aspm/parameters/policy; cat /sys/module/pcie_aspm/parameters/policy
+        set_aspm "$1"; cat /sys/module/pcie_aspm/parameters/policy
         ;;
       boost)
+        # Per CPU, with the global switch left on: power-profiles-daemon writes
+        # the per-CPU files on every profile change (off for power-saver), and
+        # the kernel refuses those writes while boost is off globally.
         [ $# -eq 1 ] && [[ "$1" =~ ^[01]$ ]] || usage
-        echo "$1" > /sys/devices/system/cpu/cpufreq/boost
-        for p in /sys/devices/system/cpu/cpu*/cpufreq/boost; do echo "$1" > "$p" 2>/dev/null || true; done
-        echo "boost=$(cat /sys/devices/system/cpu/cpufreq/boost)"
+        echo 1 > /sys/devices/system/cpu/cpufreq/boost
+        for p in /sys/devices/system/cpu/cpufreq/policy*/boost; do echo "$1" > "$p"; done
+        echo "boost=$1 max_mhz=$(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) / 1000 ))"
         ;;
       apst)
         [ $# -eq 1 ] && [[ "$1" =~ ^[0-9]+$ ]] || usage
@@ -86,18 +113,56 @@ _: {
           iw dev "$(basename "$i")" set power_save "$1"; iw dev "$(basename "$i")" get power_save
         done
         ;;
+      gpudpm)
+        [ $# -eq 1 ] && [[ "$1" =~ ^(auto|low)$ ]] || usage
+        for f in /sys/class/drm/card*/device/power_dpm_force_performance_level; do echo "$1" > "$f"; echo "$f=$(cat "$f")"; done
+        ;;
+      cpucap)
+        # none = the highest the CPU can go (amd_pstate_max_freq, with boost):
+        # the cap then follows boost, which sets the CPU's own maximum.
+        [ $# -eq 1 ] && [[ "$1" =~ ^([0-9]{3,4}|none)$ ]] || usage
+        for p in /sys/devices/system/cpu/cpufreq/policy*; do
+          if [ "$1" = none ]; then cat "$p/amd_pstate_max_freq" 2>/dev/null || cat "$p/cpuinfo_max_freq"; else echo "$1"000; fi > "$p/scaling_max_freq"
+        done
+        echo "max_mhz=$(( $(cat /sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq) / 1000 ))"
+        ;;
       sleep-safe)
-        # power-experiment may have relaxed the s2idle crash workarounds while
-        # awake; put back whatever the kernel command line asked for.
+        # power-experiment (an experiment block, or an applied best combination)
+        # may have relaxed the s2idle crash workarounds while awake; put back
+        # whatever the kernel command line asked for, noting what was there for
+        # sleep-restore. The crashes happen on the way into s2idle.
+        mkdir -p /run/power-lab; saved=/run/power-lab/pre-sleep; : > "$saved"
         policy=$(grep -o 'pcie_aspm.policy=[a-z]*' /proc/cmdline | cut -d= -f2 || true)
         current=$(grep -o '\[[a-z]*\]' /sys/module/pcie_aspm/parameters/policy | tr -d '[]')
-        if [ -n "$policy" ] && [ "$policy" != "$current" ]; then echo "$policy" > /sys/module/pcie_aspm/parameters/policy; fi
+        if [ -n "$policy" ] && [ "$policy" != "$current" ]; then
+          echo "aspm $current" >> "$saved"
+          set_aspm "$policy"
+        fi
         latency=$(grep -o 'nvme_core.default_ps_max_latency_us=[0-9]*' /proc/cmdline | cut -d= -f2 || true)
         if [ -n "$latency" ]; then
           for f in /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us; do
-            [ "$(cat "$f")" = "$latency" ] || echo "$latency" > "$f"
+            value=$(cat "$f")
+            if [ "$value" != "$latency" ]; then
+              echo "apst $f $value" >> "$saved"
+              echo "$latency" > "$f"
+            fi
           done
         fi
+        ;;
+      sleep-restore)
+        # After resume (post-resume hook): put back what sleep-safe changed, so
+        # an applied combination or a running experiment survives the suspend.
+        saved=/run/power-lab/pre-sleep
+        [ -s "$saved" ] || exit 0
+        while read -r kind path value; do
+          case "$kind" in
+            aspm) [[ "$path" =~ ^(default|performance|powersave|powersupersave)$ ]] && set_aspm "$path" ;;
+            apst) [[ "$path" == /sys/class/nvme/nvme*/power/pm_qos_latency_tolerance_us && "$value" =~ ^[0-9]+$ ]] \
+                    && [ -w "$path" ] && echo "$value" > "$path" ;;
+          esac
+        done < "$saved"
+        rm -f "$saved"
+        echo "restored: aspm=$(grep -o '\[[a-z]*\]' /sys/module/pcie_aspm/parameters/policy | tr -d '[]')"
         ;;
       next-boot)
         [ $# -eq 1 ] && [[ "$1" =~ ^(default|psr|list)$ ]] || usage
@@ -123,9 +188,11 @@ _: {
   '';
 in {
   environment.systemPackages = [powerLab];
-  # Runs as root before every suspend (pre-sleep.service), after any user-level
-  # experiment had a chance to change ASPM/APST.
+  # Run as root around every suspend (pre-sleep.service / post-resume.service):
+  # the crash workarounds hold on the way into s2idle, and whatever ASPM/APST
+  # power-experiment had set comes back after resume.
   powerManagement.powerDownCommands = "${powerLab}/bin/power-lab sleep-safe || true";
+  powerManagement.resumeCommands = "${powerLab}/bin/power-lab sleep-restore || true";
   security.sudo-rs.extraRules = [
     {
       users = ["zyansheep"];

@@ -137,6 +137,22 @@ class EtaTests(unittest.TestCase):
             eta.save_models(dict(params, fitted=__import__('time').time()), path)
             self.assertAlmostEqual(eta.load_models(path)['attribution']['chip'], params['attribution']['chip'])
 
+    def test_recommendations_for_the_battery_menu(self):
+        from test_report import factorial_minutes
+        minutes = factorial_minutes(blocks=120)
+        for m in minutes:
+            m.update(pct=50, volts=15.5, charge=2e6, unit='uAh')
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'recommend.json'
+            eta.write_recommendations(minutes, [], path)
+            written = __import__('json').loads(path.read_text())
+        self.assertEqual(set(written), {'updated', 'battery', 'comfort'})
+        self.assertEqual(set(written['battery']), set(eta.RECOMMEND_KEYS))
+        # Every setting saves here, so Battery turns on whichever savings are off now.
+        self.assertTrue(written['battery']['apply'])
+        self.assertTrue(all(a.endswith('=saving') for a in written['battery']['apply']))
+        self.assertEqual(written['comfort']['change'], 'same as Battery until a 👍')
+
     def test_plus_minus_is_half_the_interval(self):
         self.assertIn('±0:15', eta.plus_minus(1.0, 1.5))
 

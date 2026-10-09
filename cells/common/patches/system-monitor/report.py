@@ -351,7 +351,7 @@ def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_
 # Settings measured by experiment (names match experiment.catalog()) → their
 # key in a minute's `set`.
 SETTING = {'aspm': 'aspm', 'apst': 'apst', 'wifi-ps': 'wifi_ps', 'abm': 'abm', 'refresh': 'hz',
-           'boost': 'boost', 'profile': 'profile'}
+           'boost': 'boost', 'profile': 'profile', 'gpu-dpm': 'gpu_dpm', 'cpu-cap': 'cpu_cap'}
 
 
 def saving(name, value, top_hz=None):
@@ -374,6 +374,10 @@ def saving(name, value, top_hz=None):
             return str(value) == '0'
         if name == 'profile':  # platform_profile per minute, power-profiles-daemon's name from the runner
             return value in ('low-power', 'quiet', 'power-saver')
+        if name == 'gpu-dpm':
+            return value == 'low'
+        if name == 'cpu-cap':  # The runner's value; minutes compare max_mhz with the CPU's maximum.
+            return str(value) != 'none'
     except (TypeError, ValueError):
         return False
     return False
@@ -382,19 +386,52 @@ def saving(name, value, top_hz=None):
 # These change CPU frequency, and so the CPU load the workload correction
 # uses. A consequence of the setting must not be adjusted away, so they are
 # estimated without that correction and need more battery time.
-CPU_LEVERS = {'boost', 'profile'}
+CPU_LEVERS = {'boost', 'profile', 'cpu-cap', 'gpu-dpm'}  # gpu-dpm: memory clocks slow CPU work too.
 COVARIATES = ('load', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 PRIOR_SD = {'main': 5.0, 'pair': 1.0}  # W: interactions are shrunk (mildly) toward zero.
 BLOCK_MINUTES = 4  # power-experiment's blocks (experiment.BLOCK); the first minute is washout.
 
 
-def lever_states(settings, top_hz, chosen=None):
-    """{name: in its saving state}. `chosen` — the values an experiment set for the
-    settings it randomized — wins over what was logged: logging can lag, and
-    before 2026-10-07 the APST value logged was nvme_core's boot default."""
+def lever_states(settings, top, chosen=None):
+    """{name: in its saving state}; `top` is tops(minutes). `chosen` — the values an
+    experiment set for the settings it randomized — wins over what was logged:
+    logging can lag, and before 2026-10-07 the APST value logged was nvme_core's
+    boot default. Boost is the exception. Until 2026-10-08 experiments set, and
+    minutes logged, only the global switch, while power-profiles-daemon turns
+    boost off per CPU for power-saver; most "on" blocks under power-saver ran
+    without it. So it comes from the CPU's frequency cap: off while capped below
+    the highest cap seen."""
     chosen = chosen or {}
-    return {name: saving(name, chosen[name] if name in chosen else settings.get(key), top_hz)
-            for name, key in SETTING.items()}
+    states = {name: saving(name, chosen[name] if name in chosen else settings.get(key), top.get('hz'))
+              for name, key in SETTING.items()}
+    # The CPU's own maximum (boost) is cpu_mhz since layout 6; before, no cap was
+    # ever set, so the cap (mhz) was it.
+    highest = max(top.get('mhz') or 0, top.get('cpu_mhz') or 0)
+    maximum = settings.get('cpu_mhz') or settings.get('mhz')
+    if maximum is not None and highest:
+        states['boost'] = maximum < highest - 100
+    if settings.get('cpu_mhz') and settings.get('mhz') is not None:
+        states['cpu-cap'] = settings['mhz'] < settings['cpu_mhz'] - 100
+    return states
+
+
+def own_settings(minutes, top=None):
+    """Your settings, as saving states: the latest minute's outside experiments
+    (the runner puts them back), except AC_MANAGED ones, which come from the
+    latest such minute on battery."""
+    top = top or tops(minutes)
+    logged = [m for m in minutes if m.get('set')]
+    own = [m for m in logged if not m.get('exp')] or logged
+    states = lever_states(own[-1]['set'] if own else {}, top)
+    battery = [m for m in own if m['st'] == 'D']
+    if battery:
+        states.update({n: on for n, on in lever_states(battery[-1]['set'], top).items() if n in AC_MANAGED})
+    return states
+
+
+# udev switches the profile and ABM on AC/battery changes, and each profile
+# change sets boost (power-profiles-daemon: off for power-saver).
+AC_MANAGED = {'profile', 'abm', 'boost'}
 
 
 def experiment_values(exp, levers):
@@ -402,14 +439,21 @@ def experiment_values(exp, levers):
     return exp[5] if isinstance(exp[5], dict) else {levers[0]: exp[5]} if len(levers) == 1 else {}
 
 
-def top_refresh(minutes):
-    return max((m['set'].get('hz') for m in minutes if m.get('set', {}).get('hz')), default=None)
+def tops(minutes):
+    """The highest refresh rate and CPU frequency cap logged: their normal states."""
+    return {key: max((m['set'][key] for m in minutes if (m.get('set') or {}).get(key)), default=None)
+            for key in ('hz', 'mhz', 'cpu_mhz')}
+
+
+def block_group(run, t):
+    """A block's baseline group: its run and day (an automatic run goes on for weeks)."""
+    return f"{run}@{datetime.date.fromtimestamp(t).isoformat()}"
 
 
 def lever_blocks(minutes):
     """Clean blocks of setting experiments (single or combined): battery W and
     workload means, and which settings were in their saving state."""
-    top = top_refresh(minutes)
+    top = tops(minutes)
     acc = {}
     for m in minutes:
         exp = m.get('exp')
@@ -419,8 +463,7 @@ def lever_blocks(minutes):
         if not levers:
             continue  # App-freezing runs are analysed as paired A/B blocks.
         chosen = experiment_values(exp, levers)
-        # Baselines are per run and day: an automatic run goes on for weeks.
-        group = f"{exp[0]}@{datetime.date.fromtimestamp(m['t']).isoformat()}"
+        group = block_group(exp[0], m['t'])
         block = acc.setdefault((exp[0], exp[2]), {'run': group, 'levers': levers, 't': m['t'], 'seconds': 0.0,
                                                   'sums': collections.defaultdict(float),
                                                   'states': collections.Counter()})
@@ -453,8 +496,8 @@ def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_b
     randomized it), workload, an indicator per setting (saving state) and per
     pair of settings randomized together (shrunk toward zero: most pairs don't
     interact). CPU settings come from a second fit without the CPU-load
-    correction. Effects are for the settings as they were in the latest
-    battery minute. Intervals: moving-block bootstrap over consecutive blocks.
+    correction. Effects are for your settings (own_settings: the latest
+    battery minute outside experiments). Intervals: moving-block bootstrap over consecutive blocks.
     """
     blocks = lever_blocks(minutes)
     runs = sorted({b['run'] for b in blocks})
@@ -471,8 +514,7 @@ def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_b
     pairs = [(a, c) for i, a in enumerate(shown) for c in shown[i + 1:]
              if all(sum(1 for b in together(a, c) if (b['x'][a], b['x'][c]) == combo) >= min_blocks
                     for combo in ((False, False), (False, True), (True, False), (True, True)))]
-    battery = [m for m in minutes if m['st'] == 'D' and m.get('set')] or [m for m in minutes if m.get('set')]
-    current = lever_states(battery[-1]['set'] if battery else {}, top_refresh(minutes))
+    current = own_settings(minutes)
     result = {'effects': [], 'interactions': [], 'blocks': len(blocks), 'current': current, 'coef': {},
               'samples': {}, 'sigma': None, 'sigma_raw': None,
               'progress': {n: split([b for b in blocks if n in b['levers']], n) for n in randomized}}
@@ -576,7 +618,7 @@ QOL_RISK = 0.1  # Acceptable chance per 4-minute block that a combination earns 
 # either vote starts at 2% per block; for 👎 a noticeable setting starts out
 # multiplying the odds by ~2.5 (so experiments begin with about one at a time)
 # and a quiet one at no effect; for 👍 every setting starts at no effect, either way.
-NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps'}
+NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps', 'gpu-dpm', 'cpu-cap'}
 VOTE_BASE = 0.02
 VOTE_PRIOR = {'down': {'quiet': (0.0, 1.0), 'noticeable': (0.9, 2.0)},
               'up': {'quiet': (0.0, 1.5), 'noticeable': (0.0, 2.0)}}
@@ -589,7 +631,7 @@ def vote_times(events, vote):
 def qol_windows(minutes, events):
     """(setting states, {vote: given}) per 4-minute window — an experiment block,
     or a stretch outside experiments — that you were there for."""
-    times, top = {v: vote_times(events, v) for v in VOTE_PRIOR}, top_refresh(minutes)
+    times, top = {v: vote_times(events, v) for v in VOTE_PRIOR}, tops(minutes)
     windows = {}
     for m in minutes:
         if m.get('qol') is None:
@@ -663,22 +705,29 @@ def features(config, names):
     return [float(config[n]) for n in names] + [float(config[a] and config[b]) for a, b in pairs]
 
 
-def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=NOTICEABLE):
+def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=NOTICEABLE, group=None):
     """The next block's combination of `names` ({name: saving state}) for automatic experiments.
 
     The setting model's ridge fit is a Bayesian linear model (its penalties are
     the Gaussian prior), so its posterior is closed-form. Candidates are the
     combinations whose quality-of-life risk is acceptable (all of them while
-    nobody is there). For each, the expected reduction in the variance of the
-    model's predictions across all candidates if it were observed next —
-    Σ_c Cov(c, x)² / (σ² + Var x), a greedy integrated-variance design — and
-    one is sampled in proportion to it. Today's baseline is part of the
-    posterior, so a block that would only pin it down earns nothing.
+    nobody is there). Each candidate's information is the expected reduction in
+    the variance of the model's predictions across all candidates if it were
+    observed next — Σ_c Cov(c, x)² / (σ² + Var x), a greedy integrated-variance
+    design — and its cost (regret) the W it is expected to draw above the best
+    candidate, over draws from the posterior. As in information-directed
+    sampling, one is sampled in proportion to information / (cost +
+    REGRET_FLOOR)², so blocks stay with combinations that might be best —
+    experimenting costs little battery — while still sharpening the model.
+    The next block shares a baseline with the earlier blocks of its `group`
+    (block_group: the running run, today), so it is compared with them; a block
+    in a new group (`group` None) only pins down its own baseline at first.
     """
     rng = rng or np.random.default_rng()
     blocks = lever_blocks(minutes)
     sigma = sigma or block_sigma(blocks) or 2.0
-    groups = sorted({b['run'] for b in blocks} | {'next'})
+    group = group or 'next'
+    groups = sorted({b['run'] for b in blocks} | {group})
     k = len(groups) + len(COVARIATES)
     rows = np.array([[*(float(b['run'] == g) for g in groups), *(b[c] for c in COVARIATES), *features(b['x'], names)]
                      for b in blocks]).reshape(-1, k + len(features(dict.fromkeys(names, False), names)))
@@ -687,9 +736,11 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
                 + [PRIOR_SD['pair']] * (len(names) * (len(names) - 1) // 2))
     precision = rows.T @ (rows * weights[:, None]) / sigma ** 2 + np.diag(1 / np.array(prior_sd) ** 2)
     cov = np.linalg.inv(precision)
+    cov = (cov + cov.T) / 2
+    mean = cov @ (rows.T @ (weights * np.array([b['bat'] for b in blocks]))) / sigma ** 2
     qol = qol_model(minutes, events, noticeable)
     battery = [m for m in minutes if m['st'] == 'D' and m.get('set')]
-    now = lever_states(battery[-1]['set'], top_refresh(minutes)) if battery else {}  # Settings outside `names`.
+    now = lever_states(battery[-1]['set'], tops(minutes)) if battery else {}  # Settings outside `names`.
     configs = [dict(zip(names, combo)) for combo in itertools.product((False, True), repeat=len(names))]
     allowed = ([c for c in configs if not present or qol_risk(qol, dict(now, **c)) <= QOL_RISK]
                or [dict.fromkeys(names, False)])
@@ -697,15 +748,23 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     workload = [float(np.mean([m.get(c) or 0 for m in recent])) if recent else 0.0 for c in COVARIATES]
     # A prediction of interest is a contrast (no baseline); an observation includes today's.
     contrast = np.array([[0.0] * k + features(c, names) for c in allowed])
-    observed = np.array([[float(g == 'next') for g in groups] + workload + features(c, names) for c in allowed])
+    observed = np.array([[float(g == group) for g in groups] + workload + features(c, names) for c in allowed])
     cross = contrast @ cov @ observed.T
     gain = (cross ** 2).sum(axis=0) / (sigma ** 2 + np.einsum('ij,jk,ik->i', observed, cov, observed))
-    chance = gain / gain.sum() if gain.sum() > 0 else np.full(len(allowed), 1 / len(allowed))
-    choice = allowed[rng.choice(len(allowed), p=chance)]
+    # W each candidate draws above every setting normal, per posterior draw.
+    draws = rng.multivariate_normal(mean[k:], cov[k:, k:], size=REGRET_DRAWS, method='eigh') @ contrast[:, k:].T
+    regret = (draws - draws.min(axis=1, keepdims=True)).mean(axis=0)
+    score = gain / (regret + REGRET_FLOOR) ** 2
+    chance = score / score.sum() if score.sum() > 0 else np.full(len(allowed), 1 / len(allowed))
+    index = rng.choice(len(allowed), p=chance)
     spread = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', contrast, cov, contrast), 0))
-    return {'choice': choice, 'allowed': len(allowed), 'combinations': len(configs),
+    return {'choice': allowed[index], 'cost': float(regret[index]), 'allowed': len(allowed), 'combinations': len(configs),
             'accuracy': float(1.645 * spread.mean()) if len(spread) else None,
             'least_certain': allowed[int(np.argmax(spread))] if len(spread) else None, 'qol': qol, 'sigma': sigma}
+
+
+REGRET_DRAWS = 300  # Posterior draws for each candidate's expected cost.
+REGRET_FLOOR = 0.3  # W: keeps a candidate that is surely best from taking every block.
 
 
 def block_sigma(blocks):
@@ -716,6 +775,68 @@ def block_sigma(blocks):
     y = np.array([b['bat'] for b in blocks])
     resid = y - x @ np.linalg.lstsq(x, y, rcond=None)[0]
     return float(np.sqrt(np.sum(resid ** 2) / (len(y) - x.shape[1])))
+
+
+# How to say a setting is in its (power-saving, normal) state.
+PHRASES = {'aspm': ('ASPM on', 'ASPM off'), 'apst': ('APST on', 'APST off'),
+           'wifi-ps': ('Wi-Fi power saving on', 'Wi-Fi power saving off'), 'abm': ('ABM on', 'ABM off'),
+           'refresh': ('lower refresh rate', 'full refresh rate'), 'boost': ('CPU boost off', 'CPU boost on'),
+           'profile': ('power-saver profile', 'balanced profile'),
+           'gpu-dpm': ('GPU clocks low', 'GPU clocks automatic'), 'cpu-cap': ('CPU capped at 2 GHz', 'CPU uncapped')}
+GOALS = ('battery', 'comfort')
+
+
+def gain_parts(gain):
+    """('+14 min', '−8 … +51'): minutes per full charge and the 90% interval ('' when unknown)."""
+    if not gain or gain.get('minutes') is None:
+        return '', ''
+    if not math.isfinite(gain['minutes']):
+        return 'unbounded', ''
+    signed = lambda minutes: f'{minutes:+.0f}'.replace('-', '−')
+    low, high = gain.get('low'), gain.get('high')
+    bounded = low is not None and high is not None and math.isfinite(low) and math.isfinite(high)
+    return f"{signed(gain['minutes'])} min", f'{signed(low)} … {signed(high)}' if bounded else ''
+
+
+def gain_text(gain):
+    """'+14 min (−8 … +51)': minutes per full charge and the 90% interval."""
+    minutes, interval = gain_parts(gain)
+    return f'{minutes} ({interval})' if interval else minutes
+
+
+def recommendations(levers, quality, energy=None, power=None):
+    """The best measured combination for each goal, among those unlikely to earn a
+    👎: 'battery' the lowest draw, 'comfort' the likeliest 👍 (then the lowest
+    draw; Battery's until a 👍 exists to learn from). Each: the combination,
+    `apply` (power-experiment apply arguments for all of it), what it changes
+    from your settings (`change`, with `gain` and `interval` per full charge, and for comfort
+    `delight`, the 👍 chance per block now → then) and all of it as `text`."""
+    measured = {e['experiment'] for e in levers['effects']}
+    fine = lambda c: qol_risk(quality, c) <= QOL_RISK
+    learned = bool(quality['up']['votes'])
+    keys = {'battery': None,
+            'comfort': (lambda c: (-delight(quality, c), predicted(levers['coef'], c))) if learned else None}
+    out = {}
+    for goal, key in keys.items():
+        best = best_config(levers, measured, energy, power, feasible=fine, key=key)
+        entry = {'best': best, 'apply': [], 'change': 'nothing measured yet', 'gain': '', 'interval': '',
+                 'delight': ''}
+        if best:  # Every setting in it: applying must hold wherever the settings are now.
+            entry['apply'] = [f"{n}={'saving' if on else 'normal'}" for n, on in best['config'].items()]
+            # Non-breaking inside each setting, so wrapped lines break only between settings.
+            entry['change'] = ', '.join(PHRASES.get(n, (n, n))[0 if best['config'][n] else 1].replace(' ', '\u00a0')
+                                        for n in best['changes']) or 'already set'
+            if best['changes']:
+                entry['gain'], entry['interval'] = gain_parts(best)
+            if goal == 'comfort' and not learned:
+                entry['change'] = 'same as Battery until a 👍'
+            elif goal == 'comfort' and best['changes']:
+                now, then = (delight(quality, c) for c in (levers['current'], {**levers['current'], **best['config']}))
+                entry['delight'] = f'{100 * now:.0f}% → {100 * then:.0f}%'
+        entry['text'] = ' · '.join(filter(None, [entry['change'], entry['delight'] and f"👍 {entry['delight']}",
+                                                 best and best['changes'] and gain_text(best)]))
+        out[goal] = entry
+    return out
 
 
 def hours_needed(sigma, precision=0.5, block_minutes=BLOCK_MINUTES):

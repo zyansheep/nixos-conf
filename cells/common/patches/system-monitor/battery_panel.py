@@ -25,6 +25,7 @@ import eta  # noqa: E402
 import experiment  # noqa: E402
 import qol  # noqa: E402
 import report  # noqa: E402
+from report import PHRASES, gain_text  # noqa: E402
 
 # Categorical slots in validated order (dark surface #222226): adjacent stack
 # pairs clear CVD ΔE 8.4 / normal 19.3. Neutrals carry the always-on baseline.
@@ -39,11 +40,6 @@ INK, MUTED, GRID = (1, 1, 1), (1, 1, 1, .68), (1, 1, 1, .08)
 RANGES = {'6 h': 6 * 3600, 'Day': 24 * 3600, 'Week': 7 * 24 * 3600}
 FREEZES = ('freeze', 'freeze-apps')
 BATTERY_HOURS = [1, 2, 4, 8, 24]  # Experiment length choices, in hours of battery time.
-# How to say a setting is in its (power-saving, normal) state.
-PHRASES = {'aspm': ('ASPM on', 'ASPM off'), 'apst': ('APST on', 'APST off'),
-           'wifi-ps': ('Wi-Fi power saving on', 'Wi-Fi power saving off'), 'abm': ('ABM on', 'ABM off'),
-           'refresh': ('lower refresh rate', 'full refresh rate'), 'boost': ('CPU boost off', 'CPU boost on'),
-           'profile': ('power-saver profile', 'balanced profile')}
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 
 
@@ -613,16 +609,6 @@ class GainBar(Gtk.DrawingArea):
             cr.stroke()
 
 
-def gain_text(gain):
-    if not gain or gain.get('minutes') is None:
-        return ''
-    if not math.isfinite(gain['minutes']):
-        return 'unbounded'
-    interval = (f" ({gain['low']:+.0f} … {gain['high']:+.0f})"
-                if gain.get('low') is not None and math.isfinite(gain['low']) and math.isfinite(gain['high']) else '')
-    return f"{gain['minutes']:+.0f} min{interval}"
-
-
 def shared_scale(gains):
     values = [v for g in gains if g for v in (g.get('minutes'), g.get('low'), g.get('high'))
               if v is not None and math.isfinite(v)]
@@ -842,8 +828,8 @@ class BatteryPanel(Adw.Application):
         self.best_label.add_css_class('result')
         best.append(self.best_label)
         self.apply_button = Gtk.Button(label='Apply', valign=Gtk.Align.CENTER)
-        self.hint(self.apply_button, 'Until reboot. ASPM and APST also revert at the next suspend (the crash '
-                                     'workaround), ABM and the profile at the next plug change.')
+        self.hint(self.apply_button, 'Until reboot. ASPM and APST are off during each suspend (the crash '
+                                     'workaround) and come back after it; ABM and the profile follow AC.')
         self.apply_button.connect('clicked', lambda _b: self.apply_best())
         best.append(self.apply_button)
         page.append(best)
@@ -1101,7 +1087,7 @@ class BatteryPanel(Adw.Application):
         else:
             self.together.set_text('')
         self.together.set_visible(bool(self.together.get_text()))
-        self.fill_best(effects, quality)
+        self.fill_best(quality)
         rows, note = model_rows(result)
         self.whatif.set_data(rows)
         self.whatif_note.set_text(note)
@@ -1175,48 +1161,28 @@ class BatteryPanel(Adw.Application):
 
     def set_goal(self, goal):
         self.result['goal'] = goal
-        self.fill_best({e['experiment']: e for e in self.result['levers']['effects']}, self.quality)
-        self.command(['power-experiment', 'goal', goal], done=None)
+        self.fill_best(self.quality)
+        self.command(['power-experiment', 'goal', goal, '--apply'], done=None)
 
-    def fill_best(self, effects, quality):
-        """The best measured combination for the goal, among those unlikely to earn a 👎: the
-        lowest draw (Battery), or the most likely to feel especially good, then the lowest draw (Comfort)."""
-        levers, result = self.result['levers'], self.result
+    def fill_best(self, quality):
+        """What each goal's best measured combination changes, the chosen goal's first;
+        switching goals applies it (unless automatic experiments own the settings)."""
+        result, self.quality = self.result, quality
         goal = result.get('goal', 'battery')
-        self.quality = quality
         self.syncing = True
         self.goal_buttons[goal].set_active(True)
         self.syncing = False
-        fine = lambda c: report.qol_risk(quality, c) <= report.QOL_RISK
-        key = ((lambda c: (-report.delight(quality, c), report.predicted(levers['coef'], c)))
-               if goal == 'comfort' else None)
-        best = report.best_config(levers, set(effects), result.get('energy'), result.get('power'), feasible=fine, key=key)
-        self.best = None
-        aim = 'feel especially good' if goal == 'comfort' else 'save battery'
-        if not best:
-            self.best_label.set_text('The best combination appears once settings have been measured.')
-        elif not best['changes']:
-            self.best_label.set_text(f'Your battery settings already {aim} best of what has been measured'
-                                     + (' (no 👍 yet, so this is the same as Battery).'
-                                        if goal == 'comfort' and not quality['up']['votes'] else '.'))
-        else:
-            self.best = best
-            change = ', '.join(PHRASES.get(n, (n, n))[0 if best['config'][n] else 1] for n in best['changes'])
-            if goal == 'comfort':
-                now, then = (report.delight(quality, c) for c in (levers['current'], {**levers['current'], **best['config']}))
-                self.best_label.set_text(f"Most likely to feel especially good: {change} → 👍 {100 * now:.0f}% → "
-                                         f"{100 * then:.0f}% per block, {gain_text(best)} of battery per charge.")
-            else:
-                self.best_label.set_text(f"Best for battery, without likely 👎s: {change} → {gain_text(best)} per "
-                                         'charge.')
+        recs = report.recommendations(result['levers'], quality, result.get('energy'), result.get('power'))
+        self.best = recs[goal] if recs[goal]['apply'] else None
+        order = (goal,) + tuple(g for g in report.GOALS if g != goal)
+        self.best_label.set_text('\n'.join(f"{g.capitalize()}: {recs[g]['text']}" for g in order))
         self.apply_button.set_visible(self.best is not None)
         self.apply_button.set_sensitive(self.experiment_state().get('status') not in ('running', 'paused'))
 
     def apply_best(self):
         if self.best:
-            self.command(['power-experiment', 'apply'] + [f"{n}={'saving' if self.best['config'][n] else 'normal'}"
-                                                          for n in self.best['changes']],
-                         done='Applied until reboot (ASPM/APST until the next suspend).')
+            self.command(['power-experiment', 'apply', *self.best['apply']],
+                         done='Applied until reboot.')
 
     def freeze_row(self, active):
         row = Gtk.Box(spacing=10)

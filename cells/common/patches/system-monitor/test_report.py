@@ -184,10 +184,35 @@ class LeverTests(unittest.TestCase):
 
     def test_settings_read_both_value_formats_and_the_experiments_value_wins(self):
         logged = {'apst': '0', 'abm': 3, 'hz': 48.0, 'profile': 'low-power', 'wifi_ps': 'off,on'}
-        states = report.lever_states(logged, 60.0, chosen={'apst': '100000', 'refresh': '2256x1504@59.999'})
+        states = report.lever_states(logged, {'hz': 60.0}, chosen={'apst': '100000', 'refresh': '2256x1504@59.999'})
         self.assertEqual((states['apst'], states['abm'], states['refresh'], states['profile'], states['wifi-ps']),
                          (True, True, False, True, False))
         self.assertTrue(report.saving('profile', 'power-saver') and report.saving('abm', '3'))
+
+    def test_boost_comes_from_the_frequency_cap_not_the_global_switch(self):
+        top = {'hz': 60.0, 'mhz': 4972}
+        # power-saver turned boost off per CPU while the global switch (and the experiment) said on.
+        self.assertTrue(report.lever_states({'boost': '1', 'mhz': 3501}, top, chosen={'boost': '1'})['boost'])
+        self.assertFalse(report.lever_states({'boost': '1', 'mhz': 4972}, top)['boost'])
+        self.assertTrue(report.lever_states({'boost': '0'}, top)['boost'])  # Minutes from before the cap was kept.
+        # Since layout 6 the CPU's own maximum says if boost is on, under a cap too.
+        capped = report.lever_states({'mhz': 2000, 'cpu_mhz': 4972, 'gpu_dpm': 'low'}, dict(top, cpu_mhz=4972))
+        self.assertEqual((capped['boost'], capped['cpu-cap'], capped['gpu-dpm']), (False, True, True))
+        plain = report.lever_states({'mhz': 3501, 'cpu_mhz': 3501, 'gpu_dpm': 'auto'}, top)
+        self.assertEqual((plain['boost'], plain['cpu-cap'], plain['gpu-dpm']), (True, False, False))
+        self.assertFalse(report.lever_states({'mhz': 3501}, top, chosen={'cpu-cap': 'none'})['cpu-cap'])
+
+    def test_your_settings_are_the_latest_outside_experiments(self):
+        minutes = factorial_minutes(blocks=4)
+        own = dict(minutes[0], t=minutes[0]['t'] - 60, exp=None,
+                   set={'aspm': 'performance', 'apst': '0', 'boost': '1', 'hz': 60.0})
+        states = report.own_settings([own] + minutes)
+        self.assertEqual((states['aspm'], states['apst'], states['boost']), (False, False, False))
+        # On AC: the latest minute, but the profile, ABM and boost as they were on battery.
+        plugged = dict(own, t=minutes[-1]['t'] + 60, st='C',
+                       set={'aspm': 'powersupersave', 'apst': '0', 'boost': '0', 'profile': 'balanced', 'hz': 60.0})
+        states = report.own_settings([own] + minutes + [plugged])
+        self.assertEqual((states['aspm'], states['boost'], states['profile']), (True, False, False))
 
     def test_no_experiments_means_no_effects(self):
         minutes = [dict(m, exp=None) for m in factorial_minutes(blocks=20)]
@@ -245,6 +270,23 @@ class PlanTests(unittest.TestCase):
                                                                     report.predicted(levers['coef'], c)))
         self.assertEqual(battery['config'], {'refresh': True, 'aspm': True})
         self.assertEqual(comfort['config'], {'refresh': False, 'aspm': True})  # ASPM is free: keep its saving.
+        recs = report.recommendations(levers, models, energy=50, power=15)
+        self.assertEqual(sorted(recs['battery']['apply']), ['aspm=saving', 'refresh=saving'])
+        self.assertEqual(sorted(recs['comfort']['apply']), ['aspm=saving', 'refresh=normal'])  # All of it.
+        self.assertEqual(recs['comfort']['change'], 'ASPM\u00a0on')
+        self.assertRegex(recs['comfort']['delight'], r'^\d+% → \d+%$')
+        self.assertRegex(recs['battery']['gain'], r'^\+\d+ min$')
+        self.assertEqual(recs['comfort']['text'], f"ASPM\u00a0on · 👍 {recs['comfort']['delight']} · "
+                                                  f"{recs['comfort']['gain']} ({recs['comfort']['interval']})")
+        # Without a 👍 to learn from, Comfort is Battery's combination.
+        unvoted = report.recommendations(levers, report.qol_model(minutes, []), energy=50, power=15)
+        self.assertEqual(unvoted['comfort']['apply'], unvoted['battery']['apply'])
+        self.assertEqual(unvoted['comfort']['change'], 'same as Battery until a 👍')
+
+    def test_gain_parts(self):
+        self.assertEqual(report.gain_parts({'minutes': 14.2, 'low': -8.4, 'high': 51}), ('+14 min', '−8 … +51'))
+        self.assertEqual(report.gain_text({'minutes': -6, 'low': None, 'high': None}), '−6 min')
+        self.assertEqual(report.gain_parts(None), ('', ''))
 
     def test_present_users_only_get_combinations_they_are_unlikely_to_mind(self):
         names = ['aspm', 'apst', 'boost', 'profile']
@@ -254,16 +296,35 @@ class PlanTests(unittest.TestCase):
         self.assertLess(here['allowed'], 16)  # At most one noticeable setting at a time, to begin with.
         self.assertFalse(here['choice']['boost'] and here['choice']['profile'])
 
+    def test_blocks_stay_with_combinations_that_might_be_best(self):
+        names, minutes, t, rng = ['aspm', 'apst', 'wifi-ps'], [], 600_000, np.random.default_rng(4)
+        for block in range(40):  # ASPM clearly saves 3 W; the others nothing.
+            config = {n: bool(rng.integers(2)) for n in names}
+            minutes += block_minutes(t, config, block, bat=16 - 3 * config['aspm'] + rng.normal(0, 0.5))
+            t += 240
+        plans = [report.plan(minutes, [], names, present=False, rng=np.random.default_rng(seed),
+                             group=report.block_group('auto-1', t)) for seed in range(60)]
+        costly = sum(not p['choice']['aspm'] for p in plans) / len(plans)
+        apst = sum(p['choice']['apst'] for p in plans) / len(plans)
+        self.assertLess(costly, 0.2)  # Blocks without ASPM cost ~3 W, so few are spent there…
+        self.assertTrue(0.2 < apst < 0.8)  # …while the uncertain settings still go both ways.
+        cost = lambda on: np.mean([p['cost'] for p in plans if p['choice']['aspm'] == on] or [np.nan])
+        self.assertLess(cost(True), cost(False))  # The expected cost, in W above the best.
+
     def test_the_design_covers_every_combination(self):
         names, minutes, t, rng = ['aspm', 'apst', 'wifi-ps'], [], 600_000, np.random.default_rng(3)
-        seen = collections.Counter()
+        seen, states = collections.Counter(), collections.Counter()
         for block in range(24):
-            choice = report.plan(minutes, [], names, present=False, rng=rng)['choice']
+            choice = report.plan(minutes, [], names, present=False, rng=rng,
+                                 group=report.block_group('auto-1', t))['choice']
             seen[tuple(choice[n] for n in names)] += 1
+            states.update((n, choice[n]) for n in names)
             minutes += block_minutes(t, choice, block, bat=15 + rng.normal(0, 1))
             t += 240
-        self.assertEqual(len(seen), 8)
-        self.assertLessEqual(max(seen.values()), 6)
+        # Nothing saves anything, so every setting keeps going both ways.
+        self.assertGreaterEqual(min(states[n, on] for n in names for on in (False, True)), 6)
+        self.assertGreaterEqual(len(seen), 6)
+        self.assertLessEqual(max(seen.values()), 8)
 
 
 if __name__ == '__main__':

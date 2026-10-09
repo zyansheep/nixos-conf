@@ -106,6 +106,23 @@ class StoreTests(unittest.TestCase):
         minutes, _ = store.load_range(*self.span, self.db)
         self.assertEqual(minutes, store.aggregate(self.records)[0])
         self.assertIn('apst', minutes[0]['set'])
+        self.assertIn('mhz', minutes[0]['set'])  # Layout 5: the frequency cap, for boost.
+
+    def test_layout_five_gains_the_cpu_maximum_and_gpu_dpm(self):
+        writer = store.Writer(self.db)
+        for r in self.records:
+            writer.write(r)
+        writer.close()
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            for column in ('cpu_max_mhz', 'gpu_dpm'):
+                conn.execute(f'ALTER TABLE records DROP COLUMN {column}')
+            conn.execute('PRAGMA user_version = 4')  # Layout 4 recomputes minutes before 5 adds the columns.
+            conn.commit()
+        store.connect(self.db).close()
+        minutes, _ = store.load_range(*self.span, self.db)
+        self.assertEqual((minutes[0]['set']['cpu_mhz'], minutes[0]['set']['gpu_dpm']), (None, None))
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
 
     def test_layout_two_gains_quality_of_life_columns(self):
         writer = store.Writer(self.db)

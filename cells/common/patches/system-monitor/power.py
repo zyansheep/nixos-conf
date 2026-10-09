@@ -301,6 +301,12 @@ def settings(sys=Path('/sys')):
     }
     if (limit := number(cpu / 'cpu0/cpufreq/scaling_max_freq')) is not None:
         values['max_mhz'] = round(limit / 1000)
+    # The CPU's own maximum: boost raises it, a cap (max_mhz below it) doesn't.
+    if (limit := number(cpu / 'cpu0/cpufreq/cpuinfo_max_freq')) is not None:
+        values['cpu_max_mhz'] = round(limit / 1000)
+    # amdgpu DPM: 'low' pins the GPU, memory and fabric clocks at their lowest.
+    values['gpu_dpm'] = next((read(path) for path in sorted(sys.glob('class/drm/card*/device/power_dpm_force_performance_level'))),
+                             None)
     battery = find_battery(sys / 'class/power_supply')
     if battery is not None:
         values['charge_limit'] = number(battery / 'charge_control_end_threshold')

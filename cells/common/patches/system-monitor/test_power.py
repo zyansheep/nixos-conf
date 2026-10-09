@@ -35,6 +35,15 @@ class PowerTests(unittest.TestCase):
             put(sys / 'class/nvme/nvme0/power/pm_qos_latency_tolerance_us', '100000\n')
             self.assertEqual(settings(sys)['nvme_apst_us'], '100000')
 
+    def test_the_cpu_cap_its_maximum_and_the_gpu_dpm_level_are_logged(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            put(sys / 'devices/system/cpu/cpu0/cpufreq/scaling_max_freq', '2000000\n')
+            put(sys / 'devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq', '4972435\n')
+            put(sys / 'class/drm/card1/device/power_dpm_force_performance_level', 'low\n')
+            values = settings(sys)
+            self.assertEqual((values['max_mhz'], values['cpu_max_mhz'], values['gpu_dpm']), (2000, 4972, 'low'))
+
     def test_interrupt_names_skip_chip_columns(self):
         with tempfile.TemporaryDirectory() as tmp:
             put(Path(tmp) / 'interrupts', '           CPU0       CPU1\n'

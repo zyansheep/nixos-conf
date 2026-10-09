@@ -43,7 +43,7 @@ except ImportError:  # Python < 3.14
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 4  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+VERSION = 6  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
@@ -156,6 +156,8 @@ COLUMNS = (
     ('boost', 'TEXT', lambda r: part(r, 'settings').get('boost')),
     ('amd_pstate', 'TEXT', lambda r: part(r, 'settings').get('amd_pstate')),
     ('max_mhz', 'REAL', lambda r: part(r, 'settings').get('max_mhz')),
+    ('cpu_max_mhz', 'REAL', lambda r: part(r, 'settings').get('cpu_max_mhz')),
+    ('gpu_dpm', 'TEXT', lambda r: part(r, 'settings').get('gpu_dpm')),
     ('aspm', 'TEXT', lambda r: part(r, 'settings').get('aspm')),
     ('nvme_apst_us', 'TEXT', lambda r: part(r, 'settings').get('nvme_apst_us')),
     ('dcdebugmask', 'TEXT', lambda r: part(r, 'settings').get('dcdebugmask')),
@@ -266,7 +268,8 @@ class Minute:
             self.present += dt  # Someone could be using it: unlocked, screen on.
         self.settings = {'profile': row['profile'], 'aspm': row['aspm'], 'psr': psr_enabled(row['dcdebugmask']),
                          'boost': row['boost'], 'abm': row['abm'], 'wifi_ps': row['wifi_ps'], 'hz': row['hz'],
-                         'apst': row['nvme_apst_us']}
+                         'apst': row['nvme_apst_us'], 'mhz': row['max_mhz'], 'cpu_mhz': row.get('cpu_max_mhz'),
+                         'gpu_dpm': row.get('gpu_dpm')}  # mhz: the frequency cap; cpu_mhz: the CPU's maximum (boost).
         if row['exp_run'] is not None:
             exp = [row['exp_run'], row['exp_name'], row['exp_block']]
             washout = bool(row['exp_washout']) or (self.exp is not None and self.exp[4])
@@ -344,6 +347,11 @@ def votes_only(conn):
     recompute_minutes(conn)
 
 
+def add_levers(conn):
+    add_column(conn, 'records', 'cpu_max_mhz', 'REAL')
+    add_column(conn, 'records', 'gpu_dpm', 'TEXT')
+
+
 def add_qol(conn):
     add_column(conn, 'records', 'qol', 'INTEGER')
     add_column(conn, 'minutes', 'qol', 'REAL')
@@ -357,6 +365,8 @@ MIGRATIONS = {
     1: recompute_minutes,  # Minute settings gained NVMe APST.
     2: add_qol,  # Records and minutes gained quality of life; minutes the share of time someone was there.
     3: votes_only,  # Quality of life became 👍/👎 votes; drop the 0–3 levels schema 2 logged.
+    4: recompute_minutes,  # Minute settings gained the CPU frequency cap (boost as it really is).
+    5: add_levers,  # Records gained the CPU's own maximum (boost under a cap) and the amdgpu DPM level.
 }
 
 
@@ -446,6 +456,7 @@ def refresh_minutes(conn, start, end):
         apps[record].append((name, *values))
     minutes = {}
     for row in conn.execute('SELECT * FROM records WHERE t1 >= ? AND t1 < ? ORDER BY t1', (start, end)):
+        row = dict(row)  # A migration can recompute minutes before a later one adds a column.
         t = minute_of(row['t1'])
         minutes.setdefault(t, Minute(t)).add(row, apps.get(row['id'], ()))
     conn.execute('DELETE FROM minutes WHERE t >= ? AND t < ?', (start, end))
