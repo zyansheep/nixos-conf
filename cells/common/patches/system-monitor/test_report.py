@@ -201,6 +201,7 @@ class LeverTests(unittest.TestCase):
         plain = report.lever_states({'mhz': 3501, 'cpu_mhz': 3501, 'gpu_dpm': 'auto'}, top)
         self.assertEqual((plain['boost'], plain['cpu-cap'], plain['gpu-dpm']), (True, False, False))
         self.assertFalse(report.lever_states({'mhz': 3501}, top, chosen={'cpu-cap': 'none'})['cpu-cap'])
+        self.assertTrue(report.lever_states({'throttle': 'on'}, top)['throttle-apps'])
 
     def test_your_settings_are_the_latest_outside_experiments(self):
         minutes = factorial_minutes(blocks=4)

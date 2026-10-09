@@ -43,7 +43,7 @@ except ImportError:  # Python < 3.14
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 6  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+VERSION = 7  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
@@ -158,6 +158,7 @@ COLUMNS = (
     ('max_mhz', 'REAL', lambda r: part(r, 'settings').get('max_mhz')),
     ('cpu_max_mhz', 'REAL', lambda r: part(r, 'settings').get('cpu_max_mhz')),
     ('gpu_dpm', 'TEXT', lambda r: part(r, 'settings').get('gpu_dpm')),
+    ('throttle', 'TEXT', lambda r: part(r, 'settings').get('throttle')),
     ('aspm', 'TEXT', lambda r: part(r, 'settings').get('aspm')),
     ('nvme_apst_us', 'TEXT', lambda r: part(r, 'settings').get('nvme_apst_us')),
     ('dcdebugmask', 'TEXT', lambda r: part(r, 'settings').get('dcdebugmask')),
@@ -269,7 +270,7 @@ class Minute:
         self.settings = {'profile': row['profile'], 'aspm': row['aspm'], 'psr': psr_enabled(row['dcdebugmask']),
                          'boost': row['boost'], 'abm': row['abm'], 'wifi_ps': row['wifi_ps'], 'hz': row['hz'],
                          'apst': row['nvme_apst_us'], 'mhz': row['max_mhz'], 'cpu_mhz': row.get('cpu_max_mhz'),
-                         'gpu_dpm': row.get('gpu_dpm')}  # mhz: the frequency cap; cpu_mhz: the CPU's maximum (boost).
+                         'gpu_dpm': row.get('gpu_dpm'), 'throttle': row.get('throttle')}  # mhz: the frequency cap; cpu_mhz: the CPU's maximum (boost).
         if row['exp_run'] is not None:
             exp = [row['exp_run'], row['exp_name'], row['exp_block']]
             washout = bool(row['exp_washout']) or (self.exp is not None and self.exp[4])
@@ -352,6 +353,10 @@ def add_levers(conn):
     add_column(conn, 'records', 'gpu_dpm', 'TEXT')
 
 
+def add_throttle(conn):
+    add_column(conn, 'records', 'throttle', 'TEXT')
+
+
 def add_qol(conn):
     add_column(conn, 'records', 'qol', 'INTEGER')
     add_column(conn, 'minutes', 'qol', 'REAL')
@@ -367,6 +372,7 @@ MIGRATIONS = {
     3: votes_only,  # Quality of life became 👍/👎 votes; drop the 0–3 levels schema 2 logged.
     4: recompute_minutes,  # Minute settings gained the CPU frequency cap (boost as it really is).
     5: add_levers,  # Records gained the CPU's own maximum (boost under a cap) and the amdgpu DPM level.
+    6: add_throttle,  # Records gained whether app-throttle ran.
 }
 
 

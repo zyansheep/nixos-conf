@@ -283,6 +283,15 @@ def display(sys=Path('/sys')):
     return result
 
 
+def throttle_state(path):
+    """'on' while app-throttle runs (its state file names a live process), else 'off'."""
+    try:
+        os.kill(int(json.loads(Path(path).read_text())['pid']), 0)
+        return 'on'
+    except (OSError, ValueError, KeyError, TypeError):
+        return 'off'
+
+
 def settings(sys=Path('/sys')):
     cpu = sys / 'devices/system/cpu'
     values = {
@@ -759,8 +768,8 @@ def subtract(after, before):
 class Monitor:
     """Called every collector loop; writes a record every RECORD seconds."""
 
-    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None):
-        self.sys, self.proc, self.experiment = sys, proc, experiment
+    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None, throttle=None):
+        self.sys, self.proc, self.experiment, self.throttle = sys, proc, experiment, throttle
         self.log = PowerLog(directory)
         # The power database next to the archive (store.py). Read in any archive
         # day it has never seen: the first run, or after it was deleted.
@@ -893,6 +902,8 @@ class Monitor:
         if 'niri' in slow:
             shown['niri'] = slow['niri']
         system = settings(self.sys)
+        if self.throttle is not None:
+            system['throttle'] = throttle_state(self.throttle)
         if 'wifi_ps' in slow:
             system['wifi_ps'] = slow['wifi_ps']
         battery = dict(self.battery_state(), **power.get('bat', {}))

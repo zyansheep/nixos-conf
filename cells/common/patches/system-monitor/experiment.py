@@ -45,6 +45,7 @@ import time
 from pathlib import Path
 
 import qol
+import throttle
 
 BLOCK = 240
 WASHOUT = 60
@@ -274,6 +275,13 @@ def gpu_dpm_get():
                 None)
 
 
+THROTTLE_UNIT = 'app-throttle.service'
+
+
+def throttle_get():
+    return 'on' if run(['systemctl', '--user', 'is-active', THROTTLE_UNIT], check=False) == 'active' else 'off'
+
+
 CPU_CAP = '2000'  # MHz: the CPU cap's power-saving value (base is 3501, boost 4972).
 
 
@@ -327,6 +335,12 @@ def catalog(unit=None, units=None):
                 cpu_cap_get, lambda v: run(POWER_LAB + ['cpucap', v]),
                 lambda cur: CPU_CAP if cur == 'none' else 'none', root=True,
                 visible='Bursty work gets slower.', levels=lambda: (CPU_CAP, 'none')),
+        Setting('throttle-apps', 'Throttle background apps',
+                f'Caps every app but the focused one at {throttle.QUOTA}% of a core while on battery (app-throttle); '
+                'apps playing or recording audio or video, T3 Code and the input method are left alone.',
+                throttle_get, lambda v: run(['systemctl', '--user', 'start' if v == 'on' else 'stop', THROTTLE_UNIT]),
+                lambda cur: 'off' if cur == 'on' else 'on',
+                visible='Background apps update slowly until you switch to them.', levels=lambda: ('on', 'off')),
         Setting('refresh', 'Display refresh rate', 'Lower internal-panel refresh rate.',
                 refresh_get, lambda v: run(['niri', 'msg', 'output', niri_internal()['name'], 'mode', v]),
                 refresh_alternative, visible='Motion looks slightly less smooth.', levels=refresh_levels),

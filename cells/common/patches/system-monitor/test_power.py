@@ -44,6 +44,17 @@ class PowerTests(unittest.TestCase):
             values = settings(sys)
             self.assertEqual((values['max_mhz'], values['cpu_max_mhz'], values['gpu_dpm']), (2000, 4972, 'low'))
 
+    def test_throttle_is_on_only_while_its_process_lives(self):
+        import json, os
+        from power import throttle_state
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'throttle.json'
+            self.assertEqual(throttle_state(path), 'off')
+            path.write_text(json.dumps({'pid': os.getpid()}))
+            self.assertEqual(throttle_state(path), 'on')
+            path.write_text(json.dumps({'pid': 2 ** 22 + 12345}))  # Above pid_max: long gone.
+            self.assertEqual(throttle_state(path), 'off')
+
     def test_interrupt_names_skip_chip_columns(self):
         with tempfile.TemporaryDirectory() as tmp:
             put(Path(tmp) / 'interrupts', '           CPU0       CPU1\n'

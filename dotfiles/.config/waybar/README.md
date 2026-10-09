@@ -192,7 +192,7 @@ written by the collector as it measures, one transaction per record:
 | --- | --- |
 | `records` | one row per 10 s record: every scalar above as typed columns, NULL where absent (battery and chip W with min/max, CPU seconds and MHz, C1–C3 residency, IPI counts, GPU/video, Wi-Fi vs other network bytes and signal, disk bytes/busy, USB/PCI/audio, backlight, refresh rate, display-panel state, every power setting, thermals, lid/lock, experiment arm) |
 | `record_apps`, `app_names` | per record × app that did something: CPU, GPU and video seconds, disk bytes |
-| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings — including the CPU frequency cap `mhz` since layout 5, the CPU's own maximum `cpu_mhz` and the amdgpu DPM level `gpu_dpm` since layout 6 — and experiment as JSON) |
+| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings — including the CPU frequency cap `mhz` since layout 5, the CPU's own maximum `cpu_mhz` and the amdgpu DPM level `gpu_dpm` since layout 6, `throttle` since layout 7 — and experiment as JSON) |
 | `events` | starts and suspend gaps |
 
 Only the archive keeps idle apps' process counts and memory, the per-interrupt
@@ -272,8 +272,8 @@ days and fetches only new minutes. Tabs:
     (`power-experiment goal battery|comfort`; the battery menu's Comfort mode
     switch). Until something earns a 👍, Comfort is Battery's combination.
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
-    CPU boost, power profile, GPU and memory clocks, CPU frequency cap): each
-    row shows the current value, the measured
+    CPU boost, power profile, GPU and memory clocks, CPU frequency cap,
+    background-app throttle): each row shows the current value, the measured
     saving (for that setting alone, the others as they are on battery now),
     how often it lowered quality of life, and **Include**.
     `report.lever_effects` fits every run, automatic or manual, together:
@@ -305,7 +305,21 @@ days and fetches only new minutes. Tabs:
     that function's link control as saved before the change (put back when it
     resumed), and a multi-function link only enables what all its functions
     enable, so the internal GPU/USB/audio (c1) and USB4 (c3) links never got
-    ASPM: the ASPM saving measured before then is Wi-Fi and NVMe only. The tab lists clear
+    ASPM: the ASPM saving measured before then is Wi-Fi and NVMe only.
+    **Background-app throttle** (`throttle-apps`, the `app-throttle` user
+    service, `throttle.py`): while on battery, every app scope in app.slice
+    but the focused window's gets a CPU quota of 5% of one core (cgroup
+    `cpu.max` 5000/100000, which the user owns), lifted the moment it gets
+    focus. Apps with a PipeWire audio or video stream that is *running* (an
+    open, idle stream doesn't count: Floorp keeps several), T3 Code (agents)
+    and fcitx5 (it types into the focused app) are left alone, as is
+    everything on AC. It follows niri's event stream and `pw-dump --monitor`,
+    so it idles between changes; `$XDG_RUNTIME_DIR/waybar-monitor/throttle.json`
+    lists what it throttles, the collector logs `throttle` on/off (layout 7),
+    and stopping it (or `app-throttle --release`, the unit's ExecStopPost)
+    lifts every quota. Measured motivation: background apps use ~0.65 of a
+    core on battery, ~2.5 W. Terminals are throttled too, so a build in an
+    unfocused terminal slows down; `app-throttle --keep PATTERN` exempts more. The tab lists clear
     interactions and the best measured combination for the goal; **Apply**
     sets all of it now (`power-experiment apply name=saving|normal`,
     until reboot). Root settings go through `sudo -n power-lab`; its

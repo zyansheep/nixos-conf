@@ -237,7 +237,7 @@ def main():
         return
     directory = Path(os.environ['XDG_RUNTIME_DIR']) / 'waybar-monitor'
     directory.mkdir(mode=0o700, exist_ok=True)
-    power = Monitor(log, experiment=directory / 'experiment.json')
+    power = Monitor(log, experiment=directory / 'experiment.json', throttle=directory / 'throttle.json')
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     history = History()
     try:

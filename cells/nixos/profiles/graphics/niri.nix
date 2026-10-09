@@ -205,6 +205,22 @@ in {
     };
   };
 
+  # Background-app throttle (power-experiment's throttle-apps setting starts and
+  # stops it): on battery, every app scope but the focused window's, those
+  # playing or recording audio/video, T3 Code and fcitx5 gets a CPU quota.
+  systemd.user.services.app-throttle = {
+    description = "Throttle unfocused apps on battery";
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    environment.PATH = lib.mkForce "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar-monitor}/bin/app-throttle";
+      ExecStopPost = "${pkgs.waybar-monitor}/bin/app-throttle --release";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+  };
+
   # Keep notification widgets and GTK4 loaded before the first panel toggle.
   systemd.user.services.swaync = {
     description = "Resident notification center";

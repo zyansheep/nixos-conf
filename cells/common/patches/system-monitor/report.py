@@ -351,7 +351,8 @@ def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_
 # Settings measured by experiment (names match experiment.catalog()) → their
 # key in a minute's `set`.
 SETTING = {'aspm': 'aspm', 'apst': 'apst', 'wifi-ps': 'wifi_ps', 'abm': 'abm', 'refresh': 'hz',
-           'boost': 'boost', 'profile': 'profile', 'gpu-dpm': 'gpu_dpm', 'cpu-cap': 'cpu_cap'}
+           'boost': 'boost', 'profile': 'profile', 'gpu-dpm': 'gpu_dpm', 'cpu-cap': 'cpu_cap',
+           'throttle-apps': 'throttle'}
 
 
 def saving(name, value, top_hz=None):
@@ -374,8 +375,8 @@ def saving(name, value, top_hz=None):
             return str(value) == '0'
         if name == 'profile':  # platform_profile per minute, power-profiles-daemon's name from the runner
             return value in ('low-power', 'quiet', 'power-saver')
-        if name == 'gpu-dpm':
-            return value == 'low'
+        if name in ('gpu-dpm', 'throttle-apps'):
+            return value in ('low', 'on')
         if name == 'cpu-cap':  # The runner's value; minutes compare max_mhz with the CPU's maximum.
             return str(value) != 'none'
     except (TypeError, ValueError):
@@ -386,7 +387,8 @@ def saving(name, value, top_hz=None):
 # These change CPU frequency, and so the CPU load the workload correction
 # uses. A consequence of the setting must not be adjusted away, so they are
 # estimated without that correction and need more battery time.
-CPU_LEVERS = {'boost', 'profile', 'cpu-cap', 'gpu-dpm'}  # gpu-dpm: memory clocks slow CPU work too.
+# gpu-dpm: memory clocks slow CPU work too; throttle-apps: it cuts the load itself.
+CPU_LEVERS = {'boost', 'profile', 'cpu-cap', 'gpu-dpm', 'throttle-apps'}
 COVARIATES = ('load', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
 PRIOR_SD = {'main': 5.0, 'pair': 1.0}  # W: interactions are shrunk (mildly) toward zero.
 BLOCK_MINUTES = 4  # power-experiment's blocks (experiment.BLOCK); the first minute is washout.
@@ -618,7 +620,7 @@ QOL_RISK = 0.1  # Acceptable chance per 4-minute block that a combination earns 
 # either vote starts at 2% per block; for 👎 a noticeable setting starts out
 # multiplying the odds by ~2.5 (so experiments begin with about one at a time)
 # and a quiet one at no effect; for 👍 every setting starts at no effect, either way.
-NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps', 'gpu-dpm', 'cpu-cap'}
+NOTICEABLE = {'abm', 'refresh', 'boost', 'profile', 'wifi-ps', 'gpu-dpm', 'cpu-cap', 'throttle-apps'}
 VOTE_BASE = 0.02
 VOTE_PRIOR = {'down': {'quiet': (0.0, 1.0), 'noticeable': (0.9, 2.0)},
               'up': {'quiet': (0.0, 1.5), 'noticeable': (0.0, 2.0)}}
@@ -782,7 +784,8 @@ PHRASES = {'aspm': ('ASPM on', 'ASPM off'), 'apst': ('APST on', 'APST off'),
            'wifi-ps': ('Wi-Fi power saving on', 'Wi-Fi power saving off'), 'abm': ('ABM on', 'ABM off'),
            'refresh': ('lower refresh rate', 'full refresh rate'), 'boost': ('CPU boost off', 'CPU boost on'),
            'profile': ('power-saver profile', 'balanced profile'),
-           'gpu-dpm': ('GPU clocks low', 'GPU clocks automatic'), 'cpu-cap': ('CPU capped at 2 GHz', 'CPU uncapped')}
+           'gpu-dpm': ('GPU clocks low', 'GPU clocks automatic'), 'cpu-cap': ('CPU capped at 2 GHz', 'CPU uncapped'),
+           'throttle-apps': ('background apps throttled', 'background apps unthrottled')}
 GOALS = ('battery', 'comfort')
 
 
