@@ -70,6 +70,27 @@ int main() {
     "sleep": {"hours": 6.5, "low": 4.95, "high": 8.25, "watts": 1.5},
     "distribution": {"kind": "empty", "t": [0.5, 1.5], "p": [1, 1]}})";
   assert(waybar::powerMenuEta(eta, 1001).sleep == "Asleep from now: ~6:30   80%: 4:57–8:15 at 1.5 W");
+
+  const auto state = root / "state", runtime = root / "runtime";
+  std::filesystem::create_directories(state);
+  std::filesystem::create_directories(runtime);
+  auto modes = waybar::powerMenuModes(state, runtime, 1000);
+  assert(!modes.experiments && !modes.comfort && modes.status.empty() && modes.best.empty());
+  std::ofstream(state / "experiments-enabled") << "";
+  std::ofstream(state / "experiments.json") << R"({"settings": ["aspm"], "goal": "comfort"})";
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "paused", "reason": "on AC power"})";
+  std::ofstream(runtime / "recommend.json") << R"({"updated": 1000,
+    "battery": {"change": "ASPM on", "gain": "+14 min", "interval": "−8 … +51", "delight": ""},
+    "comfort": {"change": "full refresh rate", "gain": "−6 min", "interval": "−20 … +4", "delight": "2% → 9%"}})";
+  modes = waybar::powerMenuModes(state, runtime, 1100);
+  assert(modes.experiments && modes.comfort && modes.status == "Paused: on AC power");
+  assert(modes.best.at("battery").change == "ASPM on" && modes.best.at("battery").interval == "−8 … +51");
+  assert(modes.best.at("comfort").gain == "−6 min" && modes.best.at("comfort").delight == "2% → 9%");
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "running", "block": 12})";
+  assert(waybar::powerMenuModes(state, runtime, 1100).status == "Testing block 12");
+  std::filesystem::remove(state / "experiments-enabled");
+  assert(waybar::powerMenuModes(state, runtime, 1100).status.empty());
+  assert(waybar::powerMenuModes(state, runtime, 1000 + 3601).best.empty());  // Stale.
   std::filesystem::remove_all(root);
-  std::cout << "Battery health/cycle, battery-use and time-left checks passed\n";
+  std::cout << "Battery health/cycle, battery-use, time-left and experiment-control checks passed\n";
 }

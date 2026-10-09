@@ -110,7 +110,7 @@
         <property name="name">battery-eta</property>
         <property name="sensitive">False</property>
         <child>
-          <!-- battery-eta's time-left distribution, refreshed each time the menu opens. -->
+          <!-- battery-eta's time left and asleep-from-now, with their intervals; refreshed on open. -->
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <property name="spacing">2</property>
@@ -118,12 +118,6 @@
               <object class="GtkLabel">
                 <property name="name">battery-eta-title</property>
                 <property name="xalign">0</property>
-              </object>
-            </child>
-            <child>
-              <object class="GtkDrawingArea">
-                <property name="name">battery-eta-chart</property>
-                <property name="height-request">60</property>
               </object>
             </child>
             <child>
@@ -143,6 +137,184 @@
       </packing>
     </child>
     <child>
+      <object class="GtkMenuItem" id="battery-experiments">
+        <property name="name">battery-experiments</property>
+        <child>
+          <!-- Switch rows: AModule.cpp flips the switch and runs power-experiment on click. -->
+          <object class="GtkBox">
+            <property name="spacing">12</property>
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">1</property>
+                <property name="valign">center</property>
+                <property name="hexpand">True</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="label">Automatic experiments</property>
+                    <property name="xalign">0</property>
+                    <style><class name="toggle-title"/></style>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="name">battery-experiments-status</property>
+                    <property name="xalign">0</property>
+                    <style><class name="toggle-note"/></style>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkSwitch">
+                <property name="name">battery-experiments-switch</property>
+                <property name="valign">center</property>
+                <property name="can-focus">False</property>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">3</property>
+        <property name="bottom-attach">4</property>
+      </packing>
+    </child>
+    <child>
+      <object class="GtkMenuItem" id="battery-comfort">
+        <property name="name">battery-comfort</property>
+        <child>
+          <!-- Off is the Battery goal; each line is that goal's best measured combination per full charge. -->
+          <object class="GtkBox">
+            <property name="orientation">vertical</property>
+            <property name="spacing">6</property>
+            <child>
+              <object class="GtkBox">
+                <property name="spacing">12</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="orientation">vertical</property>
+                    <property name="spacing">1</property>
+                    <property name="valign">center</property>
+                    <property name="hexpand">True</property>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Comfort mode</property>
+                        <property name="xalign">0</property>
+                        <style><class name="toggle-title"/></style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="name">battery-modes-note</property>
+                        <property name="xalign">0</property>
+                        <style><class name="toggle-note"/></style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkSwitch">
+                    <property name="name">battery-comfort-switch</property>
+                    <property name="valign">center</property>
+                    <property name="can-focus">False</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+            <child>
+              <object class="GtkBox">
+                <property name="orientation">vertical</property>
+                <property name="spacing">4</property>
+                <child>
+                  <object class="GtkBox">
+                    <property name="name">battery-mode-battery</property>
+                    <property name="spacing">8</property>
+                    <style><class name="battery-mode"/></style>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Battery</property>
+                        <property name="xalign">0</property>
+                        <property name="yalign">0</property>
+                        <property name="width-chars">8</property>
+                        <style><class name="mode-key"/></style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="name">battery-mode-battery-change</property>
+                        <property name="xalign">0</property>
+                        <property name="yalign">0</property>
+                        <property name="wrap">True</property>
+                        <!-- A fixed width: GtkMenu measures heights at the minimum width. -->
+                        <property name="width-chars">24</property>
+                        <property name="max-width-chars">24</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="name">battery-mode-battery-gain</property>
+                        <property name="hexpand">True</property>
+                        <property name="xalign">1</property>
+                        <property name="yalign">0</property>
+                        <property name="justify">right</property>
+                        <style><class name="mode-gain"/></style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+                <child>
+                  <object class="GtkBox">
+                    <property name="name">battery-mode-comfort</property>
+                    <property name="spacing">8</property>
+                    <style><class name="battery-mode"/></style>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="label">Comfort</property>
+                        <property name="xalign">0</property>
+                        <property name="yalign">0</property>
+                        <property name="width-chars">8</property>
+                        <style><class name="mode-key"/></style>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="name">battery-mode-comfort-change</property>
+                        <property name="xalign">0</property>
+                        <property name="yalign">0</property>
+                        <property name="wrap">True</property>
+                        <!-- A fixed width: GtkMenu measures heights at the minimum width. -->
+                        <property name="width-chars">24</property>
+                        <property name="max-width-chars">24</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkLabel">
+                        <property name="name">battery-mode-comfort-gain</property>
+                        <property name="hexpand">True</property>
+                        <property name="xalign">1</property>
+                        <property name="yalign">0</property>
+                        <property name="justify">right</property>
+                        <style><class name="mode-gain"/></style>
+                      </object>
+                    </child>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+      </object>
+      <packing>
+        <property name="left-attach">0</property>
+        <property name="right-attach">3</property>
+        <property name="top-attach">4</property>
+        <property name="bottom-attach">5</property>
+      </packing>
+    </child>
+    <child>
       <object class="GtkMenuItem" id="battery-top-apps">
         <property name="name">battery-top-apps</property>
         <property name="sensitive">False</property>
@@ -158,20 +330,20 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">3</property>
-        <property name="bottom-attach">4</property>
+        <property name="top-attach">5</property>
+        <property name="bottom-attach">6</property>
       </packing>
     </child>
     <child>
       <object class="GtkMenuItem" id="battery-panel">
         <property name="name">battery-panel-item</property>
-        <property name="label">History, what-if &amp; experiments…</property>
+        <property name="label">History &amp; experiments…</property>
       </object>
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">4</property>
-        <property name="bottom-attach">5</property>
+        <property name="top-attach">6</property>
+        <property name="bottom-attach">7</property>
       </packing>
     </child>
   </object>

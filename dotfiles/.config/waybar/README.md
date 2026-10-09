@@ -48,14 +48,34 @@ The profile popup centers its three buttons beneath the battery. A highlighted b
 marks the active profile. Battery health and cycle count appear below the
 buttons and refresh whenever the menu opens. Health is full capacity divided by design
 capacity; unsupported readings show “unavailable”, and zero cycles is valid.
-Below that, the time-left distribution: battery-eta's full forecast density
-(the battery is empty by t exactly when the average draw over t reaches the
-remaining energy / t, so P(T ≤ t) comes straight from the draw forecast), with
-the 80% interval shaded darker and the median marked; green and to the charge
-limit while charging. Under the chart, how long the laptop would last
-suspended from now: remaining energy over a log-normal fit of per-suspend
-drain (longer suspends weigh more), with an 80% predictive interval for one new
-suspend (spread between suspends plus the uncertainty of their mean). Below that, battery use over the last 30 minutes on battery ranks apps and
+Below that, battery-eta's time left (to the charge limit while charging) with
+its 80% interval (the battery is empty by t exactly when the average draw over
+t reaches the remaining energy / t, so P(T ≤ t) comes straight from the draw
+forecast), and how long the laptop would last suspended from now: remaining
+energy over a log-normal fit of per-suspend drain (longer suspends weigh more),
+with an 80% predictive interval for one new suspend (spread between suspends
+plus the uncertainty of their mean).
+
+Then two switch rows; clicking a row flips it and keeps the menu open (Enter
+flips it and closes the menu):
+
+- **Automatic experiments** (`power-experiment enable|disable`), with the
+  runner's status under it: testing block N, or paused and why (AC power, a
+  👎 rest, a setting unavailable or failing to change, nothing to test).
+  Turning them off sets the goal's best combination.
+- **Comfort mode** picks the goal (`power-experiment goal comfort|battery
+  --apply`): off is *Battery*. Under it, each goal's best measured combination
+  — what it would change from your settings (the latest minute outside
+  experiments; profile, ABM and boost, which follow AC, as on battery), the 👍 chance per block now → then for Comfort, and the battery
+  life it adds or costs per full charge with its 90% interval. The chosen
+  goal's line is bright. Switching applies that goal's whole combination
+  unless experiments own the settings; then it applies when they are
+  disabled. Applied settings last until reboot (ASPM/APST are off during
+  each suspend and come back after it). battery-eta writes both lines to
+  `$XDG_RUNTIME_DIR/waybar-monitor/recommend.json` at each refit (every 15
+  minutes); older than an hour, they show as waiting.
+
+Below that, battery use over the last 30 minutes on battery ranks apps and
 hardware together in average watts and share, with the size of the long-term
 power log underneath (see [Battery use and the power log](#battery-use-and-the-power-log)).
 AC plug/unplug events still select Balanced / Power saver through udev rules.
@@ -191,7 +211,7 @@ SQLite itself never compresses (pages are rewritten in place).
 
 ### Battery panel and power experiments
 
-“History, what-if & experiments…” at the bottom of the battery menu,
+“History & experiments…” at the bottom of the battery menu,
 `Mod+Shift+B`, or `battery-panel [timeline|experiments]` toggles a resident
 layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you click
 another window. One row of controls scopes everything: 6 h / Day / Week, back /
@@ -249,8 +269,8 @@ days and fetches only new minutes. Tabs:
   - **Goal** — *Battery* recommends the measured combination with the lowest
     draw among those allowed; *Comfort* the one most likely to earn a 👍 (then
     the lowest draw), with what it costs in battery
-    (`power-experiment goal battery|comfort`). Until something earns a 👍,
-    Comfort is Battery's combination.
+    (`power-experiment goal battery|comfort`; the battery menu's Comfort mode
+    switch). Until something earns a 👍, Comfort is Battery's combination.
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
     CPU boost, power profile, GPU and memory clocks, CPU frequency cap): each
     row shows the current value, the measured

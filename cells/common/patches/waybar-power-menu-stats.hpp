@@ -4,6 +4,7 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <utility>
 #include <vector>
@@ -146,5 +147,54 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
   }
   eta.valid = true;
   return eta;
+}
+inline Json::Value powerMenuJson(const std::filesystem::path& path) {
+  Json::Value value;
+  std::ifstream input(path);
+  Json::CharReaderBuilder builder;
+  std::string errors;
+  return Json::parseFromStream(builder, input, &value, &errors) && value.isObject() ? value : Json::Value();
+}
+
+// The menu's experiment controls: automatic experiments (on while
+// power-experiment's flag file exists) with the runner's status, the goal, and
+// what each goal's best measured combination would change (battery-eta's
+// recommend.json, refitted every 15 minutes; missing when stale).
+struct PowerMenuGoal {
+  std::string change, gain, interval, delight;  // "ASPM on", "+14 min", "−8 … +51", "2% → 9%"
+};
+
+struct PowerMenuModes {
+  bool experiments = false;
+  std::string status;  // "Testing block 12", "Paused: on AC power", or empty while off.
+  bool comfort = false;  // The goal: comfort, or battery.
+  std::map<std::string, PowerMenuGoal> best;  // By goal.
+};
+
+inline PowerMenuModes powerMenuModes(const std::filesystem::path& state, const std::filesystem::path& runtime,
+                                     double now) {
+  PowerMenuModes modes;
+  std::error_code error;
+  modes.experiments = std::filesystem::exists(state / "experiments-enabled", error);
+  modes.comfort = powerMenuJson(state / "experiments.json")["goal"].asString() == "comfort";
+  const auto run = powerMenuJson(runtime / "experiment.json");
+  const bool automatic = run["mode"].asString() == "auto";
+  if (modes.experiments) {
+    if (automatic && run["status"].asString() == "running")
+      modes.status = "Testing block " + std::to_string(run["block"].asInt());
+    else if (automatic && run["status"].asString() == "paused")
+      modes.status = "Paused: " + run["reason"].asString();
+    else
+      modes.status = "Starting…";
+  }
+  const auto recommend = powerMenuJson(runtime / "recommend.json");
+  if (recommend.isObject() && now - recommend["updated"].asDouble() < 3600)
+    for (const char* goal : {"battery", "comfort"}) {
+      const auto& entry = recommend[goal];
+      if (entry.isObject() && !entry["change"].asString().empty())
+        modes.best[goal] = {entry["change"].asString(), entry["gain"].asString(), entry["interval"].asString(),
+                            entry["delight"].asString()};
+    }
+  return modes;
 }
 }  // namespace waybar

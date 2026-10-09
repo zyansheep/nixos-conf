@@ -1,6 +1,6 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,131 @@
+@@ -12,9 +12,171 @@
  
  namespace waybar {
  
@@ -41,68 +41,112 @@
 +  return std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "eta.json";
 +}
 +
-+// battery-eta's time-left (or time-to-limit) density: the 80% interval drawn
-+// darker, the median as a line, and an h:mm time axis.
-+static gboolean drawPowerMenuEta(GtkWidget* widget, cairo_t* cr, gpointer) {
-+  const auto* eta = static_cast<PowerMenuEta*>(g_object_get_data(G_OBJECT(widget), "eta"));
-+  if (eta == nullptr || !eta->valid) return FALSE;
-+  const double width = gtk_widget_get_allocated_width(widget);
-+  const double height = gtk_widget_get_allocated_height(widget);
-+  const double left = 6, right = width - 6, top = 4, bottom = height - 13;
-+  const double first = eta->hours.front(), last = eta->hours.back();
-+  double peak = 0;
-+  for (double value : eta->density) peak = std::max(peak, value);
-+  if (last <= first || peak <= 0) return FALSE;
-+  auto x = [&](double hours) { return left + (hours - first) / (last - first) * (right - left); };
-+  auto y = [&](double value) { return bottom - value / peak * (bottom - top); };
-+  auto area = [&](double from, double to) {
-+    cairo_move_to(cr, x(std::max(from, first)), bottom);
-+    for (size_t i = 0; i < eta->hours.size(); i++)
-+      if (eta->hours[i] >= from && eta->hours[i] <= to) cairo_line_to(cr, x(eta->hours[i]), y(eta->density[i]));
-+    cairo_line_to(cr, x(std::min(to, last)), bottom);
-+    cairo_close_path(cr);
++static PowerMenuModes currentPowerMenuModes() {
++  return powerMenuModes(std::filesystem::path(g_get_user_state_dir()) / "waybar-monitor",
++                        std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor",
++                        g_get_real_time() / 1e6);
++}
++
++// A mode row's column: the main line, and a small faded one under it.
++static std::string powerMenuMarkup(const std::string& main, const std::string& detail,
++                                   const std::string& prefix = "") {
++  auto escape = [](const std::string& text) {
++    auto* escaped = g_markup_escape_text(text.c_str(), -1);
++    std::string result = escaped;
++    g_free(escaped);
++    return result;
 +  };
-+  // Blue for time left, green for time to the charge limit (the outline's colors).
-+  const bool full = eta->kind == "full";
-+  const double red = full ? 0.56 : 0.22, green = full ? 0.87 : 0.53, blue = full ? 0.56 : 0.90;
-+  area(first, last);
-+  cairo_set_source_rgba(cr, red, green, blue, 0.22);
-+  cairo_fill(cr);
-+  area(eta->low, eta->high);
-+  cairo_set_source_rgba(cr, red, green, blue, 0.55);
-+  cairo_fill(cr);
-+  for (size_t i = 0; i < eta->hours.size(); i++)
-+    (i ? cairo_line_to : cairo_move_to)(cr, x(eta->hours[i]), y(eta->density[i]));
-+  cairo_set_source_rgba(cr, red, green, blue, 0.95);
-+  cairo_set_line_width(cr, 1.5);
-+  cairo_stroke(cr);
-+  cairo_set_source_rgba(cr, 1, 1, 1, 0.85);
-+  cairo_set_line_width(cr, 1);
-+  cairo_move_to(cr, std::round(x(eta->median)) + 0.5, top);
-+  cairo_line_to(cr, std::round(x(eta->median)) + 0.5, bottom);
-+  cairo_stroke(cr);
-+  // Recessive axis: at most five h:mm ticks on round steps.
-+  double step = 4;
-+  for (double candidate : {1.0 / 12, 0.25, 0.5, 1.0, 2.0, 4.0})
-+    if ((last - first) / candidate <= 5) { step = candidate; break; }
-+  auto* layout = pango_cairo_create_layout(cr);
-+  auto* font = pango_font_description_from_string("DejaVu Sans 7");
-+  pango_layout_set_font_description(layout, font);
-+  cairo_set_source_rgba(cr, 1, 1, 1, 0.6);
-+  for (double tick = std::ceil(first / step) * step; tick <= last; tick += step) {
-+    pango_layout_set_text(layout, powerMenuClock(tick).c_str(), -1);
-+    int text_width, text_height;
-+    pango_layout_get_pixel_size(layout, &text_width, &text_height);
-+    const double position = std::clamp(x(tick) - text_width / 2.0, 0.0, width - text_width);
-+    cairo_move_to(cr, position, bottom + 1);
-+    pango_cairo_show_layout(cr, layout);
++  std::string markup = escape(main);
++  if (!detail.empty()) markup += "\n<span size='small' alpha='60%'>" + prefix + escape(detail) + "</span>";
++  return markup;
++}
++
++static GtkWidget* findPowerMenuWidget(GtkWidget* widget, const char* name) {
++  if (g_strcmp0(gtk_widget_get_name(widget), name) == 0) return widget;
++  GtkWidget* found = nullptr;
++  if (GTK_IS_CONTAINER(widget)) {
++    GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
++    for (GList* child = children; child && !found; child = child->next)
++      found = findPowerMenuWidget(GTK_WIDGET(child->data), name);
++    g_list_free(children);
 +  }
-+  pango_font_description_free(font);
-+  g_object_unref(layout);
-+  return FALSE;
++  return found;
++}
++
++static void showPowerMenuModes(GtkWidget* menu, const PowerMenuModes& modes) {
++  if (auto* toggle = findPowerMenuWidget(menu, "battery-experiments-switch"); GTK_IS_SWITCH(toggle))
++    gtk_switch_set_active(GTK_SWITCH(toggle), modes.experiments);
++  if (auto* toggle = findPowerMenuWidget(menu, "battery-comfort-switch"); GTK_IS_SWITCH(toggle))
++    gtk_switch_set_active(GTK_SWITCH(toggle), modes.comfort);
++  auto line = [&](const char* name, const std::string& text) {
++    auto* label = findPowerMenuWidget(menu, name);
++    if (!GTK_IS_LABEL(label)) return;
++    gtk_label_set_text(GTK_LABEL(label), text.c_str());
++    gtk_widget_set_no_show_all(label, TRUE);
++    gtk_widget_set_visible(label, !text.empty());
++  };
++  line("battery-experiments-status", modes.status);
++  line("battery-modes-note", modes.experiments ? "Applies when experiments stop" : "");
++  for (const std::string goal : {"battery", "comfort"}) {
++    auto* row = findPowerMenuWidget(menu, ("battery-mode-" + goal).c_str());
++    auto* change = findPowerMenuWidget(menu, ("battery-mode-" + goal + "-change").c_str());
++    auto* gain = findPowerMenuWidget(menu, ("battery-mode-" + goal + "-gain").c_str());
++    if (row == nullptr || !GTK_IS_LABEL(change) || !GTK_IS_LABEL(gain)) continue;
++    auto* style = gtk_widget_get_style_context(row);
++    ((goal == "comfort") == modes.comfort ? gtk_style_context_add_class
++                                          : gtk_style_context_remove_class)(style, "active");
++    const auto best = modes.best.find(goal);
++    if (best == modes.best.end()) {
++      gtk_label_set_markup(GTK_LABEL(change), powerMenuMarkup("waiting for battery-eta…", "").c_str());
++      gtk_label_set_text(GTK_LABEL(gain), "");
++      continue;
++    }
++    gtk_label_set_markup(GTK_LABEL(change),
++                         powerMenuMarkup(best->second.change, best->second.delight,
++                                         "<span font_family='Font Awesome 7 Free' weight='900'></span> ")
++                             .c_str());
++    gtk_label_set_markup(GTK_LABEL(gain), powerMenuMarkup(best->second.gain, best->second.interval).c_str());
++  }
++}
++
++// battery-experiments and battery-comfort: a click flips the row's switch and
++// runs power-experiment, keeping the menu open (Enter does the same and closes
++// it). The menu item's input window covers the switch, so the item gets every
++// click.
++static void togglePowerMenuRow(GtkWidget* item) {
++  auto* menu = gtk_widget_get_parent(item);
++  const bool experiments = g_strcmp0(gtk_widget_get_name(item), "battery-experiments") == 0;
++  auto* toggle = findPowerMenuWidget(item, experiments ? "battery-experiments-switch" : "battery-comfort-switch");
++  if (!GTK_IS_SWITCH(toggle) || menu == nullptr) return;
++  const bool on = !gtk_switch_get_active(GTK_SWITCH(toggle));
++  const std::string command = std::string("/run/current-system/sw/bin/power-experiment ") +
++                              (experiments ? (on ? "enable" : "disable")
++                                           : (on ? "goal comfort --apply" : "goal battery --apply"));
++  GError* error = nullptr;
++  if (!g_spawn_command_line_async(command.c_str(), &error)) {
++    spdlog::warn("battery menu: {}: {}", command, error->message);
++    g_error_free(error);
++    return;
++  }
++  auto modes = currentPowerMenuModes();  // The command may not have written anything yet.
++  if (experiments) {
++    modes.experiments = on;
++    modes.status = on ? "Starting…" : "";
++  } else {
++    modes.comfort = on;
++  }
++  showPowerMenuModes(menu, modes);
++}
++
++static gboolean releasePowerMenuRow(GtkWidget* item, GdkEventButton* event, gpointer) {
++  if (event->button != 1) return FALSE;
++  togglePowerMenuRow(item);
++  return TRUE;
 +}
 +
  static void updatePowerMenuStats(GtkWidget* widget) {
++  if (GTK_IS_MENU(widget) && findPowerMenuWidget(widget, "battery-experiments") != nullptr)
++    showPowerMenuModes(widget, currentPowerMenuModes());
    if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-stats") == 0) {
      gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
 +  } else if (GTK_IS_BOX(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-processes") == 0) {
@@ -116,19 +160,15 @@
 +    gtk_label_set_text(GTK_LABEL(widget), eta.sleep.c_str());
 +    gtk_widget_set_no_show_all(widget, TRUE);
 +    gtk_widget_set_visible(widget, !eta.sleep.empty());
-+  } else if (GTK_IS_DRAWING_AREA(widget) &&
-+             g_strcmp0(gtk_widget_get_name(widget), "battery-eta-chart") == 0) {
-+    auto* eta = new PowerMenuEta(powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6));
-+    // show_all must not resurrect the chart when there is no estimate.
-+    gtk_widget_set_no_show_all(widget, TRUE);
-+    gtk_widget_set_visible(widget, eta->valid);
-+    g_object_set_data_full(G_OBJECT(widget), "eta", eta,
-+                           [](gpointer data) { delete static_cast<PowerMenuEta*>(data); });
-+    if (g_object_get_data(G_OBJECT(widget), "eta-draw") == nullptr) {
-+      g_signal_connect(widget, "draw", G_CALLBACK(drawPowerMenuEta), nullptr);
-+      g_object_set_data(G_OBJECT(widget), "eta-draw", GINT_TO_POINTER(1));
++  } else if (GTK_IS_MENU_ITEM(widget) && (g_strcmp0(gtk_widget_get_name(widget), "battery-experiments") == 0 ||
++                                          g_strcmp0(gtk_widget_get_name(widget), "battery-comfort") == 0)) {
++    if (g_object_get_data(G_OBJECT(widget), "power-menu-row") == nullptr) {
++      g_signal_connect(widget, "button-release-event", G_CALLBACK(releasePowerMenuRow), nullptr);
++      g_signal_connect(widget, "activate",
++                       G_CALLBACK(+[](GtkMenuItem* item, gpointer) { togglePowerMenuRow(GTK_WIDGET(item)); }),
++                       nullptr);
++      g_object_set_data(G_OBJECT(widget), "power-menu-row", GINT_TO_POINTER(1));
 +    }
-+    gtk_widget_queue_draw(widget);
    } else if (GTK_IS_CONTAINER(widget)) {
      GList* children = gtk_container_get_children(GTK_CONTAINER(widget));
      for (GList* child = children; child; child = child->next)

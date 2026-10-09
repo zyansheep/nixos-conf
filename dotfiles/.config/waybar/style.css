@@ -811,11 +811,54 @@ window.gauges-arc #wireplumber.muted {
 }
 #power-profiles-menu #battery-eta-title { font-size: 10px; font-weight: bold; }
 #power-profiles-menu #battery-eta-sleep { font-size: 10px; margin-top: 2px; }
+/* Automatic experiments and Comfort mode: whole rows are switches. */
+#power-profiles-menu #battery-experiments,
+#power-profiles-menu #battery-comfort {
+  background: transparent;
+  border: none;
+  min-width: 0;
+  padding: 6px 8px;
+  margin: 0;
+  color: #c6cbd2;
+}
+#power-profiles-menu #battery-experiments { border-top: 1px solid #45484d; border-radius: 0; }
+#power-profiles-menu #battery-experiments:hover,
+#power-profiles-menu #battery-comfort:hover { background-color: #3a3e44; }
+#power-profiles-menu .toggle-title { font-size: 11px; color: #eeeeee; }
+#power-profiles-menu .toggle-note { font-size: 9px; color: #8d929a; }
+#power-profiles-menu .battery-mode label { font-size: 10px; color: #7d828a; }
+#power-profiles-menu .battery-mode.active label { color: #e2e5e9; }
+#power-profiles-menu .battery-mode .mode-key { font-weight: bold; }
+#power-profiles-menu #battery-mode-battery.active .mode-key { color: #8fdf8f; }
+#power-profiles-menu #battery-mode-comfort.active .mode-key { color: #e7bc6b; }
+#power-profiles-menu switch {
+  min-width: 28px;
+  min-height: 14px;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #5a5f67;
+  border-radius: 9px;
+  background: #45494f;
+  box-shadow: none;
+  color: transparent;
+  font-size: 1px;
+}
+#power-profiles-menu switch:checked { background: #4f86b3; border-color: #6a9fcb; }
+#power-profiles-menu #battery-comfort-switch:checked { background: #a8844a; border-color: #c49c5c; }
+#power-profiles-menu switch slider {
+  min-width: 14px;
+  min-height: 14px;
+  margin: 0;
+  border: none;
+  border-radius: 8px;
+  background: #eeeeee;
+  box-shadow: none;
+}
 #power-profiles-menu #battery-top-apps {
   background: transparent;
   border: none;
   min-width: 0;
-  padding: 2px 8px 6px;
+  padding: 4px 8px 6px;
   color: #c6cbd2;
   border-top: 1px solid #45484d;
 }
