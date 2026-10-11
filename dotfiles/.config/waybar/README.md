@@ -216,7 +216,17 @@ SQLite itself never compresses (pages are rewritten in place).
 layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you click
 another window. One row of controls scopes everything: 6 h / Day / Week, back /
 forward (or ← →), Now. While it is open, switching periods reuses the loaded 30
-days and fetches only new minutes. Tabs:
+days and fetches only new minutes. Its data comes from `panel_data.gather` (no
+GTK, so it is tested headless): the period's charts arrive first, then the
+experiments, which are fitted on all 30 days (gains at the typical draw over
+them) and reused until a new minute lands. Each part is computed on its own,
+so one that fails shows as a warning line under the controls — with the
+traceback in `journalctl --user -u battery-panel` — and the rest still loads
+(on 2026-10-11 one analysis's TypeError blanked the whole panel).
+`battery-panel-check` gathers every period from the real database and
+prints each part's time and any failure (exit 1 on a failure or a period over
+5 s); test_panel_data.py does the same on a synthetic month holding every
+kind of data. Tabs:
 
 - **Timeline** — stacked average watts per moment by group (processor
   baseline, rest of system, display, and stable app groups: browser, builds &

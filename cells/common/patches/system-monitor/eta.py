@@ -36,10 +36,15 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
+# Before numpy: these are small matrices, and BLAS threads only contend for them
+# (a 226×76 least squares took 27 ms with 12 threads, 4 ms with one).
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
 
-import report
-from power import find_battery
+import numpy as np  # noqa: E402
+
+import report  # noqa: E402
+from power import find_battery  # noqa: E402
 
 Z80 = 1.2816  # 80% interval: 10th–90th percentile.
 REFIT = 15 * 60

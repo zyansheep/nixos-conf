@@ -18,15 +18,21 @@ import collections
 import datetime
 import itertools
 import math
+import os
 import re
 from pathlib import Path
 
-import numpy as np
-from scipy.optimize import minimize, nnls
-from scipy.special import expit
+# Before numpy: these are small matrices, and BLAS threads only contend for them
+# (a 226×76 least squares took 27 ms with 12 threads, 4 ms with one).
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
+os.environ.setdefault('OMP_NUM_THREADS', '1')
 
-import power
-import store
+import numpy as np  # noqa: E402
+from scipy.optimize import minimize, nnls  # noqa: E402
+from scipy.special import expit  # noqa: E402
+
+import power  # noqa: E402
+import store  # noqa: E402
 
 LOG = store.STATE / 'power'  # The JSONL archive, models.json and index.json.
 
@@ -165,8 +171,12 @@ def runtime_gain(energy, power, saved):
 
 
 def block_indices(n, block, rng):
+    """A moving-block bootstrap resample of range(n): ceil(n / block) runs of
+    `block` consecutive indices from random starts, cut to n."""
     starts = rng.integers(0, max(1, n - block + 1), size=math.ceil(n / block))
-    return np.concatenate([np.arange(s, min(s + block, n)) for s in starts])[:n]
+    if n < block:
+        return np.arange(n)
+    return (starts[:, None] + np.arange(block)).ravel()[:n]
 
 
 def candidates(rows, model, top=5):
@@ -269,14 +279,17 @@ def by_value(blocks, arm):
 
 
 def experiment_effects(minutes, energy, power, replicates=2000, seed=0):
-    """Paired consecutive A/B blocks per run → saving of arm B (W) and runtime gain."""
-    blocks = experiment_blocks(minutes)
+    """Paired consecutive A/B blocks per run → saving of arm B (W) and runtime gain.
+    Only runs of one setting (app freezing): a combined run's arm is a string
+    of letters and its value a dict per setting, which lever_effects fits."""
+    blocks = {key: b for key, b in experiment_blocks(minutes).items()
+              if b['arm'] in ('A', 'B') and not isinstance(b['value'], (dict, list)) and key[1] is not None}
     pairs = collections.defaultdict(list)
     arms = collections.defaultdict(list)
     for block in blocks.values():
         arms[block['name']].append(block)
     for run in sorted({key[0] for key in blocks}):
-        sequence = sorted((key[1], b) for key, b in blocks.items() if key[0] == run)
+        sequence = sorted(((key[1], b) for key, b in blocks.items() if key[0] == run), key=lambda item: item[0])
         i = 0
         while i + 1 < len(sequence):
             (n1, first), (n2, second) = sequence[i], sequence[i + 1]
@@ -324,14 +337,17 @@ def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_
     if not (enough(arms[False]) and enough(arms[True])) or len(rows) < 2 * min_rows:
         return progress
 
-    def estimate(groups):
-        sample = [(m, arm) for arm in (False, True) for boot in groups[arm] for m in boot]
+    def sums(boot, arm):  # Each boot's XᵀX and Xᵀy: a resample only adds them up.
         x = np.array([[1.0, m['load'], m.get('gpu', 0), m.get('video', 0), m.get('bl') or 0,
-                       m.get('wifi', 0), m.get('disk', 0), float(arm)] for m, arm in sample])
-        y = np.array([m['bat'] for m, _ in sample])
-        coef, *_ = np.linalg.lstsq(x, y, rcond=None)
+                       m.get('wifi', 0), m.get('disk', 0), float(arm)] for m in boot])
+        return x.T @ x, x.T @ np.array([m['bat'] for m in boot])
+    groups = {arm: [sums(boot, arm) for boot in boots.values()] for arm, boots in arms.items()}
+
+    def estimate(picked):
+        xx = sum(xx for arm in picked for xx, _ in picked[arm])
+        xy = sum(xy for arm in picked for _, xy in picked[arm])
+        coef = np.linalg.lstsq(xx, xy, rcond=None)[0]  # = least squares on the rows, rank-deficient or not.
         return -float(coef[-1])  # Watts saved with the setting on.
-    groups = {arm: list(boots.values()) for arm, boots in arms.items()}
     saved = estimate(groups)
     rng = np.random.default_rng(seed)
     boot_samples = []
@@ -485,9 +501,15 @@ def lever_blocks(minutes):
 
 
 def ridge(x, y, w, penalty):
-    sw = np.sqrt(w)
-    a = np.vstack([x * sw[:, None], np.diag(np.sqrt(penalty))])
-    return np.linalg.lstsq(a, np.concatenate([y * sw, np.zeros(len(penalty))]), rcond=None)[0]
+    """Weighted ridge regression, argmin Σ w (y − xβ)² + Σ penalty β², from its
+    normal equations (xᵀWx + diag(penalty)) β = xᵀWy: about 25× faster than a
+    least squares on the stacked rows for these small systems."""
+    xw = x * w[:, None]
+    a, b = xw.T @ x + np.diag(penalty), xw.T @ y
+    try:
+        return np.linalg.solve(a, b)  # Every penalty is positive, so a is positive definite.
+    except np.linalg.LinAlgError:
+        return np.linalg.lstsq(a, b, rcond=None)[0]
 
 
 def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_blocks=3):
@@ -541,12 +563,15 @@ def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_b
     sigma2 = {cpu: noise(cpu) for cpu in (False, True)}
 
     def fit(index):
+        # A resample as weights (how often each block was drawn): the same sums as
+        # its rows, without copying them.
+        counts = w * np.bincount(index, minlength=len(blocks))
         coef = {}
         for cpu in (False, True):
             base = len(runs) + len(covariates[cpu])
             penalty = np.array([1e-6] * base + [sigma2[cpu] / PRIOR_SD['main'] ** 2] * len(varying)
                                + [sigma2[cpu] / PRIOR_SD['pair'] ** 2] * len(pairs))
-            beta = ridge(x[cpu][index], y[index], w[index], penalty)
+            beta = ridge(x[cpu], y, counts, penalty)
             for i, name in enumerate(varying):
                 if (name in CPU_LEVERS) == cpu:
                     coef[name] = beta[base + i]
@@ -572,8 +597,8 @@ def lever_effects(minutes, energy, power, replicates=300, block=3, seed=0, min_b
     def lever(c, name):
         """W saved by a setting's saving state, the others as they are now."""
         return predicted(c, dict(current, **{name: False})) - predicted(c, dict(current, **{name: True}))
-    draw = lambda i: {key: values[i] for key, values in samples.items()}
-    result['effects'] = [dict(summary(lever(coef, n), [lever(draw(i), n) for i in range(replicates)]),
+    # predicted() takes the samples whole: each coefficient is an array of draws.
+    result['effects'] = [dict(summary(lever(coef, n), lever(samples, n)),
                               experiment=n, evidence='experiment', cpu=n in CPU_LEVERS,
                               blocks=result['progress'][n], hours=hours(n), current=current[n]) for n in shown]
     # Extra W saved with both of a pair on, beyond the two separately.
@@ -600,9 +625,7 @@ def best_config(result, allowed, energy=None, power=None, feasible=None, key=Non
     configs = [c for c in configs if feasible is None or feasible(c) or c == current]
     best = min(configs, key=key or (lambda c: predicted(result['coef'], c)))
     saving = predicted(result['coef'], current) - predicted(result['coef'], best)
-    draws = [predicted({k: v[i] for k, v in result['samples'].items()}, current)
-             - predicted({k: v[i] for k, v in result['samples'].items()}, best)
-             for i in range(len(next(iter(result['samples'].values()))))]
+    draws = predicted(result['samples'], current) - predicted(result['samples'], best)  # Every draw at once.
     low, high = np.percentile(draws, [5, 95])
     out = {'config': {n: best[n] for n in names}, 'changes': [n for n in names if best[n] != current.get(n)],
            'watts': saving, 'watts_low': float(low), 'watts_high': float(high)}

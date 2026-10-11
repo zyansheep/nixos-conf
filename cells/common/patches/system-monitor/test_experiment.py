@@ -85,7 +85,8 @@ class ExperimentTests(unittest.TestCase):
         managed = FakeSetting(value='power-saver', ac_managed=True)
         managed.value = 'balanced'  # udev's AC value; the runner must leave it alone.
         clock = FakeClock()
-        self.run_experiment(managed, 5, battery=lambda: False, clock=clock)
+        with mock.patch.object(experiment_module, 'GIVE_UP', 3600):  # Always on AC: give up after an hour, not a week.
+            self.run_experiment(managed, 5, battery=lambda: False, clock=clock)
         self.assertEqual(managed.history, [])
 
     def test_external_restore_ends_the_block_and_the_arm_is_reapplied(self):

@@ -7,6 +7,7 @@ import os
 import subprocess
 import threading
 import time
+import traceback
 from pathlib import Path
 
 import gi
@@ -25,6 +26,7 @@ import eta  # noqa: E402
 import experiment  # noqa: E402
 import qol  # noqa: E402
 import report  # noqa: E402
+from panel_data import History, gather  # noqa: E402
 from report import PHRASES, gain_text  # noqa: E402
 
 # Categorical slots in validated order (dark surface #222226): adjacent stack
@@ -38,7 +40,6 @@ STACK = list(COLORS)
 SURFACE, CARD = (0x22 / 255, 0x22 / 255, 0x26 / 255), (0x34 / 255, 0x34 / 255, 0x37 / 255)
 INK, MUTED, GRID = (1, 1, 1), (1, 1, 1, .68), (1, 1, 1, .08)
 RANGES = {'6 h': 6 * 3600, 'Day': 24 * 3600, 'Week': 7 * 24 * 3600}
-FREEZES = ('freeze', 'freeze-apps')
 BATTERY_HOURS = [1, 2, 4, 8, 24]  # Experiment length choices, in hours of battery time.
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 
@@ -473,65 +474,6 @@ class WhatIfChart(Chart):
         return lines
 
 
-class History:
-    """The last 30 days of minutes and events. While the panel is open, a reload
-    (range switch, paging, the minute tick) fetches only minutes from the newest
-    one on, which may still have been filling."""
-
-    def __init__(self):
-        self.lock = threading.Lock()
-        self.minutes, self.events, self.since = [], [], None
-
-    def get(self):
-        with self.lock:
-            now = time.time()
-            start = now - 30 * 86400
-            if self.since is None:
-                self.minutes, self.events = report.load_range(start, now + 60)
-            else:
-                minutes, events = report.load_range(self.since, now + 60)
-                known = {(e.get('event'), e.get('t1')) for e in self.events}
-                self.minutes = [m for m in self.minutes if start <= m['t'] < self.since] + minutes
-                self.events = ([e for e in self.events if e.get('t1', 0) >= start]
-                               + [e for e in events if (e.get('event'), e.get('t1')) not in known])
-            self.since = self.minutes[-1]['t'] if self.minutes else None
-            return list(self.minutes), list(self.events)
-
-
-def gather(start, end, history=None):
-    """Everything the panel shows for one period (runs off the UI thread)."""
-    history, events = (history or History()).get()
-    rows_all = report.battery_rows(history)
-    # battery-eta trains every model; fit here only if its models.json is missing or stale.
-    shared = eta.load_models()
-    model = shared['attribution'] if shared else report.fit_rows(rows_all)
-    minutes = [m for m in history if start <= m['t'] < end]
-    if start < time.time() - 30 * 86400:
-        minutes, events_old = report.load_range(start, end)
-        events = events_old + events
-    period_events = [e for e in events if start - 86400 <= e.get('t1', 0) < end + 86400]
-    sleeps = [s for s in report.sleep_drain(period_events) if s['end'] > start and s['start'] < end]
-    rows = report.battery_rows(minutes)
-    scope = 'this period'
-    if len(rows) < 30:
-        rows, scope = rows_all, 'all history (too little battery time in this period)'
-    energy = report.full_energy(history)
-    estimates, info = report.what_if(rows, energy, model=model, train_rows=rows_all) if rows else ([], None)
-    power = info['power'] if info else (sum(m['bat'] for m in rows_all) / len(rows_all) if rows_all else None)
-    pool = experiment.pool()
-    # App freezing runs only while locked, so it stays a separate paired A/B analysis.
-    freezes = [e for e in report.experiment_effects(history, energy, power)
-               if e['experiment'] in FREEZES] if power else []
-    return dict(points=report.timeline(minutes, model), span=(start, end), sleeps=sleeps,
-                sleeps_all=report.sleep_drain(events), estimates=estimates, info=info, scope=scope,
-                energy=energy, power=power, levers=report.lever_effects(history, energy, power), effects=freezes,
-                pool=pool, plan=report.plan(history, events, pool) if pool else None, goal=experiment.goal(),
-                psr=report.boot_effect(history, energy, power), psr_arm=experiment.psr_arm(),
-                catalog=[experiment.describe(spec) for spec in experiment.catalog().values()],
-                units=experiment.freezable_units()[:12], model=model,
-                trained=shared['fitted'] if shared else None)
-
-
 def model_rows(result):
     """Model estimates (apps, display) for the chart, and their caption."""
     info = result['info']
@@ -736,6 +678,10 @@ class BatteryPanel(Adw.Application):
         self.summary.add_css_class('muted')
         controls.append(self.summary)
         card.append(controls)
+        # A part of the data that failed: the rest still shows (panel_data.gather).
+        self.problems = wrapped(visible=False)
+        self.problems.add_css_class('problem')
+        card.append(self.problems)
 
         self.stack = Gtk.Stack(transition_type=Gtk.StackTransitionType.CROSSFADE)
         switcher = Gtk.StackSwitcher(stack=self.stack)
@@ -971,19 +917,26 @@ class BatteryPanel(Adw.Application):
         threading.Thread(target=self.load, args=(generation, start, end), daemon=True).start()
 
     def load(self, generation, start, end):
+        """The period's charts as soon as they are ready, then the experiments."""
         try:
-            result = gather(start, end, self.history)
-        except Exception as error:  # noqa: BLE001 - surfaced in the panel
+            result = gather(start, end, self.history,
+                            on_period=lambda partial: GLib.idle_add(self.apply, generation, partial))
+        except Exception as error:  # noqa: BLE001 - gather reports its parts' failures; this is the last resort
+            traceback.print_exc()
             result = {'error': f'{type(error).__name__}: {error}'}
         GLib.idle_add(self.apply, generation, result)
 
     def apply(self, generation, result):
+        """A load's result, or (`pending`) its period part while the experiments are computed."""
         if generation != self.generation:
             return False
-        self.spinner.stop()
-        self.loaded = time.time()
+        pending = result.get('pending', False)
+        if not pending:
+            self.spinner.stop()
+            self.loaded = time.time()
         for chart in (self.timeline, self.sleep, self.whatif):
             chart.loading = False
+        self.show_problems(result.get('errors') or {})
         if 'error' in result:
             self.summary.set_text(result['error'])
             return False
@@ -1006,12 +959,21 @@ class BatteryPanel(Adw.Application):
                                      if median > 0 else f'{len(drains)} suspends logged.')
         else:
             self.sleep_note.set_text('No suspends logged yet.')
+        if pending:
+            return False
         self.effects = result['effects']
         self.catalog, self.units = result['catalog'], result['units']
         self.psr, self.psr_arm = result.get('psr'), result.get('psr_arm')
         self.result = result
         self.fill_experiments()
         return False
+
+    def show_problems(self, errors):
+        if errors:
+            parts = '; '.join(f'{part} ({error})' for part, error in errors.items())
+            self.problems.set_text(f"Couldn't compute {parts}. Everything else is shown; details: "
+                                   'journalctl --user -u battery-panel, or battery-panel-check.')
+        self.problems.set_visible(bool(errors))
 
     def fill_legend(self, points):
         while (child := self.legend.get_first_child()) is not None:
@@ -1049,10 +1011,9 @@ class BatteryPanel(Adw.Application):
         result = self.result
         levers, plan = result['levers'], result.get('plan')
         effects = {e['experiment']: e for e in levers['effects']}
-        info = result['info']
-        draw = (f"Typical draw {result['power']:.1f} W ({result['scope'] if info else 'all history'}) → "
-                f"{result['energy'] / result['power']:.1f} h per full charge ({result['energy']:.0f} Wh). "
-                if result.get('power') and result.get('energy') else '')
+        draw = (f"Typical draw on battery {result['typical']:.1f} W over the last 30 days → "
+                f"{result['energy'] / result['typical']:.1f} h per full charge ({result['energy']:.0f} Wh). "
+                if result.get('typical') and result.get('energy') else '')
         self.experiments_note.set_text(
             draw + 'While on, every 4-minute block on battery sets the included settings to the combination the '
             'battery model expects to learn most from — among those unlikely to bother you, or any while the screen '
@@ -1172,7 +1133,7 @@ class BatteryPanel(Adw.Application):
         self.syncing = True
         self.goal_buttons[goal].set_active(True)
         self.syncing = False
-        recs = report.recommendations(result['levers'], quality, result.get('energy'), result.get('power'))
+        recs = report.recommendations(result['levers'], quality, result.get('energy'), result.get('typical'))
         self.best = recs[goal] if recs[goal]['apply'] else None
         order = (goal,) + tuple(g for g in report.GOALS if g != goal)
         self.best_label.set_text('\n'.join(f"{g.capitalize()}: {recs[g]['text']}" for g in order))
@@ -1412,6 +1373,7 @@ window { background: transparent; }
                 border-left-color: @menu_border_strong; border-radius: 12px;
                 padding: 12px 14px; font-family: sans-serif; font-size: 13px; }
 #battery-card .muted { color: @menu_muted; font-size: 12px; }
+#battery-card .problem { color: #f0a35e; font-size: 12px; }
 #battery-card .banner { background: @menu_card; border-radius: 10px; padding: 8px 10px; }
 #battery-card .experiment { padding: 8px 10px; }
 #battery-card .result { font-weight: bold; font-size: 12px; }

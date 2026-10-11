@@ -1,4 +1,5 @@
 import collections
+import math
 import unittest
 
 import numpy as np
@@ -214,6 +215,20 @@ class LeverTests(unittest.TestCase):
                        set={'aspm': 'powersupersave', 'apst': '0', 'boost': '0', 'profile': 'balanced', 'hz': 60.0})
         states = report.own_settings([own] + minutes + [plugged])
         self.assertEqual((states['aspm'], states['boost'], states['profile']), (True, False, False))
+
+    def test_fast_paths_match_their_straightforward_versions(self):
+        rng = np.random.default_rng(2)
+        x, y, w = rng.normal(size=(200, 12)), rng.normal(size=200), rng.uniform(0.5, 2, 200)
+        penalty = np.r_[np.full(4, 1e-6), np.full(8, 0.3)]
+        sw = np.sqrt(w)
+        stacked = np.linalg.lstsq(np.vstack([x * sw[:, None], np.diag(np.sqrt(penalty))]),
+                                  np.concatenate([y * sw, np.zeros(12)]), rcond=None)[0]
+        np.testing.assert_allclose(report.ridge(x, y, w, penalty), stacked, atol=1e-10)
+        for n in (1, 2, 3, 10, 151):  # Moving-block resamples, as the concatenated ranges they replaced.
+            a, b = np.random.default_rng(n), np.random.default_rng(n)
+            starts = a.integers(0, max(1, n - 3 + 1), size=math.ceil(n / 3))
+            expected = np.concatenate([np.arange(s, min(s + 3, n)) for s in starts])[:n]
+            np.testing.assert_array_equal(report.block_indices(n, 3, b), expected)
 
     def test_no_experiments_means_no_effects(self):
         minutes = [dict(m, exp=None) for m in factorial_minutes(blocks=20)]
