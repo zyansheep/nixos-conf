@@ -70,6 +70,17 @@ int main() {
     "sleep": {"hours": 6.5, "low": 4.95, "high": 8.25, "watts": 1.5},
     "distribution": {"kind": "empty", "t": [0.5, 1.5], "p": [1, 1]}})";
   assert(waybar::powerMenuEta(eta, 1001).sleep == "Asleep from now: ~6:30   80%: 4:57–8:15 at 1.5 W");
+  setenv("TZ", "UTC", 1);
+  tzset();
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Discharging", "hours": 0.07, "low": 0.065, "high": 0.075,
+    "cutout": 1250, "cutout_pm": 17.6, "distribution": {"kind": "empty", "t": [0.05, 0.1], "p": [1, 1]}})";
+  assert(waybar::powerMenuEta(eta, 1001).title == "Cuts out at 00:20:50   in 4m 09s ±18 s");
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Discharging", "hours": 0.07, "low": 0.065, "high": 0.075,
+    "cutout": 1250, "poweroff": 1220, "cutout_pm": 17.6,
+    "distribution": {"kind": "empty", "t": [0.05, 0.1], "p": [1, 1]}})";
+  assert(waybar::powerMenuEta(eta, 1001).title ==
+         "Powers off at 00:20:20   in 3m 39s ±18 s\n(the battery cuts out at 00:20:50)");
+  assert(waybar::powerMenuCountdown(41.4) == "41s" && waybar::powerMenuCountdown(-3) == "0s");
 
   const auto state = root / "state", runtime = root / "runtime";
   std::filesystem::create_directories(state);

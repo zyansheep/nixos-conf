@@ -2,6 +2,7 @@
 #include <json/json.h>
 #include <algorithm>
 #include <cmath>
+#include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <map>
@@ -79,6 +80,23 @@ inline std::string powerMenuClock(double hours) {
   return std::to_string(minutes / 60) + (minutes % 60 < 10 ? ":0" : ":") + std::to_string(minutes % 60);
 }
 
+// "4m 07s", or "41s" under a minute.
+inline std::string powerMenuCountdown(double seconds) {
+  const long total = std::max(0L, std::lround(seconds));
+  if (total < 60) return std::to_string(total) + "s";
+  return std::to_string(total / 60) + "m " + (total % 60 < 10 ? "0" : "") + std::to_string(total % 60) + "s";
+}
+
+// An epoch second as local "HH:MM:SS".
+inline std::string powerMenuTimeOfDay(double epoch) {
+  const std::time_t when = static_cast<std::time_t>(std::llround(epoch));
+  std::tm local{};
+  localtime_r(&when, &local);
+  char text[16];
+  std::strftime(text, sizeof text, "%H:%M:%S", &local);
+  return text;
+}
+
 inline std::string powerMenuTenths(double value) {
   const long tenths = std::lround(value * 10);
   return std::to_string(tenths / 10) + "." + std::to_string(std::labs(tenths % 10));
@@ -135,6 +153,18 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
                                   : std::string("Time left: ")) +
               powerMenuClock(eta.median) + "   80%: " + powerMenuClock(eta.low) + "–" +
               powerMenuClock(eta.high);
+  // The last minutes: the second the embedded controller cuts the power, or
+  // the clean power-off battery-eta does before it.
+  if (eta.kind == "empty" && state["cutout"].isNumeric()) {
+    const auto pm = " ±" + std::to_string(std::lround(state["cutout_pm"].asDouble())) + " s";
+    const auto cutout = state["cutout"].asDouble();
+    if (state["poweroff"].isNumeric())
+      eta.title = "Powers off at " + powerMenuTimeOfDay(state["poweroff"].asDouble()) + "   in " +
+                  powerMenuCountdown(state["poweroff"].asDouble() - now) + pm + "\n(the battery cuts out at " +
+                  powerMenuTimeOfDay(cutout) + ")";
+    else
+      eta.title = "Cuts out at " + powerMenuTimeOfDay(cutout) + "   in " + powerMenuCountdown(cutout - now) + pm;
+  }
   // While charging, lead with the time on battery banked so far (as the
   // outline does) and how much each minute plugged in adds.
   if (eta.kind == "full" && state["banked"].isNumeric()) {

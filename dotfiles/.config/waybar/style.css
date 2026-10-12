@@ -634,6 +634,17 @@ window.gauges-arc #wireplumber.muted {
 }
 #custom-battery-eta.low { color: #ef8585; }
 #custom-battery-eta.charging { color: #8fdf8f; }
+/* The last minutes before the embedded controller cuts the power (battery-eta's
+   `critical`): the countdown blinks, as the power button's LED does. */
+@keyframes battery-cutout { to { color: #ef8585; } }
+#custom-battery-eta.critical {
+  color: #ffffff;
+  animation-name: battery-cutout;
+  animation-duration: 0.8s;
+  animation-timing-function: steps(1);
+  animation-iteration-count: infinite;
+  animation-direction: alternate;
+}
 #power-profiles-daemon {
   min-width: 14px;
   min-height: 22px;

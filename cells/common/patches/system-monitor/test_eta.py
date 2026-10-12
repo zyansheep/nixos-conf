@@ -1,4 +1,6 @@
 import math
+import time
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -152,6 +154,124 @@ class EtaTests(unittest.TestCase):
         self.assertTrue(written['battery']['apply'])
         self.assertTrue(all(a.endswith('=saving') for a in written['battery']['apply']))
         self.assertEqual(written['comfort']['change'], 'same as Battery until a 👍')
+
+    def test_the_cutoff_comes_from_the_boots_that_died_on_battery(self):
+        def boot(name, start, charges, st='D', pct=None):
+            return [{'t': start + 60 * i, 'dt': 60, 'st': st, 'boot': name, 'charge': q * 1000,
+                     'pct': pct if pct is not None else q / 31.25} for i, q in enumerate(charges)]
+        minutes = (boot('died', 0, [93, 81, 69, 57])                   # 12 mAh a minute: 0.2 mAh/s.
+                   + boot('by-hand', 1000, [1700, 1690], pct=54)      # Shut down at 54%.
+                   + boot('slept', 2000, [300, 290], pct=9)            # Died later, while asleep.
+                   + boot('running', 9000, [60, 50]))                 # This boot: not dead yet.
+        fitted = eta.fit_cutoff(minutes)
+        self.assertEqual(fitted['deaths'], 1)
+        self.assertAlmostEqual(fitted['cutoff'], 0.057 - 5 * 0.0002, places=5)
+        timed = {'boot': 'timed', 'cut': 0.0550, 't': 500, 'source': 'black box'}
+        both = eta.fit_cutoff(minutes, [timed])
+        self.assertEqual(both['deaths'], 2)
+        self.assertAlmostEqual(both['cutoff'], np.median([0.056, 0.0550]), places=5)
+        self.assertEqual(eta.fit_cutoff([])['cutoff'], 0.0)  # Nothing died yet: empty is zero charge.
+        # battery-eta powered 'died' off itself: it looks like a death in the records, but isn't one.
+        self.assertEqual(eta.fit_cutoff(minutes, [timed, {'boot': 'died', 'poweroff': True}])['deaths'], 1)
+        self.assertEqual([d['boot'] for d in eta.deaths_in(minutes, running='died')], ['running'])
+        with tempfile.TemporaryDirectory() as tmp:  # Remembered past the window.
+            path = Path(tmp) / 'deaths.json'
+            eta.remember_deaths(minutes, path=path)
+            self.assertEqual(eta.fit_cutoff([], eta.load_gasps(path))['deaths'], 1)
+
+    def test_a_last_gasp_near_the_cutoff_from_another_boot_is_a_death(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            gasp, deaths = Path(tmp) / 'lastgasp.json', Path(tmp) / 'deaths.json'
+            write = lambda **g: gasp.write_text(json.dumps({'boot': 'old', 'charge': 0.056, 'full': 3.125,
+                                                            't': 1.0, 'seconds': 6.0, **g}))
+            write(boot='now')
+            self.assertIsNone(eta.harvest_gasp('now', gasp, deaths))
+            self.assertTrue(gasp.exists())                            # Still this boot's.
+            write(seconds=900, charge=0.12)                            # Shut down by hand at 4%.
+            self.assertIsNone(eta.harvest_gasp('now', gasp, deaths))
+            self.assertFalse(gasp.exists() or deaths.exists())
+            write(rate=0.0002)
+            death = eta.harvest_gasp('now', gasp, deaths)
+            self.assertAlmostEqual(death['cut'], 0.0558)                # Cut within the 2 s after it.
+            self.assertEqual([g['boot'] for g in eta.load_gasps(deaths)], ['old'])
+            write(boot='older', poweroff=True)                          # battery-eta powered it off.
+            self.assertTrue(eta.harvest_gasp('now', gasp, deaths)['poweroff'])
+            self.assertEqual(eta.fit_cutoff([], eta.load_gasps(deaths))['deaths'], 1)
+
+    def test_energy_counts_down_to_the_cutoff(self):
+        params = dict(self.params, volts=[14.0] * 101, cutoff=0.056)
+        self.assertAlmostEqual(eta.usable_energy(0.556, 3.125, params), 0.5 * 14.0, places=3)
+        self.assertEqual(eta.usable_energy(0.04, 3.125, params), 0.0)
+
+    def test_the_last_minutes_count_down_to_the_second_and_warn(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            battery = root / 'class/power_supply/BAT1'
+            battery.mkdir(parents=True)
+            (root / 'sys/kernel/random').mkdir(parents=True)
+            (root / 'sys/kernel/random/boot_id').write_text('cc72fcaf-0000\n')
+            values = {'type': 'Battery', 'status': 'Discharging', 'current_now': '820000', 'voltage_now': '13800000',
+                      'charge_now': '80000', 'charge_full': '3125000', 'capacity': '3'}
+            for name, value in values.items():
+                (battery / name).write_text(value)
+            notes = []
+            live = eta.Live(root, proc=root, gasp=root / 'lastgasp.json', notify=lambda *note: notes.append(note))
+            live.params = dict(self.params, volts=[13.8] * 101, cutoff=0.056, cutoff_spread=0.0018)
+            now = time.time()
+            # Two minutes of the gauge falling 0.2 mAh/s, to 80 mAh now: 120 s to the cutoff.
+            for i in range(60, 0, -1):
+                live.samples.append((now - 2 * i, 11.3, 'Discharging', 0.080 + 0.0002 * 2 * i))
+            out = live.estimate()
+            detail = out['detail']
+            self.assertIn('critical', out['class'])
+            self.assertAlmostEqual(detail['cutout'] - time.time(), 120, delta=3)
+            self.assertAlmostEqual(detail['cutout_pm'], 18, delta=1)
+            self.assertRegex(out['text'], r'</span> [12]m \d\ds <span[^>]*>±18s</span>')
+            self.assertEqual(len(notes), 1)                           # Within 5 minutes; once.
+            self.assertTrue(notes[0][0].startswith('Battery cuts out at '))
+            live.estimate()
+            self.assertEqual(len(notes), 1)
+            gasp = json.loads((root / 'lastgasp.json').read_text())   # The black box, below 5%.
+            self.assertEqual((gasp['boot'], gasp['charge']), ('cc72fcaf', 0.08))
+            (battery / 'status').write_text('Charging')
+            live.estimate()
+            self.assertFalse((root / 'lastgasp.json').exists())       # Plugged in: not a death.
+
+    def test_once_a_death_taught_the_cutoff_it_powers_off_cleanly_before_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            battery = root / 'class/power_supply/BAT1'
+            battery.mkdir(parents=True)
+            (root / 'sys/kernel/random').mkdir(parents=True)
+            (root / 'sys/kernel/random/boot_id').write_text('cc72fcaf-0000\n')
+            values = {'type': 'Battery', 'status': 'Discharging', 'current_now': '820000', 'voltage_now': '13800000',
+                      'charge_now': '62000', 'charge_full': '3125000', 'capacity': '2'}
+            for name, value in values.items():
+                (battery / name).write_text(value)
+            notes, offs = [], []
+            live = eta.Live(root, proc=root, gasp=root / 'lastgasp.json', notify=lambda *n: notes.append(n),
+                            poweroff=lambda: offs.append(time.time()))
+            live.params = dict(self.params, volts=[13.8] * 101, cutoff=0.056, cutoff_spread=0.0018, deaths=5)
+            now = time.time()
+            for i in range(60, 0, -1):  # 0.2 mAh/s, to 62 mAh: 30 s to the cutoff.
+                live.samples.append((now - 2 * i, 11.3, 'Discharging', 0.062 + 0.0002 * 2 * i))
+            out = live.estimate()
+            self.assertIn('\uf011', out['text'])                      # Counting down to the power-off …
+            self.assertAlmostEqual(out['detail']['poweroff'] - time.time(), 0, delta=3)
+            self.assertEqual(offs, [])                                # … but once is not enough.
+            live.estimate()
+            self.assertEqual(len(offs), 1)
+            self.assertTrue(json.loads((root / 'lastgasp.json').read_text())['poweroff'])
+            live.estimate()
+            self.assertEqual(len(offs), 1)                            # Only once.
+            live.params['deaths'] = 0                                  # Nothing learned: no power-off.
+            live.clear_gasp()
+            live.estimate()
+            live.estimate()
+            self.assertEqual(len(offs), 1)
+
+    def test_countdown_format(self):
+        self.assertEqual((eta.countdown(247.4), eta.countdown(41), eta.countdown(-2)), ('4m 07s', '41s', '0s'))
 
     def test_plus_minus_is_half_the_interval(self):
         self.assertIn('±0:15', eta.plus_minus(1.0, 1.5))

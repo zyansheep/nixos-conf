@@ -44,6 +44,40 @@ learned minutes-per-percent charge curve (constant current, then taper above
 ~80%), scaled by the last five minutes' rate; its interval is the spread of
 10-minute charge rates around that curve. Models refit every 15 minutes.
 
+Empty is where the battery cuts out, not zero charge. Nothing shuts the laptop
+down on low battery (UPower isn't running), so the embedded controller cuts
+the power, and it does so with charge still on the gauge: five deaths
+(2026-10-03 to 10-11) all ended at 2% with 47–59 mAh left at 8–25 W, while
+the loaded voltage (13.5–13.9 V) never collapsed. Until then battery-eta
+counted down to zero and, one minute before each death, still showed 3.5–6
+minutes. `eta.fit_cutoff` learns the cutoff from every boot that ended on
+battery below 3% (56 mAh ± 2 here), time left counts the energy above it, and
+in the last 3 minutes the gauge's own falling charge over the past 2 minutes,
+extrapolated to the cutoff, times the second it cuts out. The gauge lowers its
+estimate faster under heavy draw (1 mAh/s at 25 W, twice what the current
+explains), which the watts alone miss. Backtested leaving each death out:
+from two minutes before, within ~10 s on average and 35 s at worst, against
+3.5–5 minutes late before. Below 10 minutes the label counts down
+(`2m 07s ±18s`; it blinks red for the last 3 minutes, as the power LED does),
+the menu and panel say “Cuts out at 10:30:41”, and a notification comes at 5
+minutes and at 1. Below 5% a black box fsyncs the last reading every 2 s to
+`~/.local/state/waybar-monitor/lastgasp.json`; the next start turns a last
+gasp from an earlier boot close to the cutoff into a timed death in
+`deaths.json`, which the cutoff fit prefers (the database itself can lose the
+last ~5 s of writes, and the raw archive lost 50 s). Deaths found in the
+records are remembered there too, so the cutoff outlives the 30-day window.
+
+Once a death has taught the cutoff, battery-eta powers the laptop off cleanly
+30 s before it (`systemctl poweroff`, which logind allows the active session
+without a password) instead of letting the power vanish: apps close, the disks
+settle, the journal keeps its tail. It waits for two readings in a row that
+say so, within 10 mAh of the cutoff, so one odd gauge step can't trigger it.
+The countdown, the menu (“Powers off at 10:30:11”, then when the battery would
+cut out) and the notifications then count to the power-off. The last gasp
+says it powered off, and deaths.json records that boot as a power-off, not a
+death — otherwise its last reading, 30 s early, would pull the cutoff up and
+the power-off earlier each time.
+
 The profile popup centers its three buttons beneath the battery. A highlighted button
 marks the active profile. Battery health and cycle count appear below the
 buttons and refresh whenever the menu opens. Health is full capacity divided by design

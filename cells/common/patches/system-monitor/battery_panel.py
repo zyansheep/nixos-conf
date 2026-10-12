@@ -1308,7 +1308,14 @@ class BatteryPanel(Adw.Application):
             if estimate and estimate.get('hours') is not None:
                 line = f"{pct}% charge, {estimate['energy_pct']}% energy · {status.lower()} · {abs(watts):.1f} W"
                 interval = f"{duration(estimate['low'])}–{duration(estimate['high'])}"
-                if status == 'Discharging':
+                if status == 'Discharging' and estimate.get('cutout'):
+                    clock = lambda t: time.strftime('%H:%M:%S', time.localtime(t))
+                    end = estimate.get('poweroff') or estimate['cutout']
+                    line += (f" · {'powers off' if estimate.get('poweroff') else 'cuts out'} at {clock(end)} "
+                             f"(in {eta.countdown(end - time.time())}, ±{estimate['cutout_pm']:.0f} s"
+                             + (f"; the battery cuts out at {clock(estimate['cutout'])})" if estimate.get('poweroff')
+                                else ')'))
+                elif status == 'Discharging':
                     line += f" · {duration(estimate['hours'])} left (80%: {interval})"
                 elif status == 'Charging':
                     if estimate.get('ratio') is not None:
