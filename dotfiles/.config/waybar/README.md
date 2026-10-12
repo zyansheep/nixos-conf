@@ -351,10 +351,17 @@ kind of data. Tabs:
     enable, so the internal GPU/USB/audio (c1) and USB4 (c3) links never got
     ASPM: the ASPM saving measured before then is Wi-Fi and NVMe only.
     **Background-app throttle** (`throttle-apps`, the `app-throttle` user
-    service, `throttle.py`): while on battery, every app scope in app.slice
-    but the focused window's gets a CPU quota of 5% of one core (cgroup
-    `cpu.max` 5000/100000, which the user owns), lifted the moment it gets
-    focus. Apps with a PipeWire audio or video stream that is *running* (an
+    service, `throttle.py`): while on battery, every app with a window but
+    the focused one gets a CPU quota of 10% of one core per scope (cgroup
+    `cpu.max` 10000/100000, which the user owns), lifted the moment it gets
+    focus and kept off for 2 minutes after it loses it. An app is every scope
+    with its launch pid: Electron apps move their main process into a scope
+    of their own (`app-vesktop-2295`) and leave the renderers in niri's
+    (`app-niri-vesktop-2295`), and freeing only the window's scope left
+    Discord's renderers capped — frozen — while it was focused (2026-10-12).
+    Apps without a window (helpers, daemons, wl-copy serving the clipboard,
+    whatever a launcher spawned) are never capped: capped, the emoji picker
+    took 4–6 s to paste. Apps with a PipeWire audio or video stream that is *running* (an
     open, idle stream doesn't count: Floorp keeps several), T3 Code (agents)
     and fcitx5 (it types into the focused app) are left alone, as is
     everything on AC. It follows niri's event stream and `pw-dump --monitor`,
@@ -363,7 +370,8 @@ kind of data. Tabs:
     and stopping it (or `app-throttle --release`, the unit's ExecStopPost)
     lifts every quota. Measured motivation: background apps use ~0.65 of a
     core on battery, ~2.5 W. Terminals are throttled too, so a build in an
-    unfocused terminal slows down; `app-throttle --keep PATTERN` exempts more. The tab lists clear
+    unfocused terminal slows down; `app-throttle --keep PATTERN` exempts more
+    (matched without systemd's `\x2d` escapes). The tab lists clear
     interactions and the best measured combination for the goal; **Apply**
     sets all of it now (`power-experiment apply name=saving|normal`,
     until reboot). Root settings go through `sudo -n power-lab`; its

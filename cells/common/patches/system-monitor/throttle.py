@@ -1,10 +1,20 @@
 #!/usr/bin/env python3
-"""Background-app throttle: while on battery, every app — a systemd scope in
-app.slice — but the focused window's runs under a CPU quota of QUOTA% of one
-core (cgroup cpu.max), lifted the moment it gets focus. Apps playing or
-recording audio or video (PipeWire streams that are running, not just open)
-and KEEP (T3 Code's agents, the input method that serves the focused app) are
-left alone, and so is everything on AC.
+"""Background-app throttle: while on battery, every app with a window but the
+focused one runs under a CPU quota of QUOTA% of one core (cgroup cpu.max),
+lifted the moment it gets focus and kept off for GRACE after it loses it, so
+switching back and forth never lands on a cold app. Apps without a window —
+helpers, daemons, clipboard owners (wl-copy serves every paste), whatever a
+launcher just spawned while a layer surface had focus — are never capped:
+capped, the emoji picker took 4–6 s to paste. Apps playing or recording audio or video
+(PipeWire streams that are running, not just open) and KEEP (T3 Code's
+agents, the input method that serves the focused app) are left alone, and so
+is everything on AC.
+
+An app is every systemd scope in app.slice with the same launch pid: Electron
+apps move their main process into a scope of their own (app-vesktop-2295)
+and leave the renderers in the one niri started (app-niri-vesktop-2295), so
+freeing only the window's scope left Discord's renderers capped — frozen —
+while it was focused.
 
     app-throttle [--quota N] [--keep PATTERN ...]
     app-throttle --release      (lift every quota; the unit's ExecStopPost)
@@ -26,7 +36,8 @@ import sys
 import time
 from pathlib import Path
 
-QUOTA = 5  # % of one core per background app.
+QUOTA = 10  # % of one core per background app scope.
+GRACE = 120  # s an app stays free after it loses focus.
 PERIOD = 100_000  # µs: cgroup cpu.max's period.
 UNLIMITED = f'max {PERIOD}'
 KEEP = ('t3code', 'fcitx5')  # Agents keep working; the input method types into the focused app.
@@ -49,10 +60,12 @@ def on_battery(power=Path('/sys/class/power_supply')):
 
 
 class Throttle:
-    def __init__(self, apps=APPS, quota=QUOTA, keep=KEEP, battery=on_battery, proc=Path('/proc')):
+    def __init__(self, apps=APPS, quota=QUOTA, keep=KEEP, battery=on_battery, proc=Path('/proc'), grace=GRACE,
+                 clock=time.monotonic):
         self.apps, self.limit, self.keep = apps, f'{quota * PERIOD // 100} {PERIOD}', tuple(k.lower() for k in keep)
-        self.battery, self.proc = battery, proc
+        self.battery, self.proc, self.grace, self.clock = battery, proc, grace, clock
         self.windows, self.focused, self.nodes = {}, None, {}  # window id → pid; PipeWire node id → what we know
+        self.current, self.left = None, {}  # The focused app; when each app last lost focus.
 
     def window_event(self, event):
         """One line of `niri msg -j event-stream`."""
@@ -94,6 +107,8 @@ class Throttle:
 
     def scope_of(self, pid):
         """The app scope `pid` runs in (a name in app.slice), or None."""
+        if not pid:
+            return None
         for line in (read(self.proc / str(pid) / 'cgroup') or '').splitlines():
             parts = line.rpartition(':')[2].split('/')
             if 'app.slice' in parts[:-1]:
@@ -106,8 +121,18 @@ class Throttle:
         scopes = sorted(p.name for p in self.apps.glob('app-*.scope'))
         if not self.battery():
             return dict.fromkeys(scopes, UNLIMITED)
-        free = {self.scope_of(pid) for pid in [self.windows.get(self.focused), *self.media.values()] if pid}
-        return {s: UNLIMITED if s in free or any(k in s.lower() for k in self.keep) else self.limit for s in scopes}
+        now = self.clock()
+        focused = app_of(self.scope_of(self.windows.get(self.focused)) or '') or None
+        if focused != self.current:
+            if self.current is not None:
+                self.left[self.current] = now
+            self.current = focused
+        free = {app_of(self.scope_of(pid) or '') for pid in self.media.values()} | {focused}
+        self.left = {app: left for app, left in self.left.items() if now - left < self.grace}
+        free |= set(self.left)
+        free |= {app_of(s) for s in scopes if any(k in unescape(s).lower() for k in self.keep)}
+        windowed = {app_of(self.scope_of(pid) or '') for pid in self.windows.values()} - {''}
+        return {s: self.limit if app_of(s) in windowed and app_of(s) not in free else UNLIMITED for s in scopes}
 
     def apply(self, values=None):
         """Write what changed; the scopes now throttled."""
@@ -125,10 +150,21 @@ class Throttle:
         self.apply(dict.fromkeys((p.name for p in self.apps.glob('app-*.scope')), UNLIMITED))
 
 
+def app_of(scope):
+    """An app's scopes share its launch pid: 'app-niri-vesktop-2295.scope' and
+    'app-vesktop-2295.scope' are both '2295'. A scope without one is its own app."""
+    match = re.search(r'-(\d+)\.scope$', scope)
+    return match[1] if match else scope
+
+
+def unescape(scope):
+    """systemd's escapes: 'emoji\\x2dpicker' → 'emoji-picker'."""
+    return re.sub(r'\\x([0-9a-f]{2})', lambda m: chr(int(m[1], 16)), scope)
+
+
 def label(scope):
     """'app-niri-floorp-2240.scope' → 'floorp', 'app-md.Obsidian-2243.scope' → 'Obsidian'."""
-    name = re.sub(r'\\x([0-9a-f]{2})', lambda m: chr(int(m[1], 16)), scope)  # systemd's escapes
-    name = name.removesuffix('.scope').removeprefix('app-').removeprefix('niri-')
+    name = unescape(scope).removesuffix('.scope').removeprefix('app-').removeprefix('niri-')
     name = name.rpartition('-')[0] if name.rpartition('-')[2].isdigit() else name
     return name.rpartition('.')[2]
 
