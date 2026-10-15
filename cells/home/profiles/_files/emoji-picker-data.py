@@ -90,7 +90,9 @@ def kaomoji_entries(path):
         if k in seen:
             fail("listed twice")
         seen.add(k)
-        yield k, mood, group_words + [w.strip() for w in own.split(",") if w.strip()]
+        own_words = [w.strip() for w in own.split(",") if w.strip()]
+        # dict.fromkeys drops a word the group already has, keeping order.
+        yield k, mood, list(dict.fromkeys(group_words + own_words))
 
 
 # --- math ------------------------------------------------------------------

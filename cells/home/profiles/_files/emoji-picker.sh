@@ -65,15 +65,23 @@ else
   chars=$choice
 fi
 
-printf '%s' "$chars" | wl-copy
-printf '%s' "$chars" | wl-copy --primary
+# An explicit type, or wl-copy runs xdg-mime to guess one: ~0.35 s each.
+printf '%s' "$chars" | wl-copy --type 'text/plain;charset=utf-8'
+printf '%s' "$chars" | wl-copy --primary --type 'text/plain;charset=utf-8'
 
 [ -n "${EMOJI_PICKER_NO_PASTE:-}" ] && exit 0
 
 # Vicinae's layer surface holds the keyboard until it is torn down, and niri
 # only then hands focus back to the previous window. Pasting into that gap is
-# the other way keystrokes get swallowed.
-sleep 0.2
+# the other way keystrokes get swallowed. niri reports no focused window
+# while a layer surface has the keyboard, so paste as soon as it reports one
+# (giving up after ~0.5 s, e.g. on an empty workspace) rather than sleeping a
+# fixed 0.2 s. niri, like vicinae, comes from PATH to match the compositor.
+for _ in $(seq 25); do
+  focused=$(niri msg -j focused-window 2>/dev/null) || { sleep 0.2; break; }
+  [ "$focused" != null ] && break
+  sleep 0.02
+done
 
 # Never fail the picker over a refused paste — the clipboard still has it.
 wtype -M shift -P Insert -p Insert -m shift || true
