@@ -31,15 +31,21 @@ charging. A green leaf means Power saver, blue scales mean Balanced, and an
 amber speedometer means Performance. Open the power selector for battery health,
 cycle count and the active profile.
 
-`battery-eta` (waybar-monitor) produces the label. Time to empty is remaining
-energy (∫ loaded voltage × charge, from the power log's voltage curve) divided
-by the forecast average draw over the remaining time, solved jointly. Draw is
-modelled as an Ornstein–Uhlenbeck process on minute means (long-run mean,
-variance and decay time ≈15 min fitted from history; the recent 10-minute draw
-decays toward the mean), giving a log-normal 80% interval that also covers
-uncertainty in the long-run mean; current readings are scaled by the charge
-counter (~5% under-read). Backtested, the 80% interval for the average draw
-covered 82–88% of outcomes at 10–90 minute horizons. Time to full integrates the
+`battery-eta` (waybar-monitor) produces the label. Time left is *awake* time
+on battery (how long a suspend would last is a separate estimate, below): the
+remaining energy (∫ loaded voltage × charge, from the power log's voltage
+curve) divided by the forecast average draw over the remaining time, solved
+jointly. The draw is an Ornstein–Uhlenbeck process in log watts (minute
+means) that reverts to a *local level* — the typical draw of roughly the last
+5 hours on battery — rather than to a month-long mean, so a light day and a
+heavy build day each forecast from their own recent use; the recent 10-minute
+draw decays toward that level, with the decay time and variance fitted from
+history. The forecast is log-normal: its 80% interval also covers the
+uncertainty in the level and is calibrated against backtests of past
+discharges, and averaging on the log scale is corrected for (Jensen: the mean
+of a log-normal draw sits above its median). Current readings are scaled by
+the charge counter, which reads a few percent under. (Gains per full charge
+use a longer-run draw instead: see the panel's *typical draw*.) Time to full integrates the
 learned minutes-per-percent charge curve (constant current, then taper above
 ~80%), scaled by the last five minutes' rate; its interval is the spread of
 10-minute charge rates around that curve. Models refit every 15 minutes.
@@ -50,14 +56,15 @@ the power, and it does so with charge still on the gauge: five deaths
 (2026-10-03 to 10-11) all ended at 2% with 47–59 mAh left at 8–25 W, while
 the loaded voltage (13.5–13.9 V) never collapsed. Until then battery-eta
 counted down to zero and, one minute before each death, still showed 3.5–6
-minutes. `eta.fit_cutoff` learns the cutoff from every boot that ended on
-battery below 3% (56 mAh ± 2 here), time left counts the energy above it, and
-in the last 3 minutes the gauge's own falling charge over the past 2 minutes,
-extrapolated to the cutoff, times the second it cuts out. The gauge lowers its
-estimate faster under heavy draw (1 mAh/s at 25 W, twice what the current
-explains), which the watts alone miss. Backtested leaving each death out:
-from two minutes before, within ~10 s on average and 35 s at worst, against
-3.5–5 minutes late before. Below 10 minutes the label counts down
+minutes. `eta.fit_cutoff` learns the cutoff from the boots the battery cut
+below 3% (56 mAh ± 2 here), and time left counts the energy above it. Below
+5% the time comes from the gauge itself rather than the watts: its falling
+charge over the last 10 minutes (5 at least), extrapolated to the cutoff, and
+in the last 3 minutes its slope over the past 2 minutes, which times the
+second it cuts out. The gauge lowers its estimate faster under heavy draw (1
+mAh/s at 25 W, twice what the current explains), which the watts alone miss.
+Backtested leaving each death out: from two minutes before, within ~10 s on
+average and 35 s at worst, against 3.5–5 minutes late before. Below 10 minutes the label counts down
 (`2m 07s ±18s`; it blinks red for the last 3 minutes, as the power LED does),
 the menu and panel say “Cuts out at 10:30:41”, and a notification comes at 5
 minutes and at 1. Below 5% a black box fsyncs the last reading every 2 s to
@@ -66,48 +73,69 @@ gasp from an earlier boot close to the cutoff into a timed death in
 `deaths.json`, which the cutoff fit prefers (the database itself can lose the
 last ~5 s of writes, and the raw archive lost 50 s). Deaths found in the
 records are remembered there too, so the cutoff outlives the 30-day window.
+How each earlier boot ended comes from the system journal: the battery cut it
+(no shutdown and no reset reason), it shut down (or began to, and the battery
+cut that short), it died asleep, or the next boot gives a reset reason (a sync
+flood, a reboot). Only battery cuts teach the cutoff; any other ending is
+remembered as not a death, so a crash at 2% can't drag the cutoff up.
+deaths.json is written atomically, its previous version kept as
+`deaths.json.bak`.
 
 Once a death has taught the cutoff, battery-eta powers the laptop off cleanly
-30 s before it (`systemctl poweroff`, which logind allows the active session
-without a password) instead of letting the power vanish: apps close, the disks
-settle, the journal keeps its tail. It waits for two readings in a row that
-say so, within 10 mAh of the cutoff, so one odd gauge step can't trigger it.
-The countdown, the menu (“Powers off at 10:30:11”, then when the battery would
-cut out) and the notifications then count to the power-off. The last gasp
-says it powered off, and deaths.json records that boot as a power-off, not a
-death — otherwise its last reading, 30 s early, would pull the cutoff up and
-the power-off earlier each time.
+(`systemctl poweroff`, which logind allows the active session without a
+password) instead of letting the power vanish: apps close, the disks settle,
+the journal keeps its tail. It aims at the *early* edge of the cutoff
+estimate — the soonest the battery could plausibly cut out, not the likely
+moment — less 45 s of lead (`POWEROFF_SECONDS`), and acts only below 5%, on
+readings that agree and with the charge already close to the cutoff, so one
+odd gauge step or a wild trend can't trigger it; it re-checks the charger
+first. The countdown, the menu (“Powers off at 10:30:11”, then when the
+battery would cut out) and the notifications then count to the power-off.
+The black box records the power-off, and deaths.json keeps that boot as a
+power-off, not a death — otherwise its last reading, well before the cut,
+would pull the cutoff up and the power-off earlier each time.
 
 The profile popup centers its three buttons beneath the battery. A highlighted button
 marks the active profile. Battery health and cycle count appear below the
 buttons and refresh whenever the menu opens. Health is full capacity divided by design
 capacity; unsupported readings show “unavailable”, and zero cycles is valid.
-Below that, battery-eta's time left (to the charge limit while charging) with
-its 80% interval (the battery is empty by t exactly when the average draw over
-t reaches the remaining energy / t, so P(T ≤ t) comes straight from the draw
-forecast), and how long the laptop would last suspended from now: remaining
-energy over a log-normal fit of per-suspend drain (longer suspends weigh more),
-with an 80% predictive interval for one new suspend (spread between suspends
-plus the uncertainty of their mean).
+Below that, battery-eta's time left — awake time on battery only — (to the
+charge limit while charging) with its 80% interval (the battery is empty by t
+exactly when the average draw over t reaches the remaining energy / t, so
+P(T ≤ t) comes straight from the draw forecast), and how long the laptop would
+last suspended from now: remaining energy over a log-normal fit of per-suspend
+drain (longer suspends weigh more), with an 80% predictive interval for one new
+suspend (spread between suspends plus the uncertainty of their mean). Both
+lines refresh every second while the menu is open, so the last minutes' count
+down to the second doesn't freeze.
 
-Then two switch rows; clicking a row flips it and keeps the menu open (Enter
-flips it and closes the menu):
+Then two switch rows; a click that starts and ends on a row flips it and keeps
+the menu open (Enter flips it and closes the menu). The release that ends a
+press-drag from the bar does nothing, so opening the menu can't flip Comfort
+mode and apply settings by accident:
 
 - **Automatic experiments** (`power-experiment enable|disable`), with the
   runner's status under it: testing block N, or paused and why (AC power, a
   👎 rest, a setting unavailable or failing to change, nothing to test).
-  Turning them off sets the goal's best combination.
+  Turning them off restores a stock baseline; it no longer applies a
+  recommendation (Comfort mode or the panel's Apply does that).
 - **Comfort mode** picks the goal (`power-experiment goal comfort|battery
   --apply`): off is *Battery*. Under it, each goal's best measured combination
   — what it would change from your settings (the latest minute outside
   experiments; profile, ABM and boost, which follow AC, as on battery), the 👍 chance per block now → then for Comfort, and the battery
   life it adds or costs per full charge with its 90% interval. The chosen
-  goal's line is bright. Switching applies that goal's whole combination
-  unless experiments own the settings; then it applies when they are
-  disabled. Applied settings last until reboot (ASPM/APST are off during
-  each suspend and come back after it). battery-eta writes both lines to
+  goal's line is bright. Switching applies that goal's combination unless
+  experiments own the settings: then it only sets the goal, nothing is
+  applied (the row says so), and turning experiments off restores stock
+  rather than applying it. Risky settings (ASPM, APST, GPU clocks) are
+  applied only with `--risky` on the command line and quarantined ones not
+  at all, so a combination that includes them is applied without them.
+  Applied settings last until reboot, on battery: on AC they go back to
+  stock and return on battery. battery-eta writes both lines to
   `$XDG_RUNTIME_DIR/waybar-monitor/recommend.json` at each refit (every 15
-  minutes); older than an hour, they show as waiting.
+  minutes); older than an hour, they show as waiting. The battery panel shows
+  and applies the same file, so the menu and the panel show the same
+  combinations.
 
 Below that, battery use over the last 30 minutes on battery ranks apps and
 hardware together in average watts and share, with the size of the long-term
@@ -161,16 +189,29 @@ Linux has no per-process power meter, but this laptop measures two totals:
 battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
 `PPT`, CPU + GPU). Both are sampled four times a second. The menu splits them:
 
-- **Chip power → apps.** Above a learned floor (“Processor baseline”), chip
-  power is divided by each app's load and GPU/video engine time (DRM `fdinfo`,
-  deduplicated by client id). Load is busy CPU time × clock² (GHz): dynamic
-  power grows with frequency and voltage, and busy time alone explained only
-  45% of chip power versus 73% with the clock term. Busy CPU time not owned by a
+- **Chip power → apps.** Chip power is a learned floor, plus each app's load
+  and GPU/video engine time (DRM `fdinfo`, deduplicated by client id), plus a
+  *clock term*: the mean core clock costs power even while the cores are
+  mostly idle. Load is busy CPU time × clock² (GHz): dynamic power grows with
+  frequency and voltage. The clock term is split at the *idle clock* (where
+  the clock sits when almost nothing runs, a low percentile of the logged
+  minutes): the part up to it belongs to the floor (“Processor baseline”),
+  the part above it is raised by whatever ran and is shared among the apps by
+  their busy time. Idle cores report a placeholder clock that the platform
+  profile sets (0.41 GHz under power-saver, 1.12 GHz under balanced, and
+  another on AC), so each profile has its own idle clock, on battery and on
+  AC, and the profile
+  is also a setting with its own column in the model (below); once enough
+  minutes log the active cores' clock (store layout 9, without idle cores'
+  placeholders), the model uses that instead. Busy CPU time not owned by a
   process goes to “Kernel”.
-- **Chip watts cost more than a watt of battery.** On one-minute means,
-  battery ≈ 0.3 + 1.39 × chip + 3.0 × backlight W (R² 0.945): conversion losses
-  and rails outside PPT follow chip load. On battery, app and baseline shares
-  are multiplied by that learned factor.
+- **Chip watts cost more than a watt of battery.** Battery power is fitted as
+  a base plus a factor × chip power plus the devices below: conversion
+  losses and rails outside PPT follow chip load, so on battery the app and
+  baseline shares are multiplied by that learned factor. (Historical, before
+  the clock term: battery ≈ 0.3 + 1.39 × chip + 3.0 × backlight W on one-minute
+  means, R² 0.945; busy time alone explained 45% of chip power, 73% with the
+  clock² weighting.)
 - **Battery − k × chip → hardware.** Display (backlight), Wi-Fi (traffic),
   storage (busy time), USB devices, audio and keyboard backlight use learned
   watts per unit of activity; the unexplained remainder is “Rest of system”.
@@ -178,7 +219,11 @@ battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
 Both are non-negative least squares on one-minute means (the battery reading
 lags chip power by ~10 s), lightly shrunk toward prior guesses so features that
 never vary keep plausible values, and fitted on battery time only (AC runs a
-hungrier power profile). **Models are trained in one place:** `battery-eta`
+hungrier power profile). Experiment minutes count, except each block's
+washout: both models have a column per setting (its saving state against
+yours), so the parts are at your settings and an experiment's effect stays
+out of them. Since 2026-10-12 nearly every battery minute has been an
+experiment's, and leaving them out had frozen every model on the days before. **Models are trained in one place:** `battery-eta`
 fits these and its own time-left, charging and sleep models on the last 30 days
 at start and every 15 minutes, and writes them all to
 `~/.local/state/waybar-monitor/power/models.json`. The collector's menu
@@ -226,15 +271,28 @@ written by the collector as it measures, one transaction per record:
 | --- | --- |
 | `records` | one row per 10 s record: every scalar above as typed columns, NULL where absent (battery and chip W with min/max, CPU seconds and MHz, C1–C3 residency, IPI counts, GPU/video, Wi-Fi vs other network bytes and signal, disk bytes/busy, USB/PCI/audio, backlight, refresh rate, display-panel state, every power setting, thermals, lid/lock, experiment arm) |
 | `record_apps`, `app_names` | per record × app that did something: CPU, GPU and video seconds, disk bytes |
-| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings — including the CPU frequency cap `mhz` since layout 5, the CPU's own maximum `cpu_mhz` and the amdgpu DPM level `gpu_dpm` since layout 6, `throttle` since layout 7 — and experiment as JSON) |
+| `minutes` | the per-minute aggregates the models train on, recomputed as each record lands (per-app load, settings — including the CPU frequency cap `mhz` since layout 5, the CPU's own maximum `cpu_mhz` and the amdgpu DPM level `gpu_dpm` since layout 6, `throttle` since layout 7 — the mean core clock `ghz` since layout 8, and experiment as JSON) |
 | `events` | starts and suspend gaps |
+
+Layout 9 adds `records.mhz_active`, `active_n` and `min_mhz`,
+`minutes.ghz_active` and `purity`, `imports.records` and a `meta` table, and
+a minute's `bat`/`soc` now come from its majority status only. Its minute
+recompute is lazy, one day per transaction, newest first: for the first
+~30–40 s after an update older minutes still hold old values
+(`store.minutes_ready` is false; the battery panel's data line says so, and an
+open panel reloads its history once it turns true).
 
 Only the archive keeps idle apps' process counts and memory, the per-interrupt
 and per-interface breakdowns and display layouts. On startup the collector
 reads in any archive day the database has never seen (the first run, or after
 deleting it, ~1.7 s per day); `waybar-monitor import` re-reads every day,
-keeping what is stored. The panel and battery-eta only run queries (30 days of
-minutes ≈ 0.1 s); so can analysis:
+keeping what is stored. The panel and battery-eta only run queries; so can
+analysis. Most of the time reading minutes goes to decoding each minute's
+per-app JSON (~40 apps a minute), so the panel reads its 30 days of history
+without it (`report.load_range(..., apps=False)`, which also gives each
+experiment minute its clean parts, the records outside washout, as
+battery-eta's settings models read them) and decodes apps only for the period
+on screen and the battery minutes its what-if borrows:
 
     sqlite3 ~/.local/state/waybar-monitor/power.sqlite3 "select avg(bat_w) from records where status = 'Discharging'"
     duckdb -c "select * from sqlite_scan('~/.local/state/waybar-monitor/power.sqlite3', 'records')"
@@ -249,18 +307,43 @@ SQLite itself never compresses (pages are rewritten in place).
 `Mod+Shift+B`, or `battery-panel [timeline|experiments]` toggles a resident
 layer-shell panel. Like Audio and Wi-Fi it closes on Escape or when you click
 another window. One row of controls scopes everything: 6 h / Day / Week, back /
-forward (or ← →), Now. While it is open, switching periods reuses the loaded 30
-days and fetches only new minutes. Its data comes from `panel_data.gather` (no
-GTK, so it is tested headless): the period's charts arrive first, then the
-experiments, which are fitted on all 30 days (gains at the typical draw over
-them) and reused until a new minute lands. Each part is computed on its own,
+forward (or ← →), Now. The header carries battery-eta's line: time left
+*awake* on battery and, on a second line, how long a suspend from now would
+last. While it is open, switching periods reuses the loaded 30 days and fetches
+only new minutes; one loader thread takes only the latest request, so holding
+← or → loads just the period you stop on (a newer request cancels a running
+load between its parts), and → at Now does nothing. Its data comes from
+`panel_data.gather` (no GTK, so it is tested headless): the period's charts
+arrive first, then the what-if and the experiments, which are fitted on all 30
+days and reused until a new minute lands. The panel's gains are at one
+*typical draw*: the mean of the last 30 days' battery minutes at your settings
+(`report.typical_power`: each minute less what an experiment's settings
+added). battery-eta publishes it as `typical_power` in models.json and figures
+recommend.json's Battery/Comfort gains at it; the panel uses that while the
+models are fresh and computes the same figure otherwise (the Experiments tab
+says which). It is not the ETA's local level of the last ~5 h: a gain per full
+charge is about the long run.
+A full charge is the usable energy: less what lies below the battery's
+cutoff. Under it a small **data** line says what the numbers rest on: the
+battery minutes of the last 30 days (experiments' included) and their dates,
+how many were in experiments and how many the what-if used; the battery
+model's own minutes (or that it kept its last fit for want of new ones, or
+holds prior values), and when battery-eta trained it (or that it was fitted
+here, and why); the settings model's blocks; and whether the store is still
+recomputing history after an update. The minute's
+reload updates the tab in place, so a choice being made (the app to freeze,
+the boxes, an open hint) survives it; if the app chosen to freeze exits, the
+picker says so rather than choosing another. A command's failure, or settings
+it refused, stay under the Experiments banner for 30 s or until the next
+command. Each part is computed on its own,
 so one that fails shows as a warning line under the controls — with the
 traceback in `journalctl --user -u battery-panel` — and the rest still loads
 (on 2026-10-11 one analysis's TypeError blanked the whole panel).
 `battery-panel-check` gathers every period from the real database and
-prints each part's time and any failure (exit 1 on a failure or a period over
-5 s); test_panel_data.py does the same on a synthetic month holding every
-kind of data. Tabs:
+prints each part's time, any failure and the data line (exit 1 on a failure or
+a period over 5 s); test_panel_data.py does the same on a synthetic month
+holding every kind of data, in memory and in SQLite, and on a month of
+experiments only. Tabs:
 
 - **Timeline** — stacked average watts per moment by group (processor
   baseline, rest of system, display, and stable app groups: browser, builds &
@@ -268,7 +351,9 @@ kind of data. Tabs:
   separate battery-% strip. Faded columns are on AC (chip power only); shaded
   bands are sleep. Hover lists the groups, the top apps and the battery level.
   Below it, **sleep drain**: one dot per suspend in the period (size = length)
-  at %/h, with the median across all history.
+  at %/h, with the median across all history. A gap with AC on either side,
+  or one the collector was mostly awake for, is not a suspend on battery and
+  is left out.
 - **Experiments** — what could buy battery time, in extra minutes per full
   charge with 90% intervals, and the switch for automatic experiments:
   - **Automatic experiments** (`power-experiment enable|disable`, the
@@ -292,11 +377,21 @@ kind of data. Tabs:
     minutes after a 👎 (*Resume now*, or `qol resume`, ends that early), and
     while a setting can't be read or changed (the Wi-Fi interface gone,
     power-profiles-daemon failing); a 👎 ends the block at once. Turning it off
-    (`disable`, the switch) restores your settings and then sets the goal's
-    best combination. The
-    panel shows the model's accuracy over the allowed combinations and where
-    it is least certain. `power-experiment start <settings…> --minutes N` still
-    runs a fixed factorial run (it stops the automatic one meanwhile).
+    (`disable`, the switch) restores a stock baseline. ASPM, NVMe APST and the
+    GPU clocks (`experiment.RISKY`) are risky for the hardware and stay out of
+    automatic runs unless added from the command line (`power-experiment pool
+    add aspm --risky`); a manual `power-experiment start` needs `--risky` too.
+    Their **Include** box is off and greyed until then, and once added it says
+    so and can be unticked (the panel never adds one). After a hardware
+    incident (an xHCI death, a Bluetooth timeout, a PCIe, GPU or NVMe error,
+    or a crash reset while awake) the runner turns itself off and quarantines
+    the settings involved; the panel's banner and setting rows show the
+    quarantine. A boot that died asleep or ended without a shutdown only stops
+    the run until the next login (the s2idle crashes happen without
+    experiments too). The panel shows the model's accuracy over the allowed
+    combinations and where it is least certain. `power-experiment start
+    <settings…> --minutes N` still runs a fixed factorial run (it stops the
+    automatic one meanwhile).
   - **Quality of life** — 👍 / 👎 votes on what stands out right now: 👍 for
     something especially good, 👎 for worse than it should be. The two thumbs
     right of the battery (`custom/qol-up`, `custom/qol-down`), the panel, or
@@ -311,15 +406,24 @@ kind of data. Tabs:
     about one at a time. A combination is allowed while you are there when its
     👎 chance is at most 10% per block.
   - **Goal** — *Battery* recommends the measured combination with the lowest
-    draw among those allowed; *Comfort* the one most likely to earn a 👍 (then
+    draw among those allowed, changing a setting only where it saves with at
+    least 90% chance (`report.best_config`) and leaving those outside the
+    pool as they are (`experiment.unrecommended`: risky settings not added
+    with `--risky`, quarantined ones, ones you untick), so what it offers is
+    what Apply sets; *Comfort* the one most likely to earn a 👍 (then
     the lowest draw), with what it costs in battery
     (`power-experiment goal battery|comfort`; the battery menu's Comfort mode
     switch). Until something earns a 👍, Comfort is Battery's combination.
   - **Settings** (ASPM, NVMe APST, Wi-Fi power save, panel ABM, refresh rate,
     CPU boost, power profile, GPU and memory clocks, CPU frequency cap,
     background-app throttle): each row shows the current value, the measured
-    saving (for that setting alone, the others as they are on battery now),
-    how often it lowered quality of life, and **Include**.
+    saving (for that setting alone, the others at your settings) and the
+    chance it saves,
+    how often it lowered quality of life, and **Include** (`power-experiment
+    pool add|remove NAME`: one setting at a time, so quarantined settings stay
+    chosen for `release`; with none included, automatic experiments stay on
+    and pause with nothing to test, unlike the switch, whose off puts every
+    setting back to stock, applied ones too).
     `report.lever_effects` fits every run, automatic or manual, together:
     battery W per clean block on a baseline per run and day, workload, an
     indicator per setting (from the values the experiment set) and per pair
@@ -369,22 +473,45 @@ kind of data. Tabs:
     lists what it throttles, the collector logs `throttle` on/off (layout 7),
     and stopping it (or `app-throttle --release`, the unit's ExecStopPost)
     lifts every quota. Measured motivation: background apps use ~0.65 of a
-    core on battery, ~2.5 W. Terminals are throttled too, so a build in an
-    unfocused terminal slows down; `app-throttle --keep PATTERN` exempts more
-    (matched without systemd's `\x2d` escapes). The tab lists clear
-    interactions and the best measured combination for the goal; **Apply**
-    sets all of it now (`power-experiment apply name=saving|normal`,
-    until reboot). Root settings go through `sudo -n power-lab`; its
-    `sleep-safe` pre-sleep hook restores the boot-time ASPM policy and NVMe
-    APST limit (the s2idle crash workarounds, which matter on the way into
-    s2idle) before every suspend, noting what was there in
-    /run/power-lab/pre-sleep, and its `sleep-restore` post-resume hook puts
-    that back, so an applied combination or a running block survives the
-    suspend; the runner still starts a fresh block after resume.
-    Profile and ABM are left to the AC udev rules while plugged in.
+    core on battery, ~2.5 W. Terminals, editors and IDEs are never throttled
+    (builds and agent CLIs run in them), and an app's scopes share one quota;
+    `app-throttle --keep PATTERN …` replaces that list (matched without
+    systemd's `\x2d` escapes). The tab lists interactions that are clear — a
+    prespecified pair (the CPU cap with the profile, or with boost) at p <
+    0.1, any other at a 10% false discovery rate (Benjamini–Hochberg) over all
+    pairs, since with 45 pairs ~4.5 intervals would leave out zero by chance —
+    and the best measured combination for each goal; **Apply** sets it now
+    (`power-experiment apply name=saving|normal`, until reboot) except risky
+    settings (without `--risky`) and quarantined ones; the note under the
+    banner lists what was applied and what was not, and a failure or refusal
+    stays there 30 s. The combinations, and what Apply sets, are battery-eta's
+    recommend.json — the same the menu shows and Comfort mode applies — while
+    it is under an hour old; only then does the panel compute its own, from
+    the same inputs (every 👍/👎 of the last 30 days, settings included or not),
+    and it says so. Root settings go through `sudo -n power-lab`; its
+    `sleep-safe` pre-sleep hook restores the boot-time ASPM policy, NVMe APST
+    limit and GPU DPM auto (the s2idle crash workarounds, which matter on the
+    way into s2idle) before every suspend, and changes wait until its
+    `sleep-restore` post-resume hook has run. After resume they stay there:
+    the runner (a fresh block) and the reconciler (applied settings) set them
+    again no sooner than a minute after resume, within the risky settings'
+    45-minute hold and 8 changes a day. Applied settings follow the power
+    source: the reconcile timer (`power-experiment reconcile`, every minute)
+    puts them back to stock on AC (profile and ABM by the AC udev rules) and
+    sets them again on battery; while any are applied it also watches the
+    kernel log. `power-lab xhci-reset [BDF]` rebinds a dead USB controller
+    (default 0000:c1:00.3).
   - **Apps and display** (model estimates, outlined): removing an app's or
-    group's activity, or dimming, refitted on 10-minute moving-block bootstrap
-    resamples.
+    group's activity, or dimming, on the period's battery minutes or, when it
+    has under 30 of them, the latest 8 h of them; the caption says which,
+    with dates and how much of it was in experiments. Experiment minutes
+    count with their settings held at yours: the caption gives the draw at
+    your settings and how much the experiments' settings had changed it. The
+    90% intervals refit the models on resamples of whole days once the rows
+    span a week (else hour-long runs), widened as Student's t over the days:
+    residuals stay correlated for an hour and more, and in simulation the
+    10-minute blocks used before covered dimming's true effect only ~48% of
+    the time.
   - **On the lock screen and at boot**: freezing an app scope (`systemctl
     --user freeze`, optionally only while locked), “Close every app” (all app
     scopes, keeping T3 Code by default, only while locked: frozen blocks
@@ -395,8 +522,11 @@ kind of data. Tabs:
   (or `power-experiment next-boot psr|default`, via `power-lab next-boot` and
   `bootctl set-oneshot`) picks the entry for the next restart only, suggesting
   the arm with less battery time. The log records the running `dcdebugmask`;
-  boots are compared by least squares on workload plus a PSR indicator, with a
-  bootstrap over whole boots, once each arm has two boots with battery time.
+  boots are compared by least squares on workload and the settings that vary
+  within a boot, with a baseline per boot: the saving is the difference of
+  the arms' boot baselines, with a Welch t interval over boots, once each arm
+  has 5 boots (`report.MIN_BOOTS`) with 10+ minutes on battery (with 2 boots
+  against 7 the old bootstrap covered 69% for a nominal 90%).
 
 `battery_panel.py --render
 DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.

@@ -1,5 +1,24 @@
 # Continuous power history on isomorph
 
+> **Superseded proposal (2026-09-15), kept for its survey of the machine.**
+> What was built instead lives in `cells/common/patches/system-monitor/`
+> (package `cells/common/packages/waybar-monitor.nix`) and is documented in
+> [the Waybar README](../../../../dotfiles/.config/waybar/README.md#battery-use-and-the-power-log):
+>
+> - No RAPL, no Scaphandre and no privileged collector. The unprivileged
+>   `waybar-monitor` samples battery power and amdgpu's readable `PPT` (chip
+>   power) four times a second and splits them with a learned model: chip power
+>   by each app's busy time × clock², GPU/video time and the clock, battery
+>   minus chip by device activity, the rest as "Rest of system".
+> - History is a 10 s JSONL archive (zstd per day) and a SQLite store with
+>   per-minute aggregates, not the five-second/minute retention tiers above.
+> - `battery-eta` trains every model and forecasts time left (awake) and
+>   asleep; the battery menu shows them, battery use by app and the
+>   experiment controls; a separate GTK4 battery panel shows the history,
+>   sleep drain, what-if estimates and randomized power experiments.
+>
+> The sections below are the original proposal, unchanged.
+
 Investigated 2026-09-15. Recommendation: a small local collector for measured
 battery drain, with optional Scaphandre estimates for CPU energy by application.
 No new monitoring daemon is enabled by the menu changes.
