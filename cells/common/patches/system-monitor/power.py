@@ -40,6 +40,11 @@ def uptime():
     return time.clock_gettime(time.CLOCK_BOOTTIME)
 
 
+def suspended():
+    """Seconds this boot has spent suspended: CLOCK_BOOTTIME counts them, CLOCK_MONOTONIC doesn't."""
+    return time.clock_gettime(time.CLOCK_BOOTTIME) - time.clock_gettime(time.CLOCK_MONOTONIC)
+
+
 def clocks(boot=uptime, wall=time.time):
     """(boot, wall) read together. A suspend between the two reads would pair a
     pre-suspend uptime with a post-resume wall time, so they are read again until
@@ -973,12 +978,15 @@ class Monitor:
 
     `clock` is the uptime (BOOTTIME) source: a record that sees it jump by more
     than RECORD while being taken (a suspend) is dropped, and the next update
-    reports the gap.
+    reports the gap. `asleep` (suspended()) says how much of a gap was a
+    suspend rather than the collector stalled awake: the gap event's
+    `suspended_s`, which report.sleep_drain uses.
     """
 
     def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None, throttle=None,
-                 clock=uptime):
+                 clock=uptime, asleep=suspended):
         self.sys, self.proc, self.experiment, self.throttle, self.clock = sys, proc, experiment, throttle, clock
+        self.asleep, self.last_asleep = asleep, None
         self.log = PowerLog(directory)
         # The power database next to the archive (store.py). Read in any archive
         # day it has never seen (the first run, or after it was deleted) or holds
@@ -1035,10 +1043,16 @@ class Monitor:
         """`processes`: (pid, start ticks) → (label, cpu seconds, rss bytes, app),
         scanned just before `boot` and `wall` were read (together: clocks())."""
         self.fast.sample()
+        asleep = self.asleep()
         if self.start_boot is None or boot - self.last_boot > RECORD:
             if self.start_boot is not None:
+                gap = boot - self.last_boot
+                # Of the gap, the time suspended (the rest the collector was stalled, awake); read
+                # just after `boot`, so a suspend in between could only add to it: capped at the gap.
+                slept = ({'suspended_s': round(min(gap, max(0.0, asleep - self.last_asleep)), 1)}
+                         if self.last_asleep is not None else {})
                 self.write({'v': SCHEMA, 'event': 'gap', 't0': self.start_wall, 't1': wall,
-                                'gap_s': round(boot - self.last_boot, 1), 'boot': self.boot,
+                                'gap_s': round(gap, 1), **slept, 'boot': self.boot,
                                 'bat_before': self.last_battery, 'bat_after': self.battery_state()})
             self.reset(boot, wall)
             self.counters = self.snapshot_counters()
@@ -1054,7 +1068,7 @@ class Monitor:
                 elif key[1] / TICKS >= self.last_boot:
                     self.cpu[entry[3]] += entry[1]
         self.cpu_seen = {key: entry[1] for key, entry in processes.items()}
-        since, self.last_boot = boot - self.last_boot, boot
+        since, self.last_boot, self.last_asleep = boot - self.last_boot, boot, asleep
         clock = cpu_frequency(self.sys, own_cpu(self.proc))
         if clock[0] is not None:
             self.frequencies.append((since, *clock))

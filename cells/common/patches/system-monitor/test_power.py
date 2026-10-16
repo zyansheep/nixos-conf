@@ -387,7 +387,7 @@ class MonitorTests(unittest.TestCase):
         root = Path(self.tmp.name)
         self.sys, self.proc = fake_machine(root)
         self.log, self.db = root / 'state/power', root / 'state/power.sqlite3'
-        self.uptime = [1000.0]
+        self.uptime, self.asleep = [1000.0], [0.0]  # Boot clock; the part of it spent suspended.
         self.patches = [mock.patch('power.qol.votes', return_value=[]),
                         mock.patch('power.Commands.read', return_value={}),
                         mock.patch.dict(os.environ, {'XDG_STATE_HOME': str(root / 'xdg')})]
@@ -401,7 +401,8 @@ class MonitorTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def monitor(self):
-        return Monitor(self.log, sys=self.sys, proc=self.proc, db=self.db, clock=lambda: self.uptime[0])
+        return Monitor(self.log, sys=self.sys, proc=self.proc, db=self.db, clock=lambda: self.uptime[0],
+                       asleep=lambda: self.asleep[0])
 
     def tick(self, monitor, seconds=2, busy=None):
         self.uptime[0] += seconds
@@ -459,6 +460,7 @@ class MonitorTests(unittest.TestCase):
         self.assertIsNotNone(monitor.update(real, self.wall + real - 1000, {}))
         monitor.clock = lambda: self.uptime[0]
         self.uptime[0] = real + 3600
+        self.asleep[0] += 3600
         for _ in range(6):
             self.tick(monitor)
         monitor.close()
@@ -470,6 +472,26 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual((gap['bat_before']['pct'], gap['bat_after']['pct']), (50.0, 40.0))
         self.assertAlmostEqual(gap['t0'], records[0][1], delta=0.01)  # From the last record kept.
         self.assertGreater(gap['gap_s'], 3600)
+        self.assertEqual(gap['suspended_s'], 3600.0)  # Asleep but for the 2 s before the record.
+
+    def test_a_gap_says_how_much_of_it_was_a_suspend(self):
+        # report.sleep_drain keeps a suspend's drain and leaves out a gap the collector was stalled through awake.
+        charge = self.sys / 'class/power_supply/BAT1/charge_now'
+        monitor = self.monitor()
+        for asleep, now in ((1800, '1950000'), (0, '1900000'), (1000, '1850000')):
+            for _ in range(6):
+                self.tick(monitor)
+            put(charge, now)  # 50 mAh over each half-hour gap: 1.55 W.
+            self.asleep[0] += asleep
+            self.tick(monitor, 1800)
+        monitor.close()
+        gaps = [json.loads(d) for (d,) in self.rows("SELECT data FROM events WHERE event = 'gap' ORDER BY t1")]
+        self.assertEqual([(g['gap_s'], g['suspended_s']) for g in gaps],
+                         [(1800.0, 1800.0), (1800.0, 0.0), (1800.0, 1000.0)])
+        import report
+        (kept,) = report.sleep_drain(gaps)
+        self.assertEqual(kept['end'], gaps[0]['t1'])
+        self.assertAlmostEqual(kept['watts'], 0.05 * 15.5 / 0.5, places=3)
 
     def test_without_cpufreq_records_have_no_clock(self):
         for path in self.sys.glob('devices/system/cpu/cpu*/cpufreq/scaling_cur_freq'):
