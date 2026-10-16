@@ -56,7 +56,7 @@ def month(days=30, seed=1, now=None):
             bat = (15 + 0.8 * load - sum(SAVES[n] for n, on in config.items() if on) - 1.5 * (kind == 'freeze' and block % 2)
                    + rng.normal(0, 0.8) - 0.7 * psr)
             for i in range(4):
-                m = {'t': t, 'dt': 60, 'st': 'D', 'bat': bat + rng.normal(0, 0.5), 'soc': bat - 5, 'load': load,
+                m = {'t': t, 'dt': 60, 'st': 'D', 'bat': bat + rng.normal(0, 0.5), 'soc': bat - 5, 'load': load, 'ghz': 1 + load / 8,
                      'busy': load / 4, 'gpu': 0.01, 'video': 0.0, 'bl': 0.6, 'kbd': 0, 'wifi': 0.02, 'disk': 0.01,
                      'usb': 0, 'audio': 1 if block % 3 == 0 else 0, 'pct': 90 - block * 0.8, 'charge': 4e6 - block * 3e4,
                      'volts': 16.5 - block * 0.01, 'unit': 'uAh', 'boot': boot,
@@ -73,7 +73,7 @@ def month(days=30, seed=1, now=None):
             if kind == 'auto' and not config['refresh'] and block % 9 == 0:
                 events.append({'event': 'qol', 't1': t - 90, 'vote': 'up'})
         for i in range(120):  # 2 h charging.
-            minutes.append({'t': t, 'dt': 60, 'st': 'C', 'bat': -30.0, 'soc': 8.0, 'load': 2.0, 'busy': 0.5,
+            minutes.append({'t': t, 'dt': 60, 'st': 'C', 'bat': -30.0, 'soc': 8.0, 'load': 2.0, 'busy': 0.5, 'ghz': 1.4,
                             'pct': 50 + i * 0.3, 'charge': 2e6 + i * 2e4, 'volts': 16.0, 'unit': 'uAh', 'boot': boot,
                             'present': 1.0, 'set': logged({}, psr)})
             t += 60

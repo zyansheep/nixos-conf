@@ -35,26 +35,30 @@ class ReportTests(unittest.TestCase):
         rng = np.random.default_rng(1)
         rows = []
         for i in range(400):
-            load, bl = rng.uniform(1, 30), rng.uniform(.1, 1)
-            soc = 5 + .2 * load + rng.normal(0, .1)
-            rows.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'soc': soc, 'bl': bl,
+            load, bl, ghz = rng.uniform(1, 30), rng.uniform(.1, 1), rng.uniform(.8, 3)
+            soc = 3 + 2 * ghz + .2 * load + rng.normal(0, .1)
+            rows.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'ghz': ghz, 'soc': soc, 'bl': bl,
                          'bat': .5 + 1.4 * soc + 3 * bl + rng.normal(0, .1)})
         model = report.fit_rows(report.battery_rows(rows))
-        self.assertAlmostEqual(model['floor'], 5, delta=.2)
+        self.assertAlmostEqual(model['floor'], 3, delta=.3)
+        self.assertAlmostEqual(model['clock'], 2, delta=.2)
         self.assertAlmostEqual(model['load'], .2, delta=.01)
+        self.assertAlmostEqual(model['idle_ghz'], np.percentile([r['ghz'] for r in rows], 5))
         self.assertAlmostEqual(model['chip'], 1.4, delta=.05)
         self.assertAlmostEqual(model['bl'], 3, delta=.2)
         self.assertAlmostEqual(model['usb'], report.PRIOR['usb'], delta=.01)  # Never varied → prior
 
     def test_attribution_sums_to_battery_power(self):
-        model = dict(report.PRIOR, floor=5, load=.2, chip=1.4, bl=3)
-        m = {'t': 0, 'dt': 60, 'st': 'D', 'bat': 20.0, 'soc': 8.0, 'load': 10.0, 'bl': .5,
+        model = dict(report.PRIOR, floor=5, load=.2, clock=1, idle_ghz=1, chip=1.4, bl=3)
+        m = {'t': 0, 'dt': 60, 'st': 'D', 'bat': 20.0, 'soc': 8.0, 'load': 10.0, 'ghz': 2.0, 'bl': .5,
              'apps': {'Floorp': [6.0, 0, 0], 'openroad': [2.0, 0, 0]}}
         parts = report.attribute(m, model)
         self.assertAlmostEqual(sum(parts['groups'].values()), 20.0)
-        self.assertAlmostEqual(parts['groups']['Processor baseline'], 7.0)
-        self.assertAlmostEqual(parts['apps']['Floorp'] / parts['apps']['openroad'], 3)
+        self.assertAlmostEqual(parts['groups']['Processor baseline'], 8.4)  # 1.4 × (5 W + 1 W/GHz × 1 GHz idle)
+        self.assertAlmostEqual(parts['apps']['Floorp'] / parts['apps']['openroad'], 3)  # The clock above idle too
         self.assertAlmostEqual(parts['groups']['Display'], 1.5)
+        parts = report.attribute(dict(m, ghz=.8), model)  # Below the idle clock: all of it is baseline.
+        self.assertAlmostEqual(parts['groups']['Processor baseline'], 1.4 * 5.8)
 
     def test_runtime_gain(self):
         self.assertAlmostEqual(report.runtime_gain(48, 16, 2), 60 * 48 * (1 / 14 - 1 / 16))
@@ -66,10 +70,10 @@ class ReportTests(unittest.TestCase):
         rows = []
         for i in range(300):
             heavy = rng.uniform(0, 20)
-            load = 2 + heavy
-            soc = 5 + .2 * load
+            load, ghz = 2 + heavy, 1 + heavy / 20
+            soc = 3 + 2 * ghz + .2 * load
             bl = rng.uniform(.3, 1)
-            rows.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'soc': soc, 'bl': bl,
+            rows.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'ghz': ghz, 'soc': soc, 'bl': bl,
                          'apps': {'openroad': [heavy, 0, 0], 'Floorp': [1.0, 0, 0]},
                          'bat': .5 + 1.4 * soc + 3 * bl + rng.normal(0, .2)})
         estimates, info = report.what_if(rows, 48, replicates=50)
@@ -107,7 +111,7 @@ class ReportTests(unittest.TestCase):
             psr = boot % 2 == 1
             for _ in range(60):
                 load = rng.uniform(1, 20)
-                minutes.append({'t': t, 'dt': 60, 'st': 'D', 'load': load, 'soc': 5 + .2 * load, 'bl': .5,
+                minutes.append({'t': t, 'dt': 60, 'st': 'D', 'load': load, 'ghz': 1.5, 'soc': 5 + .2 * load, 'bl': .5,
                                 'bat': 9 + .3 * load - (1.5 if psr else 0) + rng.normal(0, .5),
                                 'boot': f'b{boot}', 'set': {'psr': psr}})
                 t += 60

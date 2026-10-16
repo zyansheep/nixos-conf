@@ -3,7 +3,7 @@
 Per-minute rows from the power database (store.py, written by the collector),
 then:
 
-* battery-only models: chip W ~ floor + load (busy cores × GHz²) + GPU + video,
+* battery-only models: chip W ~ floor + clock (mean GHz) + load (busy cores × GHz²) + GPU + video,
   and battery W ~ base + k·chip + backlight + radio/storage/USB/audio/keyboard,
   fitted by non-negative least squares on one-minute means (the battery reading
   lags chip power by ~10 s);
@@ -51,9 +51,10 @@ APP_GROUPS = [name for name, _ in GROUPS] + ['Other apps']
 CATEGORIES = ['Processor baseline', 'Rest of system', 'Display'] + APP_GROUPS
 DEVICES = (('Display', 'bl'), ('Wi-Fi', 'wifi'), ('Storage', 'disk'), ('USB devices', 'usb'),
            ('Audio', 'audio'), ('Keyboard backlight', 'kbd'))
-CHIP_TERMS = ('floor', 'load', 'gpu', 'video')
+CHIP_TERMS = ('floor', 'load', 'clock', 'gpu', 'video')
 BATTERY_TERMS = ('base', 'chip', 'bl', 'wifi', 'disk', 'usb', 'audio', 'kbd')
 PRIOR = power.PRIOR  # Shared with the collector's attribution.
+IDLE_PERCENTILE = 5  # The idle clock: minutes rarely run slower (~1.0 GHz, where ~1 core is busy).
 
 
 def display_name(app):
@@ -77,12 +78,13 @@ def load_range(start, end, db=None):
 
 def battery_rows(minutes, include_experiments=False):
     return [m for m in minutes if m['st'] == 'D' and m.get('bat', 0) > 0 and m.get('soc') is not None
-            and m.get('load') is not None and m['dt'] >= 40 and (include_experiments or 'exp' not in m)
+            and m.get('load') is not None and m.get('ghz') is not None and m['dt'] >= 40
+            and (include_experiments or 'exp' not in m)
             and m['bat'] - m['soc'] > -2]
 
 
 def design(rows):
-    chip = np.array([[1.0, m['load'], m.get('gpu', 0), m.get('video', 0)] for m in rows])
+    chip = np.array([[1.0, m['load'], m['ghz'], m.get('gpu', 0), m.get('video', 0)] for m in rows])
     battery = np.array([[1.0, m['soc'], m.get('bl') or 0, m.get('wifi', 0), m.get('disk', 0),
                          m.get('usb', 0), m.get('audio', 0), m.get('kbd') or 0] for m in rows])
     return chip, np.array([m['soc'] for m in rows]), battery, np.array([m['bat'] for m in rows])
@@ -101,6 +103,7 @@ def fit(chip_x, chip_y, battery_x, battery_y, ridge=5.0):
     if len(chip_y) >= 20:
         model.update(solve(chip_x, chip_y, CHIP_TERMS))
         model.update(solve(battery_x, battery_y, BATTERY_TERMS))
+        model['idle_ghz'] = float(np.percentile(chip_x[:, 2], IDLE_PERCENTILE))
     else:
         model.update(PRIOR)
     return model
@@ -118,14 +121,19 @@ def attribute(m, model):
         return {'groups': groups, 'apps': apps, 'devices': devices}
     on_battery = m['st'] == 'D' and m.get('bat') is not None
     k = model['chip'] if on_battery else 1.0
-    floor = min(soc, model['floor'])
-    weights = {}
-    owned = 0.0
-    for name, (load, gpu, video) in m.get('apps', {}).items():
-        weights[name] = model['load'] * load + model['gpu'] * gpu + model['video'] * video
-        owned += load
+    idle, raised = power.clock_split(model, m.get('ghz'))
+    loads = {name: load for name, (load, _, _) in m.get('apps', {}).items()}
     if m.get('load') is not None:
-        weights['Kernel'] = weights.get('Kernel', 0) + model['load'] * max(0.0, m['load'] - owned)
+        loads['Kernel'] = loads.get('Kernel', 0) + max(0.0, m['load'] - sum(loads.values()))
+    busy = sum(loads.values())
+    if busy <= 0:
+        idle += raised  # Nothing ran to raise it.
+    floor = min(soc, model['floor'] + idle)
+    weights = {}
+    for name, load in loads.items():
+        _, gpu, video = m.get('apps', {}).get(name, (0, 0, 0))
+        weights[name] = (model['load'] * load + model['gpu'] * gpu + model['video'] * video
+                         + (raised * load / busy if busy > 0 else 0))
     total = sum(weights.values())
     if total <= 0:
         floor = soc
@@ -189,13 +197,18 @@ def candidates(rows, model, top=5):
         for name in m.get('apps', {}):
             members[group_of(name)].add(name)
 
+    ghz = np.array([m['ghz'] for m in rows])
+    busy = np.array([max(m.get('load') or 0, sum(v[0] for v in m.get('apps', {}).values())) for m in rows])
+
     def activity(names):
         columns = np.zeros((len(rows), 3))
         for i, m in enumerate(rows):
             for name, values in m.get('apps', {}).items():
                 if name in names:
                     columns[i] += values
-        return lambda c: c['chip'] * (c['load'] * columns[:, 0] + c['gpu'] * columns[:, 1] + c['video'] * columns[:, 2])
+        share = np.divide(columns[:, 0], busy, out=np.zeros(len(rows)), where=busy > 0)  # Of the clock above idle.
+        return lambda c: c['chip'] * (c['load'] * columns[:, 0] + c['clock'] * np.maximum(0, ghz - c['idle_ghz']) * share
+                                      + c['gpu'] * columns[:, 1] + c['video'] * columns[:, 2])
     items = {}
     phrases = {'Browser': 'Close the browser', 'Builds & EDA': 'No builds or EDA jobs',
                'Coding tools': 'Close coding tools', 'Chat & media': 'Close chat & media',

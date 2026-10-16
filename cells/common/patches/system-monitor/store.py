@@ -43,8 +43,8 @@ except ImportError:  # Python < 3.14
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 7  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
-NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio')
+VERSION = 8  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio', 'ghz')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 
 
@@ -247,6 +247,7 @@ class Minute:
             'wifi': ((row['wifi_rx'] or 0) + (row['wifi_tx'] or 0)) / dt / 1e6,
             'disk': min(1.0, (row['disk_busy'] or 0) / dt), 'usb': row['usb'] or 0,
             'audio': min(1, (row['audio_play'] or 0) + (row['audio_rec'] or 0)),
+            'ghz': mhz / 1000 if mhz else None,  # Mean core clock, busy or not: the chip model's clock term.
         }
         for key, value in values.items():
             if value is not None:
@@ -357,6 +358,11 @@ def add_throttle(conn):
     add_column(conn, 'records', 'throttle', 'TEXT')
 
 
+def add_clock(conn):
+    add_column(conn, 'minutes', 'ghz', 'REAL')
+    recompute_minutes(conn)
+
+
 def add_qol(conn):
     add_column(conn, 'records', 'qol', 'INTEGER')
     add_column(conn, 'minutes', 'qol', 'REAL')
@@ -373,6 +379,7 @@ MIGRATIONS = {
     4: recompute_minutes,  # Minute settings gained the CPU frequency cap (boost as it really is).
     5: add_levers,  # Records gained the CPU's own maximum (boost under a cap) and the amdgpu DPM level.
     6: add_throttle,  # Records gained whether app-throttle ran.
+    7: add_clock,  # Minutes gained the mean core clock (chip power rises with it even when idle).
 }
 
 

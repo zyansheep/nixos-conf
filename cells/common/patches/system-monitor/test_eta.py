@@ -11,7 +11,7 @@ import eta
 
 
 class EtaTests(unittest.TestCase):
-    params = dict(eta.DEFAULTS, mean=16.0, var=16.0, tau=15.0, observed=1e6, kappa=1.0, floor=5.0)
+    params = dict(eta.DEFAULTS, mean=16.0, level=math.log(16.0), var=0.06, tau=15.0, level_n=1e6, kappa=1.0, floor=5.0)
 
     def test_energy_follows_the_voltage_curve(self):
         volts = [14.0 + 3.0 * p / 100 for p in range(101)]
@@ -20,7 +20,7 @@ class EtaTests(unittest.TestCase):
         self.assertLess(half / full, 0.5)   # The lower half holds less energy than the upper half.
         self.assertAlmostEqual(eta.remaining_energy(0.5, 3.0, None), 0.5 * 3.0 * 15.4)
 
-    def test_horizon_draw_moves_from_recent_to_long_run_mean(self):
+    def test_horizon_draw_moves_from_recent_to_the_level(self):
         short = eta.horizon_draw(self.params, 30.0, 0.1)
         long = eta.horizon_draw(self.params, 30.0, 10000)
         self.assertAlmostEqual(short[0], 30.0, delta=0.5)
@@ -52,14 +52,24 @@ class EtaTests(unittest.TestCase):
 
     def test_ou_fit_recovers_time_constant(self):
         rng = np.random.default_rng(3)
-        rows, t, x = [], 0, 16.0
+        rows, t, z = [], 0, math.log(16)
         for _ in range(4000):
-            x = 16 + (x - 16) * math.exp(-1 / 10) + rng.normal(0, 2)
-            rows.append({'t': t, 'bat': x, 'st': 'D', 'dt': 60})
+            z = math.log(16) + (z - math.log(16)) * math.exp(-1 / 10) + rng.normal(0, 0.1)
+            rows.append({'t': t, 'bat': math.exp(z), 'st': 'D', 'dt': 60})
             t += 60
         fitted = eta.fit_ou(rows)
         self.assertAlmostEqual(fitted['tau'], 10, delta=2)
-        self.assertAlmostEqual(fitted['mean'], 16, delta=0.5)
+        self.assertAlmostEqual(fitted['var'], 0.1 ** 2 / (1 - math.exp(-2 / 10)), delta=0.01)
+        self.assertAlmostEqual(eta.typical_draw(fitted), 16, delta=1.5)
+
+    def test_the_level_follows_how_the_laptop_is_used_now(self):
+        rng = np.random.default_rng(4)
+        rows = [{'t': 60 * i, 'bat': (20 if i < 2000 else 10) * math.exp(rng.normal(0, 0.1)), 'st': 'D', 'dt': 60}
+                for i in range(2600)]
+        fitted = eta.fit_ou(rows)
+        self.assertAlmostEqual(eta.typical_draw(fitted), 10, delta=0.3)   # The last 5 hours, not the month
+        self.assertGreater(fitted['mean'], 17)
+        self.assertAlmostEqual(eta.horizon_draw(dict(self.params, **fitted), 14.0, 10000)[0], 10, delta=0.3)
 
     def test_live_label_and_energy_fill(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -125,7 +135,7 @@ class EtaTests(unittest.TestCase):
         for i in range(200):
             load = rng.uniform(1, 20)
             soc = 6 + .2 * load
-            minutes.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'soc': soc, 'bl': .5, 'pct': 80 - i * .2,
+            minutes.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'ghz': 1.5, 'soc': soc, 'bl': .5, 'pct': 80 - i * .2,
                             'volts': 16 - i * .005, 'charge': 2.5e6 - i * 1000, 'unit': 'uAh',
                             'bat': .5 + 1.4 * soc + 1.5 + rng.normal(0, .2), 'set': {}})
         params = eta.train(minutes, [], now=1000.0)

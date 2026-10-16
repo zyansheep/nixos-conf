@@ -124,6 +124,21 @@ class StoreTests(unittest.TestCase):
         with contextlib.closing(sqlite3.connect(self.db)) as conn:
             self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
 
+    def test_layout_seven_gains_the_mean_clock_of_every_minute(self):
+        writer = store.Writer(self.db)
+        for r in self.records:
+            writer.write(r)
+        writer.close()
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            conn.execute('ALTER TABLE minutes DROP COLUMN ghz')
+            conn.execute('PRAGMA user_version = 7')
+            conn.commit()
+        self.assertNotIn('ghz', store.load_range(*self.span, self.db)[0][0])  # Readable before migrating.
+        store.connect(self.db).close()
+        minutes, _ = store.load_range(*self.span, self.db)
+        self.assertEqual(minutes, store.aggregate(self.records)[0])
+        self.assertEqual(minutes[0]['ghz'], 2.0)  # Recomputed from the records' clock.
+
     def test_layout_two_gains_quality_of_life_columns(self):
         writer = store.Writer(self.db)
         for r in self.records:

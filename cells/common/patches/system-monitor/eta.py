@@ -5,11 +5,15 @@ Discharging. Remaining energy is ∫ V(q) dq over the remaining charge, with the
 loaded-voltage curve V(q) learned from the power log (each percent of this
 gauge's coulomb-counted charge holds ~15% less energy near empty than near full),
 and the battery's current reading calibrated against its charge counter. Future
-average draw over the horizon is forecast as an Ornstein–Uhlenbeck process
-fitted to minute-level battery power: the recent draw decays toward the
-long-run mean with a learned time constant, and the variance of the horizon
-average (plus uncertainty in the long-run mean) gives a log-normal interval.
-The horizon is solved jointly with the answer (T = energy / mean draw over T).
+average draw over the horizon is forecast as an Ornstein–Uhlenbeck process in
+log watts, fitted to minute-level battery power: the recent draw decays toward
+the local level (the mean log draw of the last ~5 hours on battery, not a
+30-day mean that lags behind changes in how the laptop is used) with a learned
+time constant, and the variance of the horizon average (plus uncertainty in
+the level) gives a log-normal interval. Backtested day by day against the
+30-day watts version: ~0.5 W closer over the next hour, on a par with the
+Chronos-2 forecasting model. The horizon is solved jointly with the answer
+(T = energy / mean draw over T).
 
 Empty is where the embedded controller cuts the power, not zero charge: it
 switches the laptop off with ~55 mAh still on the gauge (1.8% of full), so
@@ -64,7 +68,8 @@ from power import find_battery  # noqa: E402
 Z80 = 1.2816  # 80% interval: 10th–90th percentile.
 REFIT = 15 * 60
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
-DEFAULTS = {'mean': 15.0, 'var': 25.0, 'tau': 20.0, 'observed': 60.0, 'kappa': 1.0, 'volts': None,
+LEVEL_MINUTES = 300  # The local level: the last ~5 hours on battery (the best window in backtests of 100–1000).
+DEFAULTS = {'mean': 15.0, 'level': math.log(15.0), 'level_n': 60, 'var': 0.08, 'tau': 20.0, 'kappa': 1.0, 'volts': None,
             'charge_curve': None, 'charge_sigma': 0.25, 'floor': 4.0,
             'cutoff': 0.0, 'cutoff_spread': 0.003, 'deaths': 0}  # Ah: until a battery death says otherwise.
 CUTOFF_PCT = 3  # A boot that ended on battery below this percent was cut off (all five so far at 2%).
@@ -92,16 +97,36 @@ def runs(rows):
 
 
 def fit_ou(rows, max_lag=60):
-    """Long-run mean/variance and autocorrelation time (minutes) of battery power."""
-    x = [np.array([m['bat'] for m in run]) for run in runs(rows)]
-    allx = np.concatenate(x) if x else np.array([])
+    """Local level, variance and autocorrelation time (minutes) of log battery power.
+
+    `rows` are battery minutes in time order. Each minute's deviation from the
+    mean log draw of the LEVEL_MINUTES before it (once there are 30) gives the
+    variance, and its autocorrelation within runs the time constant. Draw reverts
+    evenly in log watts (a 20 W stretch falls ~3 W, a 10 W one rises ~1 W).
+    """
+    allx = np.array([m['bat'] for m in rows])
     if len(allx) < 30:
         return None
-    mean, var = float(allx.mean()), float(allx.var())
+    z = np.log(np.maximum(allx, 0.1))
+    total = np.concatenate([[0.0], np.cumsum(z)])
+    x, start = [], 0
+    for run in runs(rows):
+        i = np.arange(start, start + len(run))
+        start += len(run)
+        first = np.maximum(0, i - LEVEL_MINUTES)
+        known = i - first >= 30
+        if known.any():
+            x.append((z[i] - (total[i] - total[first]) / np.maximum(i - first, 1))[known])
+    level = z[-LEVEL_MINUTES:]
+    fitted = {'mean': float(allx.mean()), 'level': float(level.mean()), 'level_n': len(level),
+              'floor': float(np.percentile(allx, 2))}
+    if sum(len(r) for r in x) < 30:
+        return fitted  # Too little history for deviations: the default variance and time constant.
+    var = float(np.mean(np.concatenate(x) ** 2))
     lags, rhos = [], []
     for k in range(1, max_lag + 1):
-        a = np.concatenate([r[:-k] - mean for r in x if len(r) > k] or [np.array([])])
-        b = np.concatenate([r[k:] - mean for r in x if len(r) > k] or [np.array([])])
+        a = np.concatenate([r[:-k] for r in x if len(r) > k] or [np.array([])])
+        b = np.concatenate([r[k:] for r in x if len(r) > k] or [np.array([])])
         if len(a) < 20:
             break
         rho = float((a * b).mean() / var)
@@ -112,8 +137,7 @@ def fit_ou(rows, max_lag=60):
     # ρ(k) = exp(−k/τ), least squares through the origin on −ln ρ.
     tau = (sum(k * k for k in lags) / sum(-k * math.log(r) for k, r in zip(lags, rhos))
            if lags else DEFAULTS['tau'])
-    return {'mean': mean, 'var': var, 'tau': min(240.0, max(2.0, tau)), 'observed': float(len(allx)),
-            'floor': float(np.percentile(allx, 2))}
+    return dict(fitted, var=var, tau=min(240.0, max(2.0, tau)))
 
 
 def fit_voltage(rows):
@@ -284,6 +308,7 @@ def fit(minutes, known=None):
 
 
 MODELS = report.LOG / 'models.json'
+MODELS_VERSION = 3  # 3: the chip model gained the clock term; the draw forecast went to log watts.
 WINDOW_DAYS = 30
 
 
@@ -303,7 +328,7 @@ def save_models(params, path=None):
     path = path or MODELS
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix('.tmp')
-    temporary.write_text(json.dumps({'version': 2, **params}))
+    temporary.write_text(json.dumps({'version': MODELS_VERSION, **params}))
     temporary.replace(path)
 
 
@@ -313,7 +338,7 @@ def load_models(path=None, max_age=3600):
         data = json.loads((path or MODELS).read_text())
     except (OSError, ValueError):
         return None
-    if data.get('version') != 2 or time.time() - data.get('fitted', 0) > max_age:
+    if data.get('version') != MODELS_VERSION or time.time() - data.get('fitted', 0) > max_age:
         return None
     return data
 
@@ -340,15 +365,18 @@ def remaining_energy(fraction, full_ah, volts):
 
 def draw_lognormal(params, recent, minutes):
     """(μ, σ) of log average draw over the next `minutes`."""
-    tau, var, mean = params['tau'], params['var'], params['mean']
+    tau, var, level = params['tau'], params['var'], params['level']
     x = max(minutes, 1e-3) / tau
     carry = (1 - math.exp(-x)) / x                       # Share of today's deviation that persists.
-    centre = mean + (recent - mean) * carry
+    mu = level + (math.log(max(recent, 0.1)) - level) * carry
     spread = var / x ** 2 * (2 * x - 3 + 4 * math.exp(-x) - math.exp(-2 * x))
-    spread += (1 - carry) ** 2 * var * 2 * tau / max(params['observed'], 1)  # Long-run mean is estimated.
-    centre = max(centre, params['floor'])
-    sigma = math.sqrt(math.log(1 + spread / centre ** 2))
-    return math.log(centre) - sigma ** 2 / 2, sigma
+    spread += (1 - carry) ** 2 * var * 2 * tau / max(params['level_n'], 1)  # The level is estimated.
+    return max(mu, math.log(params['floor'])), math.sqrt(spread)
+
+
+def typical_draw(params):
+    """Battery watts with nothing recent to go on: the local level."""
+    return math.exp(params['level'])
 
 
 def horizon_draw(params, recent, minutes):
@@ -419,8 +447,9 @@ def use_per_charge(params, charge_watts, energy_full):
     charge's worth of use (the AC draw itself is not representative: AC runs the
     Balanced profile). The interval is that draw forecast's 80% interval.
     """
-    horizon = 60 * energy_full / (params['kappa'] * params['mean'])
-    median, low, high = (params['kappa'] * d for d in horizon_draw(params, params['mean'], horizon))
+    typical = typical_draw(params)
+    horizon = 60 * energy_full / (params['kappa'] * typical)
+    median, low, high = (params['kappa'] * d for d in horizon_draw(params, typical, horizon))
     return charge_watts / median, charge_watts / high, charge_watts / low
 
 
@@ -631,11 +660,12 @@ class Live:
         if (asleep := report.sleep_runtime([], energy, model=params.get('sleep'))) is not None:
             result['sleep'] = asleep  # How long a suspend from now would last.
         if state['status'] == 'Discharging':
-            # A short session borrows from the long-run mean instead of trusting a few seconds.
+            # A short session borrows from the local level instead of trusting a few seconds.
             recent = self.recent('Discharging', 600)
             n = sum(1 for t, _, s, _ in self.samples if s == 'Discharging' and t >= time.time() - 600)
             weight = min(1.0, n / 60)
-            draw = (recent or params['mean']) * weight + params['mean'] * (1 - weight)
+            typical = typical_draw(params)
+            draw = (recent or typical) * weight + typical * (1 - weight)
             median, low, high = time_to_empty(params, energy, draw)
             times, pdf, _ = empty_distribution(params, energy, draw, low, high)
             trend = self.gauge_trend()
@@ -687,7 +717,7 @@ class Live:
             result.update(ratio=ratio, ratio_low=ratio_low, ratio_high=ratio_high, charge_watts=charge_watts)
             # Time on battery banked so far: the current energy at the typical
             # battery draw (not the AC draw), the same number shown while discharging.
-            banked, banked_low, banked_high = time_to_empty(params, energy, params['mean'])
+            banked, banked_low, banked_high = time_to_empty(params, energy, typical_draw(params))
             result.update(banked=banked, banked_low=banked_low, banked_high=banked_high)
             classes.append('charging')
             # Both ranges are wide (≈±20% / ±30%), so the label shows ~ and leaves them to the menu.
@@ -749,8 +779,8 @@ def main():
         print(json.dumps(output), flush=True)
         if detail:
             temporary = RUNTIME / 'eta.tmp'
-            temporary.write_text(json.dumps(dict(detail, params={k: v for k, v in live.params.items()
-                                                                  if k in ('mean', 'tau', 'kappa', 'charge_sigma')})))
+            shown = {k: v for k, v in live.params.items() if k in ('mean', 'tau', 'kappa', 'charge_sigma')}
+            temporary.write_text(json.dumps(dict(detail, params=dict(shown, typical=typical_draw(live.params)))))
             temporary.replace(RUNTIME / 'eta.json')
         time.sleep(2)
 

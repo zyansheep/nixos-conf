@@ -498,7 +498,12 @@ def process_io(proc, keys):
 # Model terms and the priors they start from. battery-eta trains the real
 # values (report.fit) into models.json every 15 minutes; the collector only
 # reads them. report.py shares this dict.
-PRIOR = {'floor': 6.0, 'load': 0.2, 'gpu': 3.0, 'video': 1.0,
+# Chip W = floor + clock·GHz + load·busy·GHz² + gpu + video: the mean core clock
+# costs ~3 W per GHz even with the cores idle (the whole package's voltage
+# follows it), which busy·GHz² alone missed. `idle_ghz` is where the clock sits
+# with nothing to do (report.fit learns it): the clock up to it is baseline,
+# above it apps drove it up.
+PRIOR = {'floor': 3.0, 'load': 0.12, 'clock': 3.0, 'idle_ghz': 1.0, 'gpu': 5.0, 'video': 1.0,
          'base': 0.5, 'chip': 1.3, 'bl': 3.0, 'wifi': 0.3, 'disk': 2.0, 'usb': 0.3, 'audio': 0.5, 'kbd': 0.3}
 
 
@@ -511,9 +516,11 @@ def load_attribution(path):
         return None
 
 
-def clock_squared(record):
-    mhz = record.get('cpu', {}).get('mhz')
-    return (mhz / 1000) ** 2 if mhz else None
+def clock_split(params, ghz):
+    """Chip watts of the clock term: (baseline part, part above the idle clock)."""
+    if ghz is None:
+        return params['clock'] * params['idle_ghz'], 0.0
+    return params['clock'] * min(ghz, params['idle_ghz']), params['clock'] * max(0.0, ghz - params['idle_ghz'])
 
 
 def platform_features(record):
@@ -537,7 +544,9 @@ def attribute(record, params):
 
     On battery each chip watt is scaled by the model's per-chip-watt cost (k),
     so apps carry their share of conversion losses; on AC only chip power is
-    known. `params` are battery-eta's trained values (see PRIOR).
+    known. `params` are battery-eta's trained values (see PRIOR). The clock
+    term up to the idle clock is processor baseline; above it, apps share it by
+    CPU time (theirs is what raised the clock).
     """
     dt, rows = record['dt'], collections.defaultdict(float)
     soc = record.get('soc', {}).get('w')
@@ -545,15 +554,23 @@ def attribute(record, params):
         return rows
     on_battery = discharging(record)
     scale = params['chip'] if on_battery else 1.0
-    floor = min(soc, params['floor'])
-    ghz2 = clock_squared(record) or 0
-    weights = {}
+    mhz = record.get('cpu', {}).get('mhz')
+    ghz = mhz / 1000 if mhz else None
+    ghz2 = ghz * ghz if ghz else 0
+    idle, raised = clock_split(params, ghz)
     apps = record.get('apps', {})
-    for name, app in apps.items():
-        weights[name] = (params['load'] * app.get('cpu', 0) * ghz2
-                         + params['gpu'] * app.get('gpu', 0) + params['video'] * app.get('video', 0)) / dt
-    unowned = record.get('cpu', {}).get('busy_s', 0) - sum(a.get('cpu', 0) for a in apps.values())
-    weights['Kernel'] = weights.get('Kernel', 0) + params['load'] * max(0, unowned) * ghz2 / dt
+    cpu = {name: app.get('cpu', 0) for name, app in apps.items()}
+    cpu['Kernel'] = cpu.get('Kernel', 0) + max(0, record.get('cpu', {}).get('busy_s', 0) - sum(cpu.values()))
+    busy = sum(cpu.values())
+    if busy <= 0:
+        idle += raised  # Nothing ran to raise it.
+    floor = min(soc, params['floor'] + idle)
+    weights = {}
+    for name, seconds in cpu.items():
+        app = apps.get(name, {})
+        weights[name] = ((params['load'] * seconds * ghz2 + params['gpu'] * app.get('gpu', 0)
+                          + params['video'] * app.get('video', 0)) / dt
+                         + (raised * seconds / busy if busy > 0 else 0))
     total = sum(weights.values())
     if total > 0:
         for name, weight in weights.items():

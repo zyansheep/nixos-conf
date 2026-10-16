@@ -108,15 +108,15 @@ class PowerTests(unittest.TestCase):
             self.assertNotIn('junk', params)
 
     def test_attribution_splits_chip_by_activity_and_platform_by_model(self):
-        params = dict(PRIOR)   # floor 6 W, 0.2 W/(core·GHz²), ×1.3 per chip watt
+        params = dict(PRIOR)   # floor 3 W + 3 W/GHz (to the 1 GHz idle clock), 0.12 W/(core·GHz²), ×1.3 per chip watt
         record = {'dt': 10, 'status': 'Discharging', 'bat': {'w': 20.0}, 'soc': {'w': 10.0},
                   'cpu': {'busy_s': 10.0, 'mhz': 2000},
                   'apps': {'Browser': {'cpu': 6.0}, 'Game': {'cpu': 2.0, 'gpu': 2.0}},
                   'display': {'bl': .5}, 'net': {'wlan0': {'rx': 0, 'tx': 0}}}
         rows = attribute(record, params)
-        self.assertAlmostEqual(rows['Processor baseline'], 78.0)        # 1.3 × 6 W × 10 s
-        self.assertAlmostEqual(rows['Kernel'] / rows['Browser'], 1 / 3)  # Unowned busy CPU
-        self.assertGreater(rows['Game'], rows['Browser'])               # GPU time weighs more than CPU
+        self.assertAlmostEqual(rows['Processor baseline'], 78.0)        # 1.3 × (3 W + 3 W/GHz × 1 GHz) × 10 s
+        self.assertAlmostEqual(rows['Kernel'] / rows['Browser'], 1 / 3)  # Unowned busy CPU; the clock above idle by CPU time
+        self.assertGreater(rows['Game'], rows['Kernel'])                # Same CPU time, plus GPU time
         self.assertAlmostEqual(rows['Display'], 15.0)                    # 3 W × 0.5 brightness × 10 s
         self.assertAlmostEqual(rows['Rest of system'], 55.0)
         self.assertAlmostEqual(sum(rows.values()), 200.0)                # Equals battery energy
@@ -128,6 +128,8 @@ class PowerTests(unittest.TestCase):
         rows = attribute(record, params)
         self.assertNotIn('Display', rows)
         self.assertAlmostEqual(rows['Processor baseline'], 60.0)        # On AC: chip watts only
+        record['cpu']['mhz'] = 800  # Below the idle clock: the whole clock term is baseline.
+        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 54.0)  # (3 W + 3 W/GHz × 0.8 GHz) × 10 s
 
     def test_experiment_assignment_marks_washout_and_ignores_paused_runs(self):
         with tempfile.TemporaryDirectory() as tmp:
