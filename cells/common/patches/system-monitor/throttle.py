@@ -6,15 +6,18 @@ switching back and forth never lands on a cold app. Apps without a window —
 helpers, daemons, clipboard owners (wl-copy serves every paste), whatever a
 launcher just spawned while a layer surface had focus — are never capped:
 capped, the emoji picker took 4–6 s to paste. Apps playing or recording audio or video
-(PipeWire streams that are running, not just open) and KEEP (T3 Code's
-agents, the input method that serves the focused app) are left alone, and so
-is everything on AC.
+(PipeWire streams that are running, not just open) and KEEP are left alone,
+and so is everything on AC. KEEP is where real work runs in the background:
+terminals and editors/IDEs (builds, agent CLIs and language servers run in
+their scopes; capped, a build ran 10× slower whenever another window had
+focus), T3 Code's agents and the input method that serves the focused app.
 
 An app is every systemd scope in app.slice with the same launch pid: Electron
 apps move their main process into a scope of their own (app-vesktop-2295)
 and leave the renderers in the one niri started (app-niri-vesktop-2295), so
 freeing only the window's scope left Discord's renderers capped — frozen —
-while it was focused.
+while it was focused. The quota is the app's: its scopes share it equally (a
+two-scope app gets QUOTA/2 per scope, not QUOTA each).
 
     app-throttle [--quota N] [--keep PATTERN ...]
     app-throttle --release      (lift every quota; the unit's ExecStopPost)
@@ -36,11 +39,17 @@ import sys
 import time
 from pathlib import Path
 
-QUOTA = 10  # % of one core per background app scope.
+QUOTA = 10  # % of one core per background app, shared by its scopes.
 GRACE = 120  # s an app stays free after it loses focus.
 PERIOD = 100_000  # µs: cgroup cpu.max's period.
+MINIMUM = 1000  # µs: the smallest quota cpu.max takes.
 UNLIMITED = f'max {PERIOD}'
-KEEP = ('t3code', 'fcitx5')  # Agents keep working; the input method types into the focused app.
+# Matched (case-insensitively) anywhere in the scope's name, systemd escapes undone.
+TERMINALS = ('foot', 'kitty', 'alacritty', 'wezterm', 'ghostty', 'konsole', 'gnome-terminal', 'xterm',
+             'terminator', 'tilix')
+EDITORS = ('code', 'codium', 'zed', 'emacs', 'neovide', 'jetbrains', 'sublime', 'gvim')  # 'code': VS Code, T3 Code.
+# Agents keep working; the input method types into the focused app; builds run in terminals and editors.
+KEEP = ('t3code', 'fcitx5') + TERMINALS + EDITORS
 RESCAN = 5  # s: new apps, AC changes.
 RUNTIME = Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'waybar-monitor'
 STATE = RUNTIME / 'throttle.json'
@@ -62,7 +71,9 @@ def on_battery(power=Path('/sys/class/power_supply')):
 class Throttle:
     def __init__(self, apps=APPS, quota=QUOTA, keep=KEEP, battery=on_battery, proc=Path('/proc'), grace=GRACE,
                  clock=time.monotonic):
-        self.apps, self.limit, self.keep = apps, f'{quota * PERIOD // 100} {PERIOD}', tuple(k.lower() for k in keep)
+        self.apps, self.keep = apps, tuple(k.lower() for k in keep)
+        self.quota = quota * PERIOD // 100  # µs per period for a whole app.
+        self.limit = f'{self.quota} {PERIOD}'
         self.battery, self.proc, self.grace, self.clock = battery, proc, grace, clock
         self.windows, self.focused, self.nodes = {}, None, {}  # window id → pid; PipeWire node id → what we know
         self.current, self.left = None, {}  # The focused app; when each app last lost focus.
@@ -132,7 +143,14 @@ class Throttle:
         free |= set(self.left)
         free |= {app_of(s) for s in scopes if any(k in unescape(s).lower() for k in self.keep)}
         windowed = {app_of(self.scope_of(pid) or '') for pid in self.windows.values()} - {''}
-        return {s: self.limit if app_of(s) in windowed and app_of(s) not in free else UNLIMITED for s in scopes}
+        capped = {s for s in scopes if app_of(s) in windowed and app_of(s) not in free}
+        shares = {}  # The app's quota, split between its scopes.
+        for scope in capped:
+            shares[app_of(scope)] = shares.get(app_of(scope), 0) + 1
+        return {s: self.share(shares[app_of(s)]) if s in capped else UNLIMITED for s in scopes}
+
+    def share(self, scopes):
+        return f'{max(MINIMUM, self.quota // scopes)} {PERIOD}'
 
     def apply(self, values=None):
         """Write what changed; the scopes now throttled."""
@@ -264,7 +282,7 @@ def run(throttle, niri_command=('niri', 'msg', '-j', 'event-stream'), pw_command
 
 def main(argv=None):
     parser = argparse.ArgumentParser(prog='app-throttle', description=__doc__.split('\n\n')[0])
-    parser.add_argument('--quota', type=int, default=QUOTA, help='%% of one core per background app')
+    parser.add_argument('--quota', type=int, default=QUOTA, help='%% of one core per background app (all its scopes)')
     parser.add_argument('--keep', action='append', help=f'scope patterns never throttled (default: {", ".join(KEEP)})')
     parser.add_argument('--release', action='store_true', help='lift every quota and exit')
     args = parser.parse_args(argv)

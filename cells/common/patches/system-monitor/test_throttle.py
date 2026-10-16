@@ -38,20 +38,44 @@ class ThrottleTests(unittest.TestCase):
 
     def test_everything_but_the_focused_app_and_the_kept_ones_is_capped(self):
         self.assertEqual(throttle.label(self.throttle.apply()[0]), 'floorp')
-        self.assertEqual(self.limits()['app-niri-vesktop-2295.scope'], '5000 100000')
         limits = self.limits()
         self.assertEqual(limits['app-niri-floorp-2240.scope'], '5000 100000')
-        self.assertEqual(limits['app-niri-foot-9.scope'], '5000 100000')
-        for free in ('app-md.Obsidian-2243.scope', 'app-com.t3tools.T3Code-272490.scope', 'app-niri-fcitx5-2259.scope'):
+        for free in ('app-md.Obsidian-2243.scope', 'app-com.t3tools.T3Code-272490.scope', 'app-niri-fcitx5-2259.scope',
+                     'app-niri-foot-9.scope'):  # Focused, kept (agents, the input method, a terminal).
             self.assertEqual(limits[free], UNLIMITED)
-        # Focus moves to the terminal: it is free at once; Obsidian stays free for the grace period.
-        self.throttle.window_event({'WindowFocusChanged': {'id': 3}})
+        # Focus moves to Discord: it is free at once; Obsidian stays free for the grace period.
+        self.throttle.window_event({'WindowFocusChanged': {'id': 4}})
         self.throttle.apply()
         limits = self.limits()
-        self.assertEqual((limits['app-niri-foot-9.scope'], limits['app-md.Obsidian-2243.scope']), (UNLIMITED, UNLIMITED))
+        self.assertEqual((limits['app-vesktop-2295.scope'], limits['app-md.Obsidian-2243.scope']), (UNLIMITED, UNLIMITED))
         self.now += throttle.GRACE + 1
         self.throttle.apply()
         self.assertEqual(self.limits()['app-md.Obsidian-2243.scope'], '5000 100000')
+
+    def test_terminals_and_editors_are_never_capped(self):
+        # Builds and agent CLIs run in a terminal's or an editor's scope: capped, they ran 10× slower.
+        for scope, pid in (('app-niri-codium-301.scope', 301), ('app-org.wezfurlong.wezterm-302.scope', 302),
+                           ('app-com.mitchellh.ghostty-303.scope', 303), ('app-niri-kitty-304.scope', 304),
+                           ('app-dev.zed.Zed-305.scope', 305), ('app-niri-code-306.scope', 306)):
+            (self.apps / scope).mkdir()
+            (self.apps / scope / 'cpu.max').write_text(UNLIMITED + '\n')
+            (self.proc / str(pid)).mkdir()
+            (self.proc / str(pid) / 'cgroup').write_text(f'0::/user.slice/user-1000.slice/user@1000.service/app.slice/{scope}\n')
+            self.throttle.window_event({'WindowOpenedOrChanged': {'window': {'id': pid, 'pid': pid, 'is_focused': False}}})
+        throttled = self.throttle.apply()
+        self.assertEqual([throttle.label(s) for s in throttled if 'vesktop' not in s], ['floorp'])
+        for name in ('foot', 'kitty', 'alacritty', 'wezterm', 'ghostty', 'codium', 'code'):
+            self.assertIn(name, throttle.KEEP)
+
+    def test_an_app_shares_one_quota_between_its_scopes(self):
+        self.throttle.apply()
+        limits = self.limits()
+        # Discord's two scopes get half each: 5% for the app, not 5% per scope.
+        self.assertEqual((limits['app-vesktop-2295.scope'], limits['app-niri-vesktop-2295.scope']),
+                         ('2500 100000', '2500 100000'))
+        self.assertEqual(limits['app-niri-floorp-2240.scope'], '5000 100000')
+        tiny = Throttle(self.apps, quota=1, battery=lambda: True, proc=self.proc, clock=lambda: self.now)
+        self.assertEqual(tiny.share(4), f'{throttle.MINIMUM} 100000')  # cpu.max refuses less than 1 ms.
 
     def test_apps_without_a_window_are_never_capped(self):
         self.throttle.apply()

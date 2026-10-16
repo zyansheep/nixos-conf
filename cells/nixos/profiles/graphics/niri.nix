@@ -105,9 +105,15 @@ in {
   # Make system-wide binaries available to waybar's exec scripts (jq, bash,
   # systemctl, notify-send, etc.). The default unit PATH is intentionally
   # minimal; this widens it to the system profile so custom modules can be
-  # iterated on without absolute-pathing every binary.
+  # iterated on without absolute-pathing every binary. /run/wrappers/bin comes
+  # first: the system profile's sudo is the non-setuid store binary ("sudo must
+  # be owned by uid 0"), which half-applied the battery menu's combinations.
+  # iw is the one tool power-experiment (the menu's switches) needs that the
+  # system profile lacks (it is a per-user package): without it Wi-Fi power
+  # saving read as unavailable, so `disable` could not restore it and
+  # `goal --apply` reported it failed.
   systemd.user.services.waybar.environment.PATH =
-    lib.mkForce "/run/current-system/sw/bin";
+    lib.mkForce "/run/wrappers/bin:${lib.makeBinPath [pkgs.iw]}:/run/current-system/sw/bin";
   # Out-of-store dotfile symlinks keep the same target across rebuilds, so
   # explicitly restart Waybar when its configuration or artwork changes.
   systemd.user.services.waybar.restartTriggers = [
@@ -166,8 +172,10 @@ in {
 
   # Randomized A/B power experiment, started by `power-experiment start` (the
   # panel's Experiments tab). Root settings go through `sudo -n power-lab`, so
-  # no NoNewPrivileges; the original value is restored on stop or crash, and
+  # no NoNewPrivileges; the stock values are restored (and read back) on stop,
+  # what could not be is retried by ExecStopPost and the reconcile timer, and
   # power-lab's pre-sleep hook restores the s2idle crash workarounds.
+  # TimeoutStopSec covers a full restore: ~9 sudo calls of up to 15 s each.
   systemd.user.services.power-experiment = {
     description = "Randomized A/B battery experiment";
     partOf = [ "graphical-session.target" ];
@@ -181,20 +189,30 @@ in {
         "${pkgs.waybar-monitor}/bin/power-experiment resume"
       ];
       Restart = "no";
+      TimeoutStopSec = 180;
     };
   };
 
   # Automatic experiments (the battery panel's Experiments switch, or
   # `power-experiment enable`): each block tries the combination of settings
   # the battery model expects to learn most from, among those unlikely to
-  # bother you; pauses on AC and while quality of life is below fine.
+  # bother you; pauses on AC and while quality of life is below fine. Its
+  # watchdog reads the kernel log before and while it runs; an incident removes
+  # experiments-enabled (so it never comes back at the next login by itself).
+  # Ordered after the manual unit: when one starts and the other stops
+  # (Conflicts=), the stop and its restore finish before the start.
   systemd.user.services.power-experiments = {
     description = "Automatic battery experiments";
     wantedBy = [ "graphical-session.target" ];
     partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" "waybar-monitor.service" ];
+    after = [ "graphical-session.target" "waybar-monitor.service" "power-experiment.service" ];
     conflicts = [ "power-experiment.service" ];
-    unitConfig.ConditionPathExists = "%S/waybar-monitor/experiments-enabled";
+    unitConfig = {
+      ConditionPathExists = "%S/waybar-monitor/experiments-enabled";
+      # A runner that keeps crashing stops trying: at most 5 starts an hour.
+      StartLimitIntervalSec = 3600;
+      StartLimitBurst = 5;
+    };
     environment.PATH = lib.mkForce
       "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
     serviceConfig = {
@@ -202,12 +220,42 @@ in {
       ExecStopPost = "${pkgs.waybar-monitor}/bin/power-experiment restore";
       Restart = "on-failure";
       RestartSec = 30;
+      TimeoutStopSec = 180;
+    };
+  };
+
+  # The reconciler, while no run owns the settings: retries restores a run
+  # could not finish (restore-pending, a crash), puts applied settings (the
+  # panel's Apply, `goal --apply`) back to stock on AC and sets them again on
+  # battery (risky ones also after a resume, once its wait and hold allow),
+  # is their watchdog (the kernel log, while any are applied), and notes your
+  # own power profile per power source.
+  systemd.user.services.power-experiment-reconcile = {
+    description = "Reconcile power-experiment settings with the power source";
+    after = [ "graphical-session.target" ];
+    environment.PATH = lib.mkForce
+      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment reconcile";
+      TimeoutStartSec = 180;
+    };
+  };
+  systemd.user.timers.power-experiment-reconcile = {
+    description = "Reconcile power-experiment settings every minute";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    timerConfig = {
+      OnActiveSec = "1min";
+      OnUnitActiveSec = "1min";
+      AccuracySec = "10s";
     };
   };
 
   # Background-app throttle (power-experiment's throttle-apps setting starts and
-  # stops it): on battery, every app scope but the focused window's, those
-  # playing or recording audio/video, T3 Code and fcitx5 gets a CPU quota.
+  # stops it): on battery, every windowed app but the focused one, those
+  # playing or recording audio/video, terminals, editors/IDEs, T3 Code and
+  # fcitx5 gets a CPU quota (one per app, shared by its scopes).
   systemd.user.services.app-throttle = {
     description = "Throttle unfocused apps on battery";
     partOf = [ "graphical-session.target" ];

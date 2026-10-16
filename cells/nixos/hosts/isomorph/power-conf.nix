@@ -32,6 +32,9 @@
   # add event at boot (ACAD appears before the DRM connector exists).
   # Measured 2026-09-02 (A/B/A/B, 40 s windows, browser + music workload):
   # abm0 15.35/13.02 W vs abm3 14.07/11.84 W → ~1.2 W.
+  # This is ABM's stock value for power-experiment: it restores ABM by running
+  # these rules again (`power-lab trigger power_supply`) and reads it back
+  # against experiment.ABM_POLICY (3 on battery, 0 on AC) — change both together.
   services.udev.extraRules = let
     panelAbm = pkgs.writeShellScript "panel-abm" ''
       level=''${1:-}
@@ -70,11 +73,14 @@
     # Framework 13 AMD + MT7922 (mt7921e) crashes the SoC during s2idle if the
     # card is left active. Unload before suspend, reload after.
     # https://community.frame.work/t/framework-13-amd-return-from-sleep-causes-reboot/64743
+    # The resume commands run as one `set -e` script (sleep-actions.service's
+    # stop), in no fixed order: a failed reload must not skip the rest (power-lab
+    # sleep-restore, which ends power-lab's suspend lock-out).
     powerDownCommands = ''
       ${pkgs.kmod}/bin/rmmod mt7921e || true
     '';
     resumeCommands = ''
-      ${pkgs.kmod}/bin/modprobe mt7921e
+      ${pkgs.kmod}/bin/modprobe mt7921e || echo "power-conf: modprobe mt7921e failed after resume" >&2
     '';
   };
   # services.tlp.enable = lib.mkForce false;
