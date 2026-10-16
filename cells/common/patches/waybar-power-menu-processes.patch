@@ -1,6 +1,6 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,171 @@
+@@ -12,9 +12,236 @@
  
  namespace waybar {
  
@@ -86,7 +86,8 @@
 +    gtk_widget_set_visible(label, !text.empty());
 +  };
 +  line("battery-experiments-status", modes.status);
-+  line("battery-modes-note", modes.experiments ? "Applies when experiments stop" : "");
++  // goal --apply applies nothing while a run owns the settings, and disable restores stock.
++  line("battery-modes-note", modes.experiments ? "While experiments run, this only sets the goal" : "");
 +  for (const std::string goal : {"battery", "comfort"}) {
 +    auto* row = findPowerMenuWidget(menu, ("battery-mode-" + goal).c_str());
 +    auto* change = findPowerMenuWidget(menu, ("battery-mode-" + goal + "-change").c_str());
@@ -107,6 +108,45 @@
 +                             .c_str());
 +    gtk_label_set_markup(GTK_LABEL(gain), powerMenuMarkup(best->second.gain, best->second.interval).c_str());
 +  }
++}
++
++// battery-eta's lines: the time left (to the second in its last minutes) and
++// asleep from now.
++static void showPowerMenuEta(GtkWidget* menu) {
++  const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
++  auto set = [](GtkWidget* label, const std::string& text) {
++    if (g_strcmp0(gtk_label_get_text(GTK_LABEL(label)), text.c_str()) != 0)  // No relayout for nothing.
++      gtk_label_set_text(GTK_LABEL(label), text.c_str());
++  };
++  if (auto* title = findPowerMenuWidget(menu, "battery-eta-title"); GTK_IS_LABEL(title))
++    set(title, eta.title.empty() ? "Time left: waiting for battery-eta…" : eta.title);
++  if (auto* asleep = findPowerMenuWidget(menu, "battery-eta-sleep"); GTK_IS_LABEL(asleep)) {
++    set(asleep, eta.sleep);
++    gtk_widget_set_no_show_all(asleep, TRUE);
++    gtk_widget_set_visible(asleep, !eta.sleep.empty());
++  }
++}
++
++// While the menu is open, its battery-eta lines tick every second (they would
++// otherwise freeze mid-countdown); the timer ends once the menu is unmapped.
++static gboolean tickPowerMenuEta(gpointer data) {
++  auto* menu = GTK_WIDGET(data);
++  if (!gtk_widget_get_mapped(menu)) return G_SOURCE_REMOVE;
++  try {
++    showPowerMenuEta(menu);
++  } catch (const std::exception& error) {  // jsoncpp type errors must not end Waybar.
++    spdlog::warn("battery menu: {}", error.what());
++  }
++  return G_SOURCE_CONTINUE;
++}
++
++static void startPowerMenuTick(GtkWidget* menu) {
++  if (g_object_get_data(G_OBJECT(menu), "power-menu-tick") != nullptr) return;
++  g_object_set_data(G_OBJECT(menu), "power-menu-tick", GINT_TO_POINTER(1));
++  g_timeout_add_full(G_PRIORITY_DEFAULT, 1000, tickPowerMenuEta, g_object_ref(menu), +[](gpointer data) {
++    g_object_set_data(G_OBJECT(data), "power-menu-tick", nullptr);
++    g_object_unref(data);
++  });
 +}
 +
 +// battery-experiments and battery-comfort: a click flips the row's switch and
@@ -138,35 +178,60 @@
 +  showPowerMenuModes(menu, modes);
 +}
 +
++// The menu item a button-1 press in the menu began on: a row flips only on a
++// release that ends a press on that same row, never on the release that ends
++// a press-drag from the bar (GTK delivers it to the item under the pointer).
++static gboolean pressPowerMenu(GtkWidget* menu, GdkEventButton* event, gpointer) {
++  GtkWidget* item = gtk_get_event_widget(reinterpret_cast<GdkEvent*>(event));
++  while (item != nullptr && !GTK_IS_MENU_ITEM(item)) item = gtk_widget_get_parent(item);
++  g_object_set_data(G_OBJECT(menu), "power-menu-pressed", event->button == 1 ? item : nullptr);
++  return FALSE;
++}
++
 +static gboolean releasePowerMenuRow(GtkWidget* item, GdkEventButton* event, gpointer) {
-+  if (event->button != 1) return FALSE;
-+  togglePowerMenuRow(item);
-+  return TRUE;
++  auto* menu = gtk_widget_get_parent(item);
++  if (event->button != 1 || !GTK_IS_MENU_SHELL(menu)) return FALSE;
++  const bool clicked = g_object_get_data(G_OBJECT(menu), "power-menu-pressed") == item &&
++                       gtk_menu_shell_get_selected_item(GTK_MENU_SHELL(menu)) == item;
++  g_object_set_data(G_OBJECT(menu), "power-menu-pressed", nullptr);
++  try {
++    if (clicked) togglePowerMenuRow(item);
++  } catch (const std::exception& error) {  // jsoncpp type errors must not end Waybar.
++    spdlog::warn("battery menu: {}", error.what());
++  }
++  return TRUE;  // Never the menu's own activation on release: that is Enter's alone.
 +}
 +
  static void updatePowerMenuStats(GtkWidget* widget) {
-+  if (GTK_IS_MENU(widget) && findPowerMenuWidget(widget, "battery-experiments") != nullptr)
++  if (GTK_IS_MENU(widget) && findPowerMenuWidget(widget, "battery-experiments") != nullptr) {
 +    showPowerMenuModes(widget, currentPowerMenuModes());
++    if (g_object_get_data(G_OBJECT(widget), "power-menu-press") == nullptr) {
++      g_signal_connect(widget, "button-press-event", G_CALLBACK(pressPowerMenu), nullptr);
++      g_signal_connect(widget, "unmap", G_CALLBACK(+[](GtkWidget* menu, gpointer) {
++                         g_object_set_data(G_OBJECT(menu), "power-menu-pressed", nullptr);
++                       }), nullptr);
++      g_object_set_data(G_OBJECT(widget), "power-menu-press", GINT_TO_POINTER(1));
++    }
++  }
++  if (GTK_IS_MENU(widget) && findPowerMenuWidget(widget, "battery-eta-title") != nullptr) {
++    showPowerMenuEta(widget);
++    startPowerMenuTick(widget);
++  }
    if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-stats") == 0) {
      gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
 +  } else if (GTK_IS_BOX(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-processes") == 0) {
 +    fillPowerMenuProcesses(widget);
-+  } else if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-eta-title") == 0) {
-+    const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
-+    gtk_label_set_text(GTK_LABEL(widget), eta.title.empty() ? "Time left: waiting for battery-eta…"
-+                                                              : eta.title.c_str());
-+  } else if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-eta-sleep") == 0) {
-+    const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
-+    gtk_label_set_text(GTK_LABEL(widget), eta.sleep.c_str());
-+    gtk_widget_set_no_show_all(widget, TRUE);
-+    gtk_widget_set_visible(widget, !eta.sleep.empty());
 +  } else if (GTK_IS_MENU_ITEM(widget) && (g_strcmp0(gtk_widget_get_name(widget), "battery-experiments") == 0 ||
 +                                          g_strcmp0(gtk_widget_get_name(widget), "battery-comfort") == 0)) {
 +    if (g_object_get_data(G_OBJECT(widget), "power-menu-row") == nullptr) {
 +      g_signal_connect(widget, "button-release-event", G_CALLBACK(releasePowerMenuRow), nullptr);
-+      g_signal_connect(widget, "activate",
-+                       G_CALLBACK(+[](GtkMenuItem* item, gpointer) { togglePowerMenuRow(GTK_WIDGET(item)); }),
-+                       nullptr);
++      g_signal_connect(widget, "activate", G_CALLBACK(+[](GtkMenuItem* item, gpointer) {
++                         try {
++                           togglePowerMenuRow(GTK_WIDGET(item));
++                         } catch (const std::exception& error) {
++                           spdlog::warn("battery menu: {}", error.what());
++                         }
++                       }), nullptr);
 +      g_object_set_data(G_OBJECT(widget), "power-menu-row", GINT_TO_POINTER(1));
 +    }
    } else if (GTK_IS_CONTAINER(widget)) {
