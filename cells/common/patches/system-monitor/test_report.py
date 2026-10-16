@@ -1,9 +1,13 @@
 import collections
 import math
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
+import power
 import report
 import store
 
@@ -107,7 +111,7 @@ class ReportTests(unittest.TestCase):
         self.assertFalse(store.psr_enabled(None))          # Before logging: nixos-hardware's 0x10
         rng = np.random.default_rng(5)
         minutes, t = [], 0
-        for boot in range(6):
+        for boot in range(10):
             psr = boot % 2 == 1
             for _ in range(60):
                 load = rng.uniform(1, 20)
@@ -119,9 +123,9 @@ class ReportTests(unittest.TestCase):
         self.assertAlmostEqual(effect['watts'], 1.5, delta=.3)
         self.assertLess(effect['watts_low'], effect['watts'])
         self.assertGreater(effect['minutes'], 0)
-        progress = report.boot_effect(minutes[:120], 48, 16)   # One boot per arm: not enough yet
+        progress = report.boot_effect(minutes[:480], 48, 16)   # Four boots per arm: not enough yet
         self.assertNotIn('watts', progress)
-        self.assertEqual(progress['boots'], {'off': 1, 'on': 1})
+        self.assertEqual(progress['boots'], {'off': 4, 'on': 4})
 
     def test_sleep_drain(self):
         events = [{'event': 'gap', 't1': 7200, 'gap_s': 3600,
@@ -140,7 +144,7 @@ class ReportTests(unittest.TestCase):
         self.assertLess(estimate['low'], estimate['hours'])
         self.assertGreater(estimate['high'], estimate['hours'])
         self.assertIsNone(report.sleep_runtime(sleeps[:2], 24.0))       # Too few suspends
-        noisy = report.sleep_runtime(sleeps + [{'watts': 3.0, 'hours': 1}], 24.0)
+        noisy = report.sleep_runtime([dict(s, watts=s['watts'] ** 3) for s in sleeps], 24.0)
         self.assertGreater(noisy['high'] - noisy['low'], estimate['high'] - estimate['low'])
 
 
@@ -345,6 +349,457 @@ class PlanTests(unittest.TestCase):
         self.assertGreaterEqual(min(states[n, on] for n in names for on in (False, True)), 6)
         self.assertGreaterEqual(len(seen), 6)
         self.assertLessEqual(max(seen.values()), 8)
+
+
+T0 = 1_790_000_040.0  # On a minute: 2026-09-21.
+
+
+def minute(t, **values):
+    """One battery minute with everything the models read."""
+    m = {'t': t, 'dt': 60, 'st': 'D', 'bat': 14.0, 'soc': 8.0, 'load': 4.0, 'busy': 1.0, 'ghz': 1.3, 'gpu': 0,
+         'video': 0, 'bl': .5, 'kbd': 0, 'wifi': 0, 'disk': 0, 'usb': 0, 'audio': 0, 'set': {'profile': 'low-power'}}
+    m.update(values)
+    return m
+
+
+def chip_minutes(n, seed, balanced=0.15, active=False):
+    """Minutes of a 16-CPU chip: `a` active cores at clock f, the idle ones at
+    their profile's placeholder (0.41 GHz power-saver, 1.12 balanced), so the
+    mean clock (ghz) depends on the profile while the power does not; ghz is
+    correlated with load about as on the real machine (0.7). With `active`,
+    the power follows the active cores' clock (logged as ghz_active) instead."""
+    rng, out = np.random.default_rng(seed), []
+    for i in range(n):
+        profile = 'balanced' if rng.random() < balanced else 'low-power'
+        a = 1 + rng.poisson(2.0)
+        f = min(4.8, 1.4 + 0.25 * a + rng.gamma(2, 0.3))
+        busy = a * rng.uniform(0.3, 0.9)
+        p = 1.12 if profile == 'balanced' else 0.41
+        ghz = (a * f + (16 - a) * p) / 16
+        load = busy * ghz ** 2
+        if active:
+            soc = 2.0 + 0.9 * f + 0.15 * load + rng.normal(0, .15)
+        else:
+            soc = 2.0 + 3.0 * (ghz - p) + 0.15 * load + rng.normal(0, .15)
+        bl = rng.uniform(.2, 1)
+        m = minute(T0 + 60 * i, soc=soc, ghz=ghz, load=load, busy=busy, bl=bl,
+                   bat=.5 + 1.4 * soc + 3 * bl + rng.normal(0, .2), set={'profile': profile},
+                   apps={'app': [load * 0.7, 0, 0]})
+        if active:
+            m['ghz_active'] = f
+        out.append(m)
+    return sorted(out, key=lambda m: m['t'])
+
+
+def chip_error(model, rows, profile=None):
+    """Mean chip prediction error (W) of `model` on `rows` of `profile`."""
+    rows = [m for m in rows if profile is None or m['set']['profile'] == profile]
+    x, y, _, _ = report.design(rows, model)
+    levers = report.model_levers(model)
+    coef = np.array([model[n] for n in report.CHIP_TERMS] + [model[f'soc:{n}'] for n in levers])
+    return x @ coef - y
+
+
+class ModelDataTests(unittest.TestCase):
+    def test_models_learn_from_experiment_minutes_with_each_setting_held_at_yours(self):
+        # Since 2026-10-12 every battery minute has been an experiment's: the models
+        # must use them (not freeze on older days), with ASPM's saving kept out of the parts.
+        rng, minutes = np.random.default_rng(3), []
+        for block in range(150):
+            aspm = bool(rng.integers(2))
+            for i in range(4):
+                load, bl = rng.uniform(1, 20), rng.uniform(.2, 1)
+                ghz = 0.9 + 0.08 * load + rng.normal(0, .15)
+                soc = 2 + 3 * ghz + .1 * load + rng.normal(0, .1)
+                minutes.append(minute(T0 + 60 * len(minutes), soc=soc, ghz=ghz, load=load, bl=bl,
+                                      bat=(30.0 if i == 0 else .5 + 1.4 * soc + 3 * bl - 1.5 * aspm + rng.normal(0, .1)),
+                                      set={'profile': 'low-power', 'aspm': 'powersupersave' if aspm else 'performance'},
+                                      exp=['auto-1', 'aspm', block, 'B' if aspm else 'A', i == 0,
+                                           'powersupersave' if aspm else 'performance']))
+        plugged = [minute(T0 + 60 * (len(minutes) + i), st='C', bat=-20.0,
+                          set={'profile': 'balanced', 'aspm': 'performance'}) for i in range(30)]
+        rows = report.battery_rows(minutes + plugged)
+        self.assertEqual(len(rows), 450)                       # Washout out, experiments in
+        self.assertEqual(report.battery_rows(minutes, include_experiments=False), [])
+        model = report.fit_rows(rows, minutes=minutes + plugged)
+        self.assertEqual((model['rows'], model['experiment_rows'], model['prior'], model['kept']), (450, 450, 0, 0))
+        self.assertEqual((model['t0'], model['t1']), (rows[0]['t'], rows[-1]['t']))
+        self.assertAlmostEqual(model['bat:aspm'], -1.5, delta=.2)  # The setting's own column…
+        self.assertAlmostEqual(model['chip'], 1.4, delta=.05)      # …so the parts stay right.
+        self.assertAlmostEqual(model['bl'], 3, delta=.2)
+        self.assertAlmostEqual(model['clock'], 3, delta=.3)
+        self.assertEqual(model['own:aspm'], 0.0)                # Yours: ASPM off, from outside experiments
+        aspm_on = np.mean([report.minute_states(m, report.model_top(model))['aspm'] for m in rows])
+        typical = report.typical_power(rows, model)
+        self.assertAlmostEqual(typical - np.mean([m['bat'] for m in rows]), 1.5 * aspm_on, delta=.15)
+        _, info = report.what_if(rows, 50, replicates=10, model=model)
+        self.assertAlmostEqual(info['power'], typical)
+        self.assertEqual((info['rows'], info['experiment_rows']), (450, 450))
+
+    def test_too_few_rows_keep_the_last_model_and_never_silently_the_prior(self):
+        rows = report.battery_rows(chip_minutes(200, 1))
+        model = report.fit_rows(rows)
+        kept = report.fit_rows(rows[:5], previous=model)
+        self.assertEqual((kept['kept'], kept['floor'], kept['rows'], kept['t1']),
+                         (1.0, model['floor'], model['rows'], model['t1']))
+        self.assertEqual(report.fit_rows([], previous=kept)['floor'], model['floor'])  # Kept again
+        prior = report.fit_rows(rows[:5])
+        self.assertEqual((prior['prior'], prior['rows'], prior['floor']), (1.0, 5.0, report.PRIOR['floor']))
+        self.assertEqual(report.fit_rows([], previous=prior)['prior'], 1.0)  # A prior is not a model to keep.
+        old = {k: v for k, v in model.items() if k != 'clock_active'}  # From before the active clock
+        self.assertEqual(report.fit_rows([], previous=old)['clock_active'], report.PRIOR['clock_active'])
+
+    def test_minutes_partly_on_ac_are_left_out(self):
+        m = minute(T0)
+        rows = report.battery_rows([m, dict(m, purity=0.95), dict(m, purity=0.6), dict(m, purity=None)])
+        self.assertEqual([r.get('purity') for r in rows], [None, 0.95, None])
+
+    def test_your_settings_without_any_battery_minute_outside_experiments(self):
+        exp = factorial_minutes(blocks=8)
+        plugged = [dict(exp[-1], t=exp[-1]['t'] + 60 * (i + 1), st='C', exp=None,
+                        set={'aspm': 'performance', 'apst': '0', 'boost': '1', 'profile': 'balanced', 'abm': 0,
+                             'hz': 60.0}) for i in range(5)]
+        states = report.own_settings(exp + plugged)
+        # AC has AC's profile, ABM and boost: on battery udev sets power-saver, ABM on, no boost.
+        self.assertEqual((states['profile'], states['abm'], states['boost'], states['aspm']), (True, True, True, False))
+
+
+class ClockTests(unittest.TestCase):
+    def test_fit_recovers_clock_and_load_correlated_as_on_the_machine(self):
+        rng, rows = np.random.default_rng(4), []
+        for i in range(400):
+            load = rng.gamma(2, 3)
+            ghz = 0.9 + 0.08 * load + rng.normal(0, .25)  # corr(ghz, load) ≈ 0.7, as measured
+            soc = 3 + 2 * ghz + .2 * load + rng.normal(0, .1)
+            rows.append(minute(i * 60, load=load, ghz=ghz, soc=soc, bat=.5 + 1.4 * soc + rng.normal(0, .1), set={}))
+        self.assertGreater(np.corrcoef([m['ghz'] for m in rows], [m['load'] for m in rows])[0, 1], .6)
+        model = report.fit_rows(report.battery_rows(rows))
+        self.assertAlmostEqual(model['clock'], 2, delta=.2)
+        self.assertAlmostEqual(model['load'], .2, delta=.02)
+
+    def test_each_profiles_idle_clock_carries_the_clock_term_across_profiles(self):
+        # Fitted on 85% power-saver minutes, the raw mean clock over-predicted balanced ones.
+        train, test = chip_minutes(1200, 5), chip_minutes(600, 6)
+        model = report.fit_rows(report.battery_rows(train))
+        self.assertGreater(model['idle_ghz:balanced'] - model['idle_ghz:low-power'], .4)
+        raw = {k: v for k, v in model.items() if not k.startswith('idle_ghz:')}  # One idle clock for all
+        self.assertGreater(chip_error(raw, test, 'balanced').mean(), 1.0)
+        self.assertLess(abs(chip_error(model, test, 'balanced').mean()), .25)
+        self.assertLess(abs(chip_error(model, test, 'low-power').mean()), .15)
+        # Unknown profile: the pooled idle clock, as before.
+        self.assertEqual(report.clock_of(dict(test[0], set={}), model), test[0]['ghz'])
+
+    def test_the_active_cores_clock_is_used_once_minutes_log_it(self):
+        train, test = chip_minutes(1200, 7, active=True), chip_minutes(600, 8, active=True)
+        without = [{k: v for k, v in m.items() if k != 'ghz_active'} for m in train]
+        mean_model, active_model = report.fit_rows(without), report.fit_rows(train)
+        self.assertNotIn('idle_ghz_active', mean_model)
+        self.assertEqual(active_model['active_rows'], 1200)
+        self.assertNotIn('idle_ghz_active', report.fit_rows(train[:100] + without[100:]))  # Too few yet
+        stripped = [dict(m, ghz_active=None) for m in test]
+        for profile in ('balanced', 'low-power'):
+            self.assertLess(np.abs(chip_error(active_model, test, profile)).mean(),
+                            0.7 * np.abs(chip_error(mean_model, stripped, profile)).mean())
+        self.assertAlmostEqual(active_model['clock_active'], .9, delta=.15)
+
+
+class AttributionTests(unittest.TestCase):
+    MODEL = dict(report.PRIOR, floor=2.5, load=.15, clock=3.0, idle_ghz=1.0, chip=1.4, bl=3.0,
+                 **{'idle_ghz:low-power': 1.0, 'idle_ghz:balanced': 1.5, 'idle_ghz:balanced:ac': 1.9})
+
+    def steady(self, mhz, status='Discharging', profile='balanced', active=None, bat=20.0):
+        records = []
+        for i in range(6):
+            r = record(T0 + 10 * (i + 1) - 5, bat=bat, soc=8.0, busy=3.0, mhz=mhz, status=status, bl=.5,
+                       apps={'Floorp': {'cpu': 12.0, 'gpu': 1.0}, 'yosys': {'cpu': 6.0}})
+            r['settings'] = {'platform_profile': profile}
+            r['net'] = {'wlan0': {'rx': 2e6, 'tx': 1e6}}
+            if active:
+                r['cpu']['mhz_active'] = active
+            records.append(r)
+        (m,), _ = store.aggregate(records)
+        if active:
+            m['ghz_active'] = active / 1000  # store layout 9 (the data agent's) keeps this per minute.
+        return records, m
+
+    def assert_agree(self, records, m, model):
+        per_record = collections.defaultdict(float)
+        for r in records:
+            for name, joules in power.attribute(r, model).items():
+                per_record[name] += joules / sum(r['dt'] for r in records)
+        parts = report.attribute(m, model)
+        for name, watts in parts['apps'].items():
+            self.assertAlmostEqual(per_record[name], watts, places=6, msg=name)
+        self.assertAlmostEqual(per_record['Processor baseline'], parts['groups']['Processor baseline'], places=6)
+        self.assertAlmostEqual(per_record.get('Display', 0), parts['groups'].get('Display', 0), places=6)
+        self.assertAlmostEqual(sum(per_record.values()), sum(parts['groups'].values()), places=6)
+        return parts
+
+    def test_the_collector_and_the_panel_split_a_steady_minute_alike(self):
+        model = dict(self.MODEL, **{'idle_ghz_active': 1.8, 'clock_active': 0.9})
+        for mhz, status, profile, active in ((2400, 'Discharging', 'balanced', None),
+                                             (2400, 'Charging', 'balanced', None),
+                                             (900, 'Discharging', 'low-power', None),
+                                             (2400, 'Discharging', None, None),
+                                             (2400, 'Discharging', 'balanced', 3100)):
+            with self.subTest(mhz=mhz, status=status, profile=profile, active=active):
+                self.assert_agree(*self.steady(mhz, status, profile, active), model)
+
+    def test_the_clock_above_the_profiles_idle_goes_to_apps_by_cpu_share(self):
+        records, m = self.steady(1500)  # Balanced idles at 1.5 GHz: all of it baseline.
+        parts = report.attribute(m, self.MODEL)
+        self.assertAlmostEqual(parts['groups']['Processor baseline'], 1.4 * (2.5 + 3.0 * 1.0))
+        low = report.attribute(dict(m, set={'profile': 'low-power'}), self.MODEL)  # 0.5 GHz above its idle
+        self.assertAlmostEqual(low['groups']['Processor baseline'], parts['groups']['Processor baseline'])
+        self.assertAlmostEqual(sum(low['apps'].values()), 1.4 * (8.0 - 5.5))  # The rest of the chip: apps'
+        self.assertGreater(low['apps']['yosys'], parts['apps']['yosys'])  # Its CPU share of the raised clock
+
+    def test_the_stack_never_exceeds_the_battery_draw(self):
+        _, m = self.steady(2400, bat=9.0)  # Less than k × chip (1.4 × 8 W)
+        parts = report.attribute(m, self.MODEL)
+        self.assertAlmostEqual(sum(parts['groups'].values()), 9.0)
+        self.assertEqual(parts['devices'], {})
+        (point,) = report.timeline([m], self.MODEL)
+        self.assertAlmostEqual(sum(point['groups'].values()), 9.0)
+
+
+
+def setting_minutes(blocks, seed, saves=None, names=('aspm', 'apst', 'wifi-ps', 'abm', 'refresh'), runs=4,
+                    sigma=1.0, pair=None):
+    """Combined runs randomizing `names` per 4-minute block (first minute washout), with
+    the W each setting's saving state saves (`saves`) and a run baseline each."""
+    rng, minutes, saves = np.random.default_rng(seed), [], saves or {}
+    for block in range(blocks):
+        run = f'auto-{block * runs // blocks}'
+        config = {n: bool(rng.integers(2)) for n in names}
+        bat = (15 + (block * runs // blocks) * 0.7 + rng.normal(0, sigma)
+               - sum(saves.get(n, 0) * on for n, on in config.items()))
+        if pair:
+            bat -= pair[1] * all(config[n] for n in pair[0])
+        for i, m in enumerate(block_minutes(T0 + 240 * block, config, block, run=run, bat=0)):
+            m['bat'] = bat + rng.normal(0, .3)
+            m['exp'][1], m['exp'][5] = '+'.join(names), None
+            m['set'] = dict(m['set'], abm=3 if config.get('abm') else 0)
+            minutes.append(m)
+    return minutes
+
+
+class SelectionTests(unittest.TestCase):
+    def test_without_any_effect_little_is_recommended_and_the_interval_mostly_holds_zero(self):
+        # Picking the lowest of 2^n point predictions reported ~2 W saved from nothing.
+        results = []
+        for seed in range(8):
+            levers = report.lever_effects(setting_minutes(160, seed), 50, 15, replicates=80)
+            levers['current'] = dict.fromkeys(levers['current'], False)
+            best = report.best_config(levers, set(report.SETTING))
+            results.append(best)
+            for name in best['changes']:
+                self.assertGreaterEqual(best['chance'][name], report.CONFIDENCE)
+        self.assertLess(np.mean([b['watts'] for b in results]), .4)
+        self.assertLessEqual(sum(b['watts_low'] > 0 for b in results), 2)
+
+    def test_settings_that_surely_save_are_chosen_and_one_that_costs_never(self):
+        saves = {'aspm': 2.0, 'apst': 0.0, 'wifi-ps': 1.0, 'abm': -1.0, 'refresh': 0.0}
+        levers = report.lever_effects(setting_minutes(240, 12, saves), 50, 15, replicates=80)
+        levers['current'] = dict.fromkeys(levers['current'], False)
+        best = report.best_config(levers, set(saves), 50, 15)
+        self.assertTrue(best['config']['aspm'] and best['config']['wifi-ps'])
+        self.assertFalse(best['config']['abm'])  # Its saving state costs
+        self.assertFalse(best['config']['apst'] or best['config']['refresh'])  # Nothing to gain
+        self.assertAlmostEqual(best['watts'], 3.0, delta=.6)
+        self.assertLess(best['watts_low'], best['watts'])
+        excluded = report.best_config(levers, set(saves), exclude=('aspm',))
+        self.assertNotIn('aspm', excluded['config'])
+        self.assertEqual(excluded['changes'], ['wifi-ps'])
+        # ABM on (yours) and costing: turning it off is the saving.
+        levers['current']['abm'] = True
+        self.assertIn('abm', report.best_config(levers, {'abm'})['changes'])
+        recs = report.recommendations(levers, report.qol_model([], []), 50, 15, exclude=('aspm', 'wifi-ps'))
+        self.assertEqual(recs['battery']['best']['changes'], ['abm'])
+
+    def test_only_prespecified_pairs_take_part_and_others_need_a_false_discovery_rate(self):
+        result = report.lever_effects(factorial_minutes(), energy=50, power=15, replicates=100)
+        for i in result['interactions']:
+            self.assertIn('p', i)
+            self.assertFalse(i['prespecified'])
+        clear = {frozenset(i['pair']) for i in result['interactions'] if i['clear']}
+        self.assertEqual(clear, {frozenset({'aspm', 'apst'})})  # The real one; boost's pairs are noise
+        terms, factor, _, _ = report.selection(result)
+        self.assertEqual(terms, ['aspm', 'apst', 'boost'])
+        self.assertTrue(all(0 < f <= 1 for f in factor))
+
+
+class PlanNoiseTests(unittest.TestCase):
+    def test_block_noise_is_after_each_runs_baseline_and_plan_uses_it(self):
+        minutes = setting_minutes(160, 2, {'aspm': 2.0}, runs=8, sigma=1.0)  # Runs 0.7 W apart
+        blocks = report.lever_blocks(minutes)
+        sigma = report.block_sigma(blocks)
+        self.assertAlmostEqual(sigma, 1.0, delta=.2)
+        x = np.array([[1.0, *(b[c] for c in report.COVARIATES)] for b in blocks])
+        y = np.array([b['bat'] for b in blocks])
+        alone = np.std(y - x @ np.linalg.lstsq(x, y, rcond=None)[0])  # The workload alone, as before
+        self.assertGreater(alone, 1.5 * sigma)
+        plan = report.plan(minutes, [], ['wifi-ps', 'refresh'], present=False, rng=np.random.default_rng(0))
+        self.assertAlmostEqual(plan['sigma'], sigma)  # The settings outside the plan (ASPM's 2 W) modelled too
+
+    def test_cpu_settings_are_planned_with_their_load_saving(self):
+        # Boost off saves through a lower clock, i.e. lower load: adjusting for
+        # load would see nothing to gain from it.
+        rng, minutes = np.random.default_rng(6), []
+        for block in range(50):
+            config = {'boost': bool(rng.integers(2)), 'apst': bool(rng.integers(2))}
+            load = max(.2, rng.normal(6, 1)) * (0.5 if config['boost'] else 1.0)
+            for m in block_minutes(T0 + 240 * block, config, block, bat=0):
+                m.update(load=load, bat=12 + .8 * load + rng.normal(0, .3))
+                minutes.append(m)
+        plans = [report.plan(minutes, [], ['boost', 'apst'], present=False, rng=np.random.default_rng(seed),
+                             group=report.block_group('auto-1', minutes[-1]['t'])) for seed in range(30)]
+        self.assertLess(sum(not p['choice']['boost'] for p in plans) / len(plans), .25)
+
+
+class BootTests(unittest.TestCase):
+    def boots(self, on, off, seed=5, effect=1.5):
+        rng, minutes, t = np.random.default_rng(seed), [], T0
+        for i, psr in enumerate([True] * on + [False] * off):
+            base, balanced = rng.normal(0, .5), (0.6 if psr else 0.1)  # PSR boots ran balanced more
+            for _ in range(60):
+                load, profile = rng.uniform(1, 20), 'balanced' if rng.random() < balanced else 'low-power'
+                minutes.append(minute(t, load=load, soc=5 + .2 * load, set={'psr': psr, 'profile': profile},
+                                      bat=9 + .3 * load + base + 2.0 * (profile == 'balanced') - effect * psr
+                                      + rng.normal(0, .5), boot=f'b{i}'))
+                t += 60
+        return minutes
+
+    def test_boot_effect_needs_five_boots_each_and_adjusts_for_the_profile(self):
+        progress = report.boot_effect(self.boots(4, 6), 48, 16)
+        self.assertNotIn('watts', progress)
+        self.assertEqual(progress['boots'], {'on': 4, 'off': 6})
+        effect = report.boot_effect(self.boots(6, 6), 48, 16)
+        self.assertIn('profile', effect['adjusted'])
+        self.assertAlmostEqual(effect['watts'], 1.5, delta=.5)  # Not 1.5 − 2 W × (0.6 − 0.1)
+        self.assertLess(effect['watts_low'], effect['watts'])
+        self.assertGreater(effect['minutes'], 0)
+
+    def test_boot_interval_covers_about_ninety_percent(self):
+        hits = sum(e['watts_low'] <= 1.5 <= e['watts_high']
+                   for e in (report.boot_effect(self.boots(5, 5, seed), 48, 16) for seed in range(40)))
+        self.assertGreaterEqual(hits, 32)  # 90% of 40 is 36; the old one held 69%
+
+
+class SleepTests(unittest.TestCase):
+    def gap(self, t1, hours, drop, **extra):
+        return {'event': 'gap', 't1': t1, 'gap_s': hours * 3600, **extra,
+                'bat_before': {'pct': 60, 'charge': 2_000_000, 'volts': 15.5, 'unit': 'uAh'},
+                'bat_after': {'pct': 58, 'charge': 2_000_000 - drop}}
+
+    def test_only_real_suspends_on_battery_count(self):
+        t = T0 + 100 * 3600
+        events = [self.gap(t, 2, 120_000),                                       # 0.93 W
+                  self.gap(t + 10 * 3600, 0.7, 350_000),                         # 7.8 W: awake
+                  self.gap(t + 20 * 3600, 2, 120_000, suspended_s=2 * 3600 - 60),  # Suspended throughout
+                  self.gap(t + 30 * 3600, 2, 120_000, suspended_s=1800),          # Mostly awake
+                  self.gap(t + 40 * 3600, 2, 120_000)]                            # Plugged in after
+        self.assertEqual(len(report.sleep_drain(events)), 3)
+        around = lambda t1, hours, st: [minute(store.minute_of(t1 - hours * 3600) - 60, st='D'),
+                                        minute(store.minute_of(t1), st=st)]
+        minutes = sorted(around(t, 2, 'D') + around(t + 20 * 3600, 2, 'D') + around(t + 40 * 3600, 2, 'C'),
+                         key=lambda m: m['t'])
+        self.assertEqual([s['end'] for s in report.sleep_drain(events, minutes)], [t, t + 20 * 3600])
+
+    def test_one_odd_suspend_moves_the_sleep_model_little(self):
+        sleeps = [{'watts': w, 'hours': h} for w, h in ((0.9, 3), (1.0, 1), (1.1, 2), (0.95, 8), (1.05, 0.5))]
+        centre, spread, _ = report.sleep_model(sleeps)
+        odd = report.sleep_model(sleeps + [{'watts': 2.9, 'hours': 6}])
+        self.assertAlmostEqual(math.exp(odd[0]), math.exp(centre), delta=.06)
+        self.assertLess(odd[1], 2 * spread)
+        wide = report.sleep_model([dict(s, watts=s['watts'] ** 3) for s in sleeps])  # Three times the spread
+        self.assertGreater(wide[1], 2 * spread)
+
+
+class CleanPartsTests(unittest.TestCase):
+    def test_blocks_keep_their_clean_records_when_the_minute_has_washout(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            db = Path(tmp) / 'power.sqlite3'
+            writer, records = store.Writer(db), []
+            for block in range(4):  # Blocks start 30 s into a minute: its first records are washout.
+                start = T0 + 240 * block + 30
+                exp = {'run': 'r', 'name': 'aspm', 'block': block, 'arm': 'AB'[block % 2],
+                       'value': ('performance', 'powersupersave')[block % 2]}
+                for i in range(24):
+                    records.append(record(start + 10 * (i + 1), bat=16 - 2 * (block % 2),
+                                          exp=dict(exp, washout=i < 3)))
+            for r in records:
+                writer.write(r)
+            writer.close()
+            minutes, _ = report.load_range(T0 - 60, T0 + 1200, db)
+            plain, _ = report.load_range(T0 - 60, T0 + 1200, db, apps=False)
+        self.assertNotIn('apps', plain[0])
+        (second,) = [m for m in minutes if m['t'] == T0 + 60]  # 1 washout record, 5 clean
+        self.assertTrue(second['exp'][4])
+        self.assertEqual([part['dt'] for part in second['clean']], [50])
+        blocks = report.experiment_blocks(minutes)
+        self.assertEqual({round(b['seconds']) for b in blocks.values()}, {210})  # 21 clean records each, not 180
+        self.assertEqual({b['watts'] for b in blocks.values()}, {16, 14})
+
+    def test_a_store_without_the_apps_switch_still_loads(self):
+        def old_load_range(start, end, db):
+            return [minute(T0)], []
+        with mock.patch.object(store, 'load_range', old_load_range):
+            minutes, _ = report.load_range(0, 1, '/nonexistent.sqlite3', apps=False)
+        self.assertEqual(len(minutes), 1)
+
+
+class SmallerFixesTests(unittest.TestCase):
+    def test_a_setting_is_measured_with_what_it_does_to_the_disk(self):
+        # ASPM saves 2 W but its slower link keeps the disk busier, which costs 1 W.
+        rng, minutes = np.random.default_rng(9), []
+        for block in range(160):
+            config = {'aspm': bool(rng.integers(2)), 'wifi-ps': bool(rng.integers(2))}
+            disk = 0.1 + 0.5 * config['aspm'] + rng.uniform(0, .05)
+            bat = 15 - 2.0 * config['aspm'] + 2.0 * disk + rng.normal(0, .5)
+            for m in block_minutes(T0 + 240 * block, config, block, bat=0):
+                m.update(disk=disk, bat=bat + rng.normal(0, .2))
+                minutes.append(m)
+        result = report.lever_effects(minutes, 50, 15, replicates=60)
+        result['current'] = dict.fromkeys(result['current'], False)
+        (aspm,) = [e for e in result['effects'] if e['experiment'] == 'aspm']
+        self.assertAlmostEqual(aspm['watts'], 1.0, delta=.3)
+
+    def test_few_pairs_get_a_t_interval(self):
+        minutes = []
+        for block, watts in enumerate((16, 14.5, 16, 13.5, 16, 14.0)):
+            arm = 'AB'[block % 2]
+            minutes += [{'t': T0 + block * 1000 + i * 60, 'dt': 60, 'st': 'D', 'bat': watts,
+                         'exp': ['r', 'freeze-apps', block, arm, False, ('running', 'frozen')[block % 2]]}
+                        for i in range(3)]
+        (effect,) = report.experiment_effects(minutes, 48, 16)
+        deltas = np.array([1.5, 2.5, 2.0])
+        half = 2.920 * deltas.std(ddof=1) / math.sqrt(3)  # Student's t with 2 degrees of freedom, 95% one-sided
+        self.assertAlmostEqual(effect['watts_low'], 2.0 - half, places=3)
+        self.assertAlmostEqual(effect['watts_high'], 2.0 + half, places=3)
+
+    def test_runtime_comes_from_the_energy_above_the_cutoff(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            battery = Path(tmp) / 'class/power_supply/BAT1'
+            battery.mkdir(parents=True)
+            (battery / 'energy_full').write_text('55000000\n')
+            self.assertAlmostEqual(report.full_energy([], Path(tmp)), 55.0)
+            self.assertAlmostEqual(report.full_energy([], Path(tmp), reserve_wh=3.3), 51.7)
+
+    def test_each_vote_counts_once_in_its_own_window(self):
+        # A block in the middle of a 4-minute window, between minutes outside experiments.
+        minutes = [dict(m, qol=0) for m in block_minutes(T0 + 120, {'aspm': True, 'apst': False}, 1)]
+        minutes = ([minute(T0 + 60 * i, qol=0, present=1.0, set={}) for i in range(2)] + minutes
+                   + [minute(T0 + 360 + 60 * i, qol=0, present=1.0, set={}) for i in range(2)])
+        events = [{'event': 'qol', 't1': T0 + 200, 'vote': 'down'}]
+        windows = report.qol_windows(minutes, events)
+        self.assertEqual(sum(w[1]['down'] for w in windows), 1)
+        (voted,) = [w for w in windows if w[1]['down']]
+        self.assertTrue(voted[2] and voted[0]['aspm'])  # In the experiment block's window
+        model = report.qol_model(minutes, events)['down']
+        self.assertIn('experiment', model)
+        self.assertLess(report.qol_risk({'down': model}, {}, experiment=False),
+                        report.qol_risk({'down': model}, {}, experiment=True) + 1e-9)
 
 
 if __name__ == '__main__':

@@ -635,26 +635,46 @@ def process_io(proc, keys):
 # Chip W = floor + clock·GHz + load·busy·GHz² + gpu + video: the mean core clock
 # costs ~3 W per GHz even with the cores idle (the whole package's voltage
 # follows it), which busy·GHz² alone missed. `idle_ghz` is where the clock sits
-# with nothing to do (report.fit learns it): the clock up to it is baseline,
-# above it apps drove it up.
-PRIOR = {'floor': 3.0, 'load': 0.12, 'clock': 3.0, 'idle_ghz': 1.0, 'gpu': 5.0, 'video': 1.0,
+# with nothing to do (report.fit_rows learns it, and each profile's: see
+# clock_split): the clock up to it is baseline, above it apps drove it up.
+# 'clock_active' is the W per GHz of the active cores' clock, used instead once
+# minutes log it (see clock_split).
+PRIOR = {'floor': 3.0, 'load': 0.12, 'clock': 3.0, 'idle_ghz': 1.0, 'gpu': 5.0, 'video': 1.0, 'clock_active': 1.0,
          'base': 0.5, 'chip': 1.3, 'bl': 3.0, 'wifi': 0.3, 'disk': 2.0, 'usb': 0.3, 'audio': 0.5, 'kbd': 0.3}
 
 
 def load_attribution(path):
-    """Trained attribution parameters from battery-eta's models.json, or None."""
+    """Trained attribution parameters from battery-eta's models.json, or None:
+    PRIOR's keys and the idle clocks report.fit_rows learned (each profile's
+    'idle_ghz:<profile>[:ac]', and 'idle_ghz_active')."""
     try:
         data = json.loads(Path(path).read_text())
-        return {**PRIOR, **{k: float(v) for k, v in data['attribution'].items() if k in PRIOR}}
+        return {**PRIOR, **{k: float(v) for k, v in data['attribution'].items()
+                            if k in PRIOR or k.startswith('idle_ghz')}}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
 
 
-def clock_split(params, ghz):
-    """Chip watts of the clock term: (baseline part, part above the idle clock)."""
+def clock_split(params, ghz, profile=None, ac=False, active=None):
+    """Chip watts of the clock term: (baseline part, part above the idle clock).
+
+    Idle cores report a placeholder clock set by the platform profile (and AC),
+    so the mean clock `ghz` is measured from the profile's own idle clock
+    ('idle_ghz:<profile>:ac' on AC, then 'idle_ghz:<profile>', then the pooled
+    'idle_ghz'; report.fit_rows learns them): baseline up to it, apps above it.
+    The model's clock is on the pooled idle clock's scale (report.clock_of).
+    Once the model has an active-core clock ('idle_ghz_active') and the minute
+    or record has one (`active`, GHz: no placeholders in it), that is used
+    instead: the pooled baseline, plus 'clock_active' W per GHz from its idle."""
+    pooled = params['idle_ghz']
+    if active is not None and 'idle_ghz_active' in params:
+        excess = params['clock_active'] * (active - params['idle_ghz_active'])
+        return max(0.0, params['clock'] * pooled + min(0.0, excess)), max(0.0, excess)
     if ghz is None:
-        return params['clock'] * params['idle_ghz'], 0.0
-    return params['clock'] * min(ghz, params['idle_ghz']), params['clock'] * max(0.0, ghz - params['idle_ghz'])
+        return params['clock'] * pooled, 0.0
+    idle = params.get(f'idle_ghz:{profile}', pooled)
+    idle = params.get(f'idle_ghz:{profile}:ac', idle) if ac else idle
+    return params['clock'] * max(0.0, pooled + min(0.0, ghz - idle)), params['clock'] * max(0.0, ghz - idle)
 
 
 def platform_features(record):
@@ -679,8 +699,9 @@ def attribute(record, params):
     On battery each chip watt is scaled by the model's per-chip-watt cost (k),
     so apps carry their share of conversion losses; on AC only chip power is
     known. `params` are battery-eta's trained values (see PRIOR). The clock
-    term up to the idle clock is processor baseline; above it, apps share it by
-    CPU time (theirs is what raised the clock).
+    term up to the profile's idle clock (clock_split) is processor baseline;
+    above it, apps share it by CPU time (theirs is what raised the clock).
+    report.attribute splits a minute the same way, by load.
     """
     dt, rows = record['dt'], collections.defaultdict(float)
     soc = record.get('soc', {}).get('w')
@@ -688,10 +709,13 @@ def attribute(record, params):
         return rows
     on_battery = discharging(record)
     scale = params['chip'] if on_battery else 1.0
-    mhz = record.get('cpu', {}).get('mhz')
+    if on_battery and soc > 0:
+        scale = max(0.0, min(scale, record['bat']['w'] / soc))  # Never more than the battery delivered.
+    mhz, active = record.get('cpu', {}).get('mhz'), record.get('cpu', {}).get('mhz_active')
     ghz = mhz / 1000 if mhz else None
     ghz2 = ghz * ghz if ghz else 0
-    idle, raised = clock_split(params, ghz)
+    idle, raised = clock_split(params, ghz, (record.get('settings') or {}).get('platform_profile'), not on_battery,
+                               active / 1000 if active else None)
     apps = record.get('apps', {})
     cpu = {name: app.get('cpu', 0) for name, app in apps.items()}
     cpu['Kernel'] = cpu.get('Kernel', 0) + max(0, record.get('cpu', {}).get('busy_s', 0) - sum(cpu.values()))

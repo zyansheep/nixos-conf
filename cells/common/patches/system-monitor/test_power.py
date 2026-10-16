@@ -13,8 +13,9 @@ from unittest import mock
 import power
 import store
 from power import (PRIOR, Deltas, FastSampler, GpuClients, IdleStates, Monitor, PowerLog, attribute, battery_watts,
-                   clock_means, clocks, cpu_frequency, device_deltas, experiment_assignment, idle_deltas, interrupts,
-                   load_attribution, log_footer, network, own_cpu, parse_fdinfo, settings, subtract, summarize, TICKS)
+                   clock_means, clock_split, clocks, cpu_frequency, device_deltas, experiment_assignment, idle_deltas,
+                   interrupts, load_attribution, log_footer, network, own_cpu, parse_fdinfo, settings, subtract,
+                   summarize, TICKS)
 
 
 def put(path, text):
@@ -115,6 +116,41 @@ class PowerTests(unittest.TestCase):
             params = load_attribution(path)
             self.assertEqual((params['chip'], params['floor'], params['bl']), (1.4, 5.0, PRIOR['bl']))
             self.assertNotIn('junk', params)
+            idle = {'idle_ghz:balanced': 1.5, 'idle_ghz:balanced:ac': 1.9, 'idle_ghz_active': 1.8, 'own:aspm': 0.0}
+            path.write_text(json.dumps({'version': 3, 'attribution': {'chip': 1.4, **idle}}))
+            params = load_attribution(path)
+            self.assertEqual({k: params.get(k) for k in idle}, dict(idle, **{'own:aspm': None}))  # The clocks only
+
+    def test_the_clock_is_measured_from_the_profiles_idle_clock(self):
+        params = dict(PRIOR, clock=3.0, idle_ghz=1.0, **{'idle_ghz:balanced': 1.5, 'idle_ghz:balanced:ac': 1.9})
+        split = lambda *args, **kwargs: tuple(round(w, 9) for w in clock_split(*args, **kwargs))
+        self.assertEqual(split(params, 2.0), (3.0, 3.0))                   # Pooled: 1 GHz idle
+        self.assertEqual(split(params, 2.0, 'balanced'), (3.0, 1.5))       # Balanced idles at 1.5 GHz
+        self.assertEqual(split(params, 2.0, 'balanced', ac=True), (3.0, 0.3))
+        self.assertEqual(split(params, 1.2, 'balanced'), (2.1, 0.0))      # Below its idle: less baseline
+        self.assertEqual(split(params, 2.0, 'performance'), (3.0, 3.0))    # Unknown profile: pooled
+        self.assertEqual(split(params, 2.0, 'balanced', active=3.0), (3.0, 1.5))  # No active model yet
+        active = dict(params, idle_ghz_active=2.0, clock_active=0.5)
+        self.assertEqual(split(active, 2.0, 'balanced', active=3.0), (3.0, 0.5))
+        self.assertEqual(split(active, 2.0, 'balanced', active=1.0), (2.5, 0.0))
+        self.assertEqual(split(active, 2.0, 'balanced'), (3.0, 1.5))       # A record without it
+
+    def test_attribution_uses_the_records_profile_and_active_clock(self):
+        params = dict(PRIOR, **{'idle_ghz:balanced': 1.5, 'idle_ghz_active': 2.0})
+        record = {'dt': 10, 'status': 'Discharging', 'bat': {'w': 20.0}, 'soc': {'w': 10.0},
+                  'cpu': {'busy_s': 10.0, 'mhz': 1200}, 'apps': {'Browser': {'cpu': 10.0}},
+                  'settings': {'platform_profile': 'balanced'}}
+        # 1.2 GHz is below balanced's idle clock: 0.3 GHz less baseline, 1.3 × (3 W + 3 W/GHz × 0.7 GHz) × 10 s.
+        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 66.3)
+        record['settings']['platform_profile'] = None  # Unknown: the pooled idle clock, 1 GHz
+        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 78.0)
+        record['settings']['platform_profile'] = 'balanced'
+        record['cpu']['mhz_active'] = 2500  # The active clock instead: above its idle, so the baseline is whole
+        rows = attribute(record, params)
+        self.assertAlmostEqual(rows['Processor baseline'], 78.0)
+        self.assertAlmostEqual(sum(rows.values()), 200.0)
+        record['bat']['w'] = 9.0  # Less than the chip at its cost per watt: the parts still add up to it.
+        self.assertAlmostEqual(sum(attribute(record, params).values()), 90.0)
 
     def test_attribution_splits_chip_by_activity_and_platform_by_model(self):
         params = dict(PRIOR)   # floor 3 W + 3 W/GHz (to the 1 GHz idle clock), 0.12 W/(core·GHz²), ×1.3 per chip watt
