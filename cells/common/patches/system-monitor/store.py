@@ -15,12 +15,16 @@ plain Python).
     minutes      per-minute aggregates the models train on, recomputed from
                  `records` whenever one lands (apps/settings/exp as JSON)
     imports      archive days the database already has: read in, or written live
+    meta         `stale_before`: minutes before it await a recompute after a
+                 migration changed Minute (the collector works through them a
+                 day at a time; minutes_ready() says when they are done)
 
 The JSONL log (`power/DAY.jsonl[.zst]`) is still written alongside as a raw
 archive: it alone has idle apps' process counts and memory, per-interrupt and
 per-interface detail and display layouts. On startup the collector imports any
-archive day the database has never seen (the first run, or after deleting it);
-`waybar-monitor import` re-reads every day, keeping what is already stored.
+archive day the database has never seen (the first run, or after deleting it)
+or holds fewer records of than the archive (a write failed); `waybar-monitor
+import` re-reads every day, keeping what is already stored.
 
     sqlite3 ~/.local/state/waybar-monitor/power.sqlite3 "select avg(bat_w) from records where status = 'Discharging'"
     duckdb -c "select * from sqlite_scan('~/.local/state/waybar-monitor/power.sqlite3', 'records')"
@@ -43,9 +47,12 @@ except ImportError:  # Python < 3.14
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 8  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
-NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio', 'ghz')
+VERSION = 9  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio', 'ghz',
+           'ghz_active')
+BY_STATUS = ('bat', 'soc')  # Averaged over the minute's majority status only (signed watts don't mix).
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
+CHUNK = 86400  # Seconds of stale minutes recomputed per transaction after a migration.
 
 
 # --- Raw log record → columns ------------------------------------------------------------
@@ -181,6 +188,14 @@ COLUMNS = (
     # Quality-of-life votes in the record (qol.py): −1 a 👎, +1 a 👍, 0 none
     # (schema 2 logged a 0–3 level instead, which nothing reads)
     ('qol', 'INTEGER', lambda r: r.get('qol') if (r.get('v') or 0) >= 3 else None),
+    # The clock of the CPUs that were doing something: amd-pstate reports an idle
+    # CPU at exactly scaling_min_freq, a placeholder, so `mhz` mixes in the floor.
+    # mhz_active: time-weighted mean MHz over CPUs reading above their minimum (not
+    # the collector's own); active_n: the mean count of such CPUs; min_mhz: cpu0's
+    # scaling_min_freq, that placeholder (it follows the platform profile)
+    ('mhz_active', 'REAL', lambda r: part(r, 'cpu').get('mhz_active')),
+    ('active_n', 'REAL', lambda r: part(r, 'cpu').get('active_n')),
+    ('min_mhz', 'REAL', lambda r: part(r, 'settings').get('min_mhz')),
 )
 NAMES = [name for name, _, _ in COLUMNS]
 APP_FIELDS = (('cpu_s', 'cpu'), ('gpu_s', 'gpu'), ('video_s', 'video'), ('io_read', 'io_r'), ('io_write', 'io_w'))
@@ -224,9 +239,12 @@ def day_of(t1):
 
 
 class Minute:
-    """dt-weighted means over one minute's records (as `records` rows)."""
+    """dt-weighted means over one minute's records (as `records` rows). `st` is
+    the status most of the minute had and `purity` that share of it; `bat` and
+    `soc` average only the records in that status."""
 
     def __init__(self, t):
+        # sums and weights by key, or by (status, key) for BY_STATUS keys.
         self.t, self.dt, self.sums, self.weights = t, 0.0, collections.defaultdict(float), collections.defaultdict(float)
         self.status, self.apps, self.last, self.exp, self.settings = collections.Counter(), {}, {}, None, {}
         self.boot, self.qol, self.present = None, None, 0.0
@@ -237,8 +255,9 @@ class Minute:
         if dt <= 0:
             return
         self.dt += dt
-        self.status[STATUS.get(row['status'], 'U')] += dt
-        mhz = row['mhz']
+        status = STATUS.get(row['status'], 'U')
+        self.status[status] += dt
+        mhz, active = row['mhz'], row.get('mhz_active')
         ghz2 = (mhz / 1000) ** 2 if mhz else None
         busy = (row['busy_s'] or 0) / dt
         values = {
@@ -248,11 +267,13 @@ class Minute:
             'disk': min(1.0, (row['disk_busy'] or 0) / dt), 'usb': row['usb'] or 0,
             'audio': min(1, (row['audio_play'] or 0) + (row['audio_rec'] or 0)),
             'ghz': mhz / 1000 if mhz else None,  # Mean core clock, busy or not: the chip model's clock term.
+            'ghz_active': active / 1000 if active else None,  # Mean clock of the CPUs above their idle floor.
         }
         for key, value in values.items():
             if value is not None:
-                self.sums[key] += value * dt
-                self.weights[key] += dt
+                slot = (status, key) if key in BY_STATUS else key
+                self.sums[slot] += value * dt
+                self.weights[slot] += dt
         for name, cpu, gpu, video, *_ in apps:
             if not (cpu or gpu or video):
                 continue
@@ -281,10 +302,12 @@ class Minute:
             self.exp = [*exp, row['exp_arm'], washout, value]
 
     def row(self):
-        row = {'t': self.t, 'dt': round(self.dt, 2), 'st': self.status.most_common(1)[0][0]}
+        status = self.status.most_common(1)[0][0]
+        row = {'t': self.t, 'dt': round(self.dt, 2), 'st': status}
         for key in NUMERIC:
-            if self.weights.get(key):
-                row[key] = round(self.sums[key] / self.weights[key], 4)
+            slot = (status, key) if key in BY_STATUS else key
+            if self.weights.get(slot):
+                row[key] = round(self.sums[slot] / self.weights[slot], 4)
         if self.apps:
             row['apps'] = {name: [round(v / self.dt, 4) for v in values] for name, values in self.apps.items()}
         row.update(self.last)
@@ -294,6 +317,7 @@ class Minute:
         if self.qol is not None:
             row['qol'] = self.qol
         row['present'] = round(self.present / self.dt, 2)
+        row['purity'] = round(self.status[status] / self.dt, 4)  # Share of the minute in its status `st`.
         if self.exp is not None:
             row['exp'] = self.exp
         return row
@@ -314,12 +338,13 @@ def aggregate(records):
 
 # --- Database --------------------------------------------------------------------------------
 
-MINUTE_COLUMNS = ('t', 'dt', 'st', 'boot', *NUMERIC, 'pct', 'charge', 'volts', 'unit', 'qol', 'present')
+MINUTE_COLUMNS = ('t', 'dt', 'st', 'boot', *NUMERIC, 'pct', 'charge', 'volts', 'unit', 'qol', 'present', 'purity')
 MINUTE_TYPES = {'t': 'REAL PRIMARY KEY', 'st': 'TEXT', 'boot': 'TEXT', 'unit': 'TEXT'}  # The rest REAL.
 APP_TYPES = {'io_read': 'INTEGER', 'io_write': 'INTEGER'}  # The rest REAL.
 RECORD_SQL = ', '.join(f'{name} {kind}' for name, kind, _ in COLUMNS)
 APP_SQL = ', '.join(f"{column} {APP_TYPES.get(column, 'REAL')}" for column, _ in APP_FIELDS)
 MINUTE_SQL = ', '.join(f"{column} {MINUTE_TYPES.get(column, 'REAL')}" for column in MINUTE_COLUMNS)
+META_SQL = 'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value)'
 SCHEMA = [
     f'CREATE TABLE records (id INTEGER PRIMARY KEY, {RECORD_SQL})',
     'CREATE TABLE app_names (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE)',
@@ -331,12 +356,11 @@ SCHEMA = [
     # A minute row is ~1.5 KB (mostly `apps`): a rowid table packs that far
     # better than WITHOUT ROWID would.
     f'CREATE TABLE minutes ({MINUTE_SQL}, apps TEXT, settings TEXT, exp TEXT)',
-    'CREATE TABLE imports (day TEXT PRIMARY KEY, at REAL NOT NULL)',
+    # records: how many records the archive day held when it was last read in
+    # (NULL: written live), so a day is re-read only when the archive has grown.
+    'CREATE TABLE imports (day TEXT PRIMARY KEY, at REAL NOT NULL, records INTEGER)',
+    META_SQL,
 ]
-
-
-def recompute_minutes(conn):
-    refresh_minutes(conn, -1e18, 1e18)
 
 
 def add_column(conn, table, column, kind):
@@ -344,9 +368,14 @@ def add_column(conn, table, column, kind):
         conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {kind}')
 
 
+def add_qol(conn):
+    add_column(conn, 'records', 'qol', 'INTEGER')
+    add_column(conn, 'minutes', 'qol', 'REAL')
+    add_column(conn, 'minutes', 'present', 'REAL')
+
+
 def votes_only(conn):
     conn.execute('UPDATE records SET qol = NULL WHERE v IS NULL OR v < 3')
-    recompute_minutes(conn)
 
 
 def add_levers(conn):
@@ -360,31 +389,39 @@ def add_throttle(conn):
 
 def add_clock(conn):
     add_column(conn, 'minutes', 'ghz', 'REAL')
-    recompute_minutes(conn)
 
 
-def add_qol(conn):
-    add_column(conn, 'records', 'qol', 'INTEGER')
-    add_column(conn, 'minutes', 'qol', 'REAL')
-    add_column(conn, 'minutes', 'present', 'REAL')
-    recompute_minutes(conn)
+def add_active_clock(conn):
+    for column in ('mhz_active', 'active_n', 'min_mhz'):
+        add_column(conn, 'records', column, 'REAL')
+    add_column(conn, 'minutes', 'ghz_active', 'REAL')
+    add_column(conn, 'minutes', 'purity', 'REAL')
+    add_column(conn, 'imports', 'records', 'INTEGER')
+    conn.execute(META_SQL)
 
 
-# MIGRATIONS[n] takes layout n to n + 1. Minutes are derived, so a change to
-# Minute is a migration that recomputes them.
+# MIGRATIONS[n] takes layout n to n + 1: (schema change or None, whether Minute
+# changed). Schema changes run at once, in connect(). Minutes are derived, so a
+# Minute change only marks them stale, once, after the whole chain (against the
+# final layout); the collector then recomputes them a day per transaction
+# (Writer.catch_up) while it samples.
 MIGRATIONS = {
-    1: recompute_minutes,  # Minute settings gained NVMe APST.
-    2: add_qol,  # Records and minutes gained quality of life; minutes the share of time someone was there.
-    3: votes_only,  # Quality of life became 👍/👎 votes; drop the 0–3 levels schema 2 logged.
-    4: recompute_minutes,  # Minute settings gained the CPU frequency cap (boost as it really is).
-    5: add_levers,  # Records gained the CPU's own maximum (boost under a cap) and the amdgpu DPM level.
-    6: add_throttle,  # Records gained whether app-throttle ran.
-    7: add_clock,  # Minutes gained the mean core clock (chip power rises with it even when idle).
+    1: (None, True),  # Minute settings gained NVMe APST.
+    2: (add_qol, True),  # Records and minutes gained quality of life; minutes the share of time someone was there.
+    3: (votes_only, True),  # Quality of life became 👍/👎 votes; drop the 0–3 levels schema 2 logged.
+    4: (None, True),  # Minute settings gained the CPU frequency cap (boost as it really is).
+    5: (add_levers, False),  # Records gained the CPU's own maximum (boost under a cap) and the amdgpu DPM level.
+    6: (add_throttle, False),  # Records gained whether app-throttle ran.
+    7: (add_clock, True),  # Minutes gained the mean core clock (chip power rises with it even when idle).
+    # Records gained the active-CPU clock (mhz_active, active_n) and the idle floor
+    # (min_mhz); minutes ghz_active, `purity`, and bat/soc of the majority status
+    # only; imports the archive's record count; and the meta table.
+    8: (add_active_clock, True),
 }
 
 
 def connect(db=DB):
-    """A read-write connection, creating the database on first use."""
+    """A read-write connection, creating or migrating the database on first use."""
     db = Path(db)
     db.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db, timeout=60, isolation_level=None)
@@ -401,9 +438,15 @@ def connect(db=DB):
                 if version == 0:
                     for statement in SCHEMA:
                         conn.execute(statement)
-                else:
+                elif version < VERSION:
+                    stale = False
                     for step in range(version, VERSION):
-                        MIGRATIONS[step](conn)
+                        change, minutes = MIGRATIONS[step]
+                        if change is not None:
+                            change(conn)
+                        stale |= minutes
+                    if stale:
+                        mark_stale(conn)
                 conn.execute(f'PRAGMA user_version = {VERSION}')
     except BaseException:
         conn.close()
@@ -420,6 +463,60 @@ def transaction(conn):
         conn.execute('ROLLBACK')
         raise
     conn.execute('COMMIT')
+
+
+# --- Deferred minute recomputes ----------------------------------------------------------------
+# A migration that changes Minute sets meta `stale_before` past the newest minute:
+# every minute before it was computed by an older Minute. recompute_step() then
+# recomputes the newest CHUNK below it and moves it down, one transaction each,
+# until nothing older is left and the key goes. A live write recomputes its own
+# minute meanwhile. Both read `records` and replace minutes inside one write
+# transaction, so whichever runs last leaves the same, current rows: they cannot
+# undo each other (nor can `waybar-monitor import` in another process).
+
+def mark_stale(conn):
+    conn.execute(META_SQL)
+    top = conn.execute('SELECT max(x) FROM (SELECT max(t1) AS x FROM records UNION ALL '
+                       'SELECT max(t) FROM minutes)').fetchone()[0]
+    if top is not None:
+        conn.execute("INSERT OR REPLACE INTO meta VALUES ('stale_before', ?)", (minute_of(top) + 60,))
+
+
+def recompute_step(conn, span=CHUNK):
+    """Recompute the newest `span` seconds of stale minutes in one transaction.
+    Returns whether stale minutes remain."""
+    with transaction(conn):
+        found = conn.execute("SELECT value FROM meta WHERE key = 'stale_before'").fetchone()
+        if found is None:
+            return False
+        start = found[0] - span
+        refresh_minutes(conn, start, found[0])
+        below = conn.execute('SELECT max(x) FROM (SELECT max(t1) AS x FROM records WHERE t1 < ? UNION ALL '
+                             'SELECT max(t) FROM minutes WHERE t < ?)', (start, start)).fetchone()[0]
+        if below is None:
+            conn.execute("DELETE FROM meta WHERE key = 'stale_before'")
+            return False
+        conn.execute("UPDATE meta SET value = ? WHERE key = 'stale_before'", (minute_of(below) + 60,))
+        return True
+
+
+def minutes_ready(db=DB):
+    """Whether every minute is current: the database has this build's layout (or
+    newer) and no recompute is pending. Read-only and cheap. False while the
+    collector is still working through a migration's recompute (older minutes
+    then lack new columns or hold old values), and when there is no database."""
+    try:
+        conn = sqlite3.connect(Path(db).absolute().as_uri() + '?mode=ro', uri=True, timeout=30)
+    except sqlite3.OperationalError:
+        return False
+    try:
+        if conn.execute('PRAGMA user_version').fetchone()[0] < VERSION:
+            return False
+        return conn.execute("SELECT 1 FROM meta WHERE key = 'stale_before'").fetchone() is None
+    except sqlite3.Error:
+        return False
+    finally:
+        conn.close()
 
 
 def compact(value):
@@ -442,13 +539,15 @@ def app_id(conn, ids, name):
 
 def insert(conn, records, ids):
     """Store raw log records (inside a transaction) and refresh their minutes.
-    Records and events already stored are left alone."""
-    touched = []
+    Records and events already stored are left alone. Returns how many records
+    `records` held (stored now or before)."""
+    touched, count = [], 0
     for record in records:
         if 'event' in record:
             conn.execute(INSERT_EVENT, (record.get('event'), record.get('t1', 0), record.get('t0'),
                                         record.get('boot'), record.get('gap_s'), compact(record)))
         elif is_record(record):
+            count += 1
             row = record_row(record)
             cursor = conn.execute(INSERT_RECORD, [row[name] for name in NAMES])
             if cursor.rowcount:
@@ -457,6 +556,7 @@ def insert(conn, records, ids):
                 touched.append(minute_of(record['t1']))
     if touched:
         refresh_minutes(conn, min(touched), max(touched) + 60)
+    return count
 
 
 def refresh_minutes(conn, start, end):
@@ -469,7 +569,7 @@ def refresh_minutes(conn, start, end):
         apps[record].append((name, *values))
     minutes = {}
     for row in conn.execute('SELECT * FROM records WHERE t1 >= ? AND t1 < ? ORDER BY t1', (start, end)):
-        row = dict(row)  # A migration can recompute minutes before a later one adds a column.
+        row = dict(row)
         t = minute_of(row['t1'])
         minutes.setdefault(t, Minute(t)).add(row, apps.get(row['id'], ()))
     conn.execute('DELETE FROM minutes WHERE t >= ? AND t < ?', (start, end))
@@ -486,7 +586,7 @@ def minute_from(row):
     """Back to the dict Minute.row() made (absent values stay absent)."""
     keys = row.keys()  # A reader can meet an older layout until the collector migrates it.
     m = {name: row[name] for name in MINUTE_COLUMNS if name in keys and row[name] is not None}
-    if row['apps'] is not None:
+    if 'apps' in keys and row['apps'] is not None:
         m['apps'] = json.loads(row['apps'])
     m['set'] = json.loads(row['settings']) if row['settings'] is not None else {}
     if row['exp'] is not None:
@@ -494,27 +594,65 @@ def minute_from(row):
     return m
 
 
+def complain(where, error):
+    print(f'waybar-monitor: {where}: {type(error).__name__}: {error}', file=sys.stderr)
+
+
 class Writer:
-    """The collector's side: one small transaction per record, every 10 s. A
-    database error is reported and retried on the next record; it never stops
-    the JSONL archive."""
+    """The collector's side: one small transaction per record, every 10 s. Any
+    error is reported and retried on the next record; it never stops the JSONL
+    archive. A day whose write failed is re-read from the archive once writes
+    work again (catch_up), as is, on a later start, any day the archive holds more
+    records of (import_logs)."""
 
     def __init__(self, db=DB):
         self.db, self.conn, self.ids = Path(db), None, {}
+        self.missed = set()  # Days with a record or event the database didn't take.
+        self.stale = True  # Minutes may await a recompute (asked once per connection).
 
     def write(self, record):
+        """Store one record or event; whether it worked."""
         try:
             if self.conn is None:
-                self.conn, self.ids = connect(self.db), {}
+                self.conn, self.ids, self.stale = connect(self.db), {}, True
             with transaction(self.conn):
                 insert(self.conn, [record], self.ids)
                 # From now on this day is written live, so a restart needn't read
-                # its archive file back in.
+                # its archive file back in (unless the archive has more of it).
                 if 't1' in record:
-                    self.conn.execute('INSERT OR IGNORE INTO imports VALUES (?, ?)', (day_of(record['t1']), time.time()))
-        except sqlite3.Error as error:
-            print(f'waybar-monitor: {self.db}: {error}', file=sys.stderr)
+                    self.conn.execute('INSERT OR IGNORE INTO imports (day, at) VALUES (?, ?)',
+                                      (day_of(record['t1']), time.time()))
+            return True
+        except Exception as error:
+            complain(self.db, error)
+            if isinstance(record.get('t1'), (int, float)):
+                self.missed.add(day_of(record['t1']))
             self.close()
+            return False
+
+    def catch_up(self, log=None):
+        """One piece of deferred work, between samples: re-read an archive day
+        (`log` directory) a failed write missed, else recompute a day of stale
+        minutes. Only on a connection the last write succeeded on. Returns
+        whether there is more it could do now."""
+        if self.conn is None:
+            return False  # Writes don't work (yet): the next successful one reopens it.
+        try:
+            if self.missed and log is not None:
+                # One try per miss (a record no write can take mustn't re-read its
+                # day forever); a restart's import_logs catches what a try lost.
+                day = min(self.missed)
+                self.missed.discard(day)
+                if (path := log_days(log).get(day)) is not None:
+                    with transaction(self.conn):
+                        insert(self.conn, read_records(path), self.ids)
+                        self.conn.execute('INSERT OR IGNORE INTO imports (day, at) VALUES (?, ?)', (day, time.time()))
+            elif self.stale:
+                self.stale = recompute_step(self.conn)
+        except Exception as error:
+            complain(self.db, error)
+            self.close()
+        return bool(self.missed and log is not None) or self.stale
 
     def close(self):
         if self.conn is not None:
@@ -539,8 +677,10 @@ def read_records(path):
                     yield json.loads(line)
                 except ValueError:
                     continue  # A torn final line after a crash.
-    except (OSError, EOFError, ValueError):
+    except (EOFError, ValueError):
         return  # A torn compressed file: the records so far still stand.
+    except Exception as error:  # Unreadable or corrupt (ZstdError is a plain Exception): the rest stands.
+        complain(path, error)
 
 
 def log_days(log):
@@ -551,19 +691,48 @@ def log_days(log):
     return days
 
 
-def import_logs(log, db=DB, force=False):
-    """Read archive days into the database: those never imported, or all with `force`.
-    Returns the days read."""
+def archive_counts(log):
+    """Records per archive day, from the archive's index.json (power.PowerLog)."""
+    try:
+        days = json.loads((Path(log) / 'index.json').read_text())['days']
+        return {day: int(stats['records']) for day, stats in days.items()}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def day_span(day):
+    """[start, end) wall seconds of a local calendar day (what day_of maps to it)."""
+    date = datetime.date.fromisoformat(day)
+    start = datetime.datetime.combine(date, datetime.time())
+    return start.timestamp(), datetime.datetime.combine(date + datetime.timedelta(days=1), datetime.time()).timestamp()
+
+
+def lacking(conn, day, archived, seen):
+    """Whether the database lacks records of `day` the archive holds: it has
+    `archived` (None: unknown) and held `seen` when last read in."""
+    if archived is None or archived == seen:
+        return False
+    return conn.execute('SELECT count(*) FROM records WHERE t1 >= ? AND t1 < ?', day_span(day)).fetchone()[0] < archived
+
+
+def import_logs(log, db=DB, force=False, counts=None):
+    """Read archive days into the database: those never imported, those the
+    archive holds more records of than the database (a write failed: a long lock
+    wait, a full disk, a collector too old for the layout), or all with `force`.
+    `counts`: records per archive day (the collector passes its PowerLog index;
+    else index.json). Idempotent. Returns the days read."""
+    counts = archive_counts(log) if counts is None else counts
     conn = connect(db)
     try:
-        done = {row[0] for row in conn.execute('SELECT day FROM imports')}
+        seen = {row[0]: row[1] for row in conn.execute('SELECT day, records FROM imports')}
         ids, read = {}, []
         for day, path in log_days(log).items():
-            if day in done and not force:
+            if day in seen and not force and not lacking(conn, day, counts.get(day), seen[day]):
                 continue
             with transaction(conn):
-                insert(conn, list(read_records(path)), ids)
-                conn.execute('INSERT OR REPLACE INTO imports VALUES (?, ?)', (day, time.time()))
+                found = insert(conn, read_records(path), ids)
+                conn.execute('INSERT OR REPLACE INTO imports (day, at, records) VALUES (?, ?, ?)',
+                             (day, time.time(), counts.get(day, found)))
             read.append(day)
         return read
     finally:
@@ -572,17 +741,21 @@ def import_logs(log, db=DB, force=False):
 
 # --- Readers (the panel, battery-eta, analysis) -------------------------------------------------
 
-def load_range(start, end, db=DB):
+def load_range(start, end, db=DB, apps=True):
     """Per-minute dict rows and events with start <= t < end. Read-only: an
-    absent or not yet created database is just empty."""
+    absent or not yet created database is just empty. `apps=False` leaves out
+    each minute's 'apps' (neither read nor parsed: much faster)."""
     try:
         conn = sqlite3.connect(Path(db).absolute().as_uri() + '?mode=ro', uri=True, timeout=30)
     except sqlite3.OperationalError:
         return [], []
     conn.row_factory = sqlite3.Row
     try:
+        columns = '*'
+        if not apps:
+            columns = ', '.join(row[1] for row in conn.execute('PRAGMA table_info(minutes)') if row[1] != 'apps') or '*'
         minutes = [minute_from(row) for row in
-                   conn.execute('SELECT * FROM minutes WHERE t >= ? AND t < ? ORDER BY t', (start, end))]
+                   conn.execute(f'SELECT {columns} FROM minutes WHERE t >= ? AND t < ? ORDER BY t', (start, end))]
         events = [json.loads(row['data']) for row in
                   conn.execute('SELECT data FROM events WHERE t1 >= ? AND t1 < ? ORDER BY t1', (start, end))]
         return minutes, events

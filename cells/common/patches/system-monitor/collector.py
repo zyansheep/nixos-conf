@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Bounded, local cache for Waybar's native hover panels; no command lines stored."""
 import collections
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -9,7 +10,7 @@ import sys
 import time
 
 import store
-from power import Monitor
+from power import RECORD, Monitor, clocks
 
 TICKS = os.sysconf('SC_CLK_TCK')
 PAGE = os.sysconf('SC_PAGE_SIZE')
@@ -227,14 +228,54 @@ def browser_labels(state, current, directory, now=None):
             row['name'] = labels.get(row['name'], row['name'])
 
 
+def single_instance(state):
+    """Hold an exclusive lock on <state>/collector.lock while the process lives, or
+    exit: a second collector would log every record twice."""
+    state.mkdir(parents=True, exist_ok=True)
+    path = state / 'collector.lock'
+    handle = open(path, 'a+')
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.seek(0)
+        holder = handle.read().strip() or '?'
+        handle.close()
+        sys.exit(f'waybar-monitor: another collector (PID {holder}) is already running; it holds {path}')
+    handle.truncate(0)
+    handle.write(f'{os.getpid()}\n')
+    handle.flush()
+    return handle
+
+
+def collect(power, history, directory, began, scan=processes, sensors=temperatures):
+    """One sample: scan processes, then read the clocks, so a record's interval
+    ends where its process and counter readings do. A suspend during the scan
+    (uptime jumped) discards the sample (None): the next one reports the gap."""
+    current = scan()
+    boot, wall = clocks()
+    if boot - began > RECORD:
+        return None
+    state = history.sample(boot, current)
+    browser_labels(state, history.previous, directory.parent / 'floorp-monitor')
+    state['temperature'] = sensors()
+    state['battery'] = power.update(boot, wall, current)
+    temporary = directory / 'snapshot.tmp'
+    temporary.write_text(json.dumps(state, ensure_ascii=True))
+    temporary.chmod(0o600)
+    temporary.replace(directory / 'snapshot.json')
+    return state
+
+
 def main():
     state_home = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state'))
     log = Path(os.environ.get('STATE_DIRECTORY', state_home / 'waybar-monitor')) / 'power'
     if sys.argv[1:] == ['import']:
         # Re-read every archive day into the power database, keeping what it has.
+        # Safe beside the running collector (idempotent transactions), so no lock.
         for day in store.import_logs(log, log.parent / 'power.sqlite3', force=True):
             print(day)
         return
+    lock = single_instance(log.parent)  # noqa: F841 (held until exit)
     directory = Path(os.environ['XDG_RUNTIME_DIR']) / 'waybar-monitor'
     directory.mkdir(mode=0o700, exist_ok=True)
     power = Monitor(log, experiment=directory / 'experiment.json', throttle=directory / 'throttle.json')
@@ -243,15 +284,8 @@ def main():
     try:
         while True:
             began = time.clock_gettime(time.CLOCK_BOOTTIME)
-            current = processes()
-            state = history.sample(began, current)
-            browser_labels(state, history.previous, directory.parent / 'floorp-monitor')
-            state['temperature'] = temperatures()
-            state['battery'] = power.update(began, time.time(), current)
-            temporary = directory / 'snapshot.tmp'
-            temporary.write_text(json.dumps(state, ensure_ascii=True))
-            temporary.chmod(0o600)
-            temporary.replace(directory / 'snapshot.json')
+            if collect(power, history, directory, began) is not None:
+                power.maintain()  # Deferred database work (a migration's recompute), a piece per loop.
             # Battery current and chip power change faster than the process scan.
             while (remaining := began + 2 - time.clock_gettime(time.CLOCK_BOOTTIME)) > .1:
                 time.sleep(min(.5, remaining))

@@ -1,7 +1,14 @@
+import contextlib
+import io
 import json
+import os
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from unittest import mock
+
+import collector
 from collector import History, processes, temperatures, process_label, process_identity, browser_labels, TICKS, PAGE
 
 
@@ -127,6 +134,50 @@ class MonitorTests(unittest.TestCase):
             self.assertEqual(result[(43,100)][0], 'Floorp web · PID 43')
             self.assertEqual(result[(43,100)][3], 'Floorp')
 
+
+    def test_one_collector_at_a_time(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / 'state'
+            held = collector.single_instance(state)
+            self.assertEqual((state / 'collector.lock').read_text(), f'{os.getpid()}\n')
+            with self.assertRaises(SystemExit) as stopped:
+                collector.single_instance(state)
+            self.assertIn(f'another collector (PID {os.getpid()}) is already running', str(stopped.exception.code))
+            held.close()
+            collector.single_instance(state).close()  # Free again once the first exits.
+
+    def test_import_needs_no_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state = Path(tmp) / 'state'
+            (state / 'power').mkdir(parents=True)
+            (state / 'power' / '2026-01-02.jsonl').write_text(json.dumps(
+                {'v': 1, 't0': 1767312000, 't1': 1767312010, 'dt': 10, 'status': 'Discharging'}) + '\n')
+            held = collector.single_instance(state)  # The running collector.
+            try:
+                with mock.patch.dict(os.environ, {'STATE_DIRECTORY': str(state)}), \
+                        mock.patch('sys.argv', ['waybar-monitor', 'import']), \
+                        contextlib.redirect_stdout(io.StringIO()) as out:
+                    collector.main()
+            finally:
+                held.close()
+            self.assertEqual(out.getvalue(), '2026-01-02\n')
+
+    def test_a_suspend_during_the_process_scan_discards_the_sample(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / 'waybar-monitor'  # Browser labels come from its sibling floorp-monitor.
+            directory.mkdir()
+            power = mock.Mock()
+            power.update.return_value = {'rows': []}
+            began = time.clock_gettime(time.CLOCK_BOOTTIME)
+            with mock.patch('collector.clocks', return_value=(began + 3600, time.time())):
+                self.assertIsNone(collector.collect(power, History(), directory, began, scan=lambda: {}))
+            power.update.assert_not_called()  # The next sample reports the gap instead.
+            self.assertFalse((directory / 'snapshot.json').exists())
+            boot, wall = began + 0.3, time.time()
+            with mock.patch('collector.clocks', return_value=(boot, wall)):
+                state = collector.collect(power, History(), directory, began, scan=lambda: {}, sensors=lambda: [])
+            power.update.assert_called_once_with(boot, wall, {})  # Clocks read after the scan, together.
+            self.assertEqual(json.loads((directory / 'snapshot.json').read_text())['battery'], state['battery'])
 
 if __name__ == '__main__':
     unittest.main()

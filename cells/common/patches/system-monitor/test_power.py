@@ -1,11 +1,20 @@
+import contextlib
+import io
 import json
+import os
 import random
+import sqlite3
 import tempfile
 import time
 import unittest
 from pathlib import Path
-from power import (PRIOR, Deltas, GpuClients, PowerLog, attribute, battery_watts, experiment_assignment,
-                   interrupts, load_attribution, log_footer, parse_fdinfo, settings, summarize, TICKS)
+from unittest import mock
+
+import power
+import store
+from power import (PRIOR, Deltas, FastSampler, GpuClients, IdleStates, Monitor, PowerLog, attribute, battery_watts,
+                   clock_means, clocks, cpu_frequency, device_deltas, experiment_assignment, idle_deltas, interrupts,
+                   load_attribution, log_footer, network, own_cpu, parse_fdinfo, settings, subtract, summarize, TICKS)
 
 
 def put(path, text):
@@ -173,6 +182,301 @@ class PowerTests(unittest.TestCase):
             reopened = PowerLog(directory)
             self.assertEqual(reopened.totals(), (4, 40, 1))  # Today's file rescanned, old day indexed.
 
+
+    def test_clocks_are_read_together_even_across_a_suspend(self):
+        boots = iter([100.0, 3700.0, 3700.0, 3700.1])  # A suspend between the first uptime and the wall-clock read.
+        walls = iter([1000.0, 4600.0])
+        self.assertEqual(clocks(lambda: next(boots), lambda: next(walls)), (3700.1, 4600.0))
+
+    def test_the_active_clock_leaves_out_idle_cpus_and_the_collectors_own(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys, proc = Path(tmp) / 'sys', Path(tmp) / 'proc'
+            for cpu, current in enumerate([4000000, 406000, 2000000, 406000, 3000000]):
+                put(sys / f'devices/system/cpu/cpu{cpu}/cpufreq/scaling_cur_freq', f'{current}\n')
+                put(sys / f'devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq', '406000\n')
+            put(proc / 'thread-self/stat', '42 (waybar (mon) x) R ' + ' '.join(str(i) for i in range(4, 39)) + ' 0 0 0\n')
+            self.assertEqual(own_cpu(proc), 0)  # Field 39, after a comm with spaces and parentheses.
+            mean, peak, active, n = cpu_frequency(sys, own_cpu(proc))
+            self.assertAlmostEqual(mean, (4000 + 406 + 2000 + 406 + 3000) / 5)  # As ever: every CPU.
+            self.assertEqual((peak, active, n), (4000, 2500, 2))  # cpu0 is ours; cpu1 and cpu3 idle.
+            self.assertEqual(cpu_frequency(sys, own=2)[2:], (3500, 2))
+            self.assertIsNone(own_cpu(Path(tmp) / 'nowhere'))
+            put(sys / 'devices/system/cpu/cpu0/cpufreq/scaling_cur_freq', '406000\n')
+            put(sys / 'devices/system/cpu/cpu2/cpufreq/scaling_cur_freq', '406000\n')
+            put(sys / 'devices/system/cpu/cpu4/cpufreq/scaling_cur_freq', '406000\n')
+            self.assertEqual(cpu_frequency(sys, 0)[2:], (None, 0))
+            self.assertEqual(cpu_frequency(Path(tmp) / 'nowhere'), (None, None, None, 0))  # No cpufreq.
+            put(sys / 'devices/system/cpu/cpu0/cpufreq/scaling_max_freq', '5000000\n')
+            put(sys / 'devices/system/cpu/cpu0/cpufreq/scaling_min_freq', '1116000\n')
+            self.assertEqual(settings(sys)['min_mhz'], 1116)  # The floor follows the profile.
+
+    def test_record_clock_is_time_weighted_over_samples_with_an_active_cpu(self):
+        samples = [(2.0, 1000, 3000, 3000, 2), (6.0, 800, 1200, 1500, 1), (2.0, 600, 600, None, 0)]
+        self.assertEqual(clock_means(samples), {'mhz': 800, 'mhz_max': 3000, 'mhz_active': 1875, 'active_n': 1.0})
+        self.assertEqual(clock_means([(0.0, 600, 600, None, 0)]), {'mhz': 600, 'mhz_max': 600, 'active_n': 0.0})
+        self.assertEqual(clock_means([(0.0, 900, 900, 2000, 1)])['mhz_active'], 2000)  # The only sample: weight 0.
+        self.assertEqual(clock_means([]), {})
+
+    def test_counter_deltas_are_never_negative_and_recreated_devices_restart(self):
+        self.assertEqual(subtract({'iowait': 5.0, 'user': 9.0, 'ctxt': 10}, {'iowait': 5.5, 'user': 4.0, 'ctxt': 4}),
+                         {'iowait': 0, 'user': 5.0, 'ctxt': 6})  # /proc/stat iowait can step back.
+        self.assertEqual(subtract({'ctxt': 30}, {'ctxt': 10}, 1.5), {'ctxt': 30})
+        before = {'wlan0': {'rx': 1000, 'tx': 500, 'state': 'up'}, 'tun0': {'rx': 9000, 'tx': 9000, 'state': 'up'}}
+        after = {'wlan0': {'rx': 1600, 'tx': 700, 'state': 'up'}, 'tun0': {'rx': 300, 'tx': 9100, 'state': 'up'},
+                 'usb0': {'rx': 5, 'tx': 5, 'state': 'up'}}
+        self.assertEqual(device_deltas(after, before), {'wlan0': {'rx': 600, 'tx': 200}, 'tun0': {}, 'usb0': {}})
+        later = {'tun0': {'rx': 400, 'tx': 9150, 'state': 'up'}}
+        self.assertEqual(device_deltas(later, after), {'tun0': {'rx': 100, 'tx': 50}})  # From the new baseline.
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            for name, value in (('rx_bytes', '10'), ('tx_bytes', '20'), ('rx_packets', '1'), ('tx_packets', '2')):
+                put(sys / 'class/net/wlan0/statistics' / name, value)
+            put(sys / 'class/net/wlan0/operstate', 'up')
+            put(sys / 'class/net/eth0/statistics/rx_bytes', '10')  # Half gone: no reading, not zeros.
+            self.assertEqual(network(sys), {'wlan0': {'rx': 10, 'tx': 20, 'rxp': 1, 'txp': 2, 'state': 'up'}})
+
+    def test_idle_residency_survives_a_cpu_going_offline_and_back(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            for cpu in (0, 1):
+                put(sys / f'devices/system/cpu/cpu{cpu}/cpuidle/state0/name', 'C1')
+                put(sys / f'devices/system/cpu/cpu{cpu}/cpuidle/state0/time', '5000000')
+            states = IdleStates(sys)
+            first = states.read()
+            put(sys / 'devices/system/cpu/cpu0/cpuidle/state0/time', '7000000')
+            (sys / 'devices/system/cpu/cpu1/cpuidle/state0/time').unlink()  # cpu1 offline
+            second = states.read()
+            self.assertEqual(idle_deltas(second, first), {'C1': 2.0})
+            put(sys / 'devices/system/cpu/cpu1/cpuidle/state0/time', '9000000')  # Back, with all of its history.
+            self.assertEqual(idle_deltas(states.read(), second), {'C1': 0.0})
+
+    def test_device_paths_are_found_again_after_failed_reads(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            put(sys / 'class/power_supply/BAT0/type', 'Battery')
+            put(sys / 'class/power_supply/BAT0/status', 'Discharging')
+            put(sys / 'class/power_supply/BAT0/power_now', '8000000')
+            put(sys / 'class/hwmon/hwmon2/name', 'amdgpu')
+            put(sys / 'class/hwmon/hwmon2/power1_input', '5000000')
+            fast = FastSampler(sys)
+            fast.sample()
+            self.assertEqual(fast.take()[0]['bat']['w'], 8.0)
+            # The battery and the hwmon directory come back under new names.
+            (sys / 'class/power_supply/BAT0').rename(sys / 'class/power_supply/BAT1')
+            (sys / 'class/hwmon/hwmon2').rename(sys / 'class/hwmon/hwmon5')
+            for _ in range(power.MISSES + 1):
+                fast.sample()
+            values, status = fast.take()
+            self.assertEqual((values['bat']['w'], values['soc']['w'], status), (8.0, 5.0, 'Discharging'))
+            self.assertEqual(fast.battery.name, 'BAT1')
+
+    def test_gpu_clients_count_new_clients_from_zero_and_cap_at_the_interval(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            proc = Path(tmp)
+            counts = {}
+
+            class Clients(GpuClients):
+                def fd_count(self, pid):
+                    return counts.get(pid, 1)
+
+            def client(pid, fd, cid, gfx, compute=0):
+                (proc / str(pid) / 'fd').mkdir(parents=True, exist_ok=True)
+                link = proc / str(pid) / 'fd' / str(fd)
+                if not link.is_symlink():
+                    link.symlink_to('/dev/dri/renderD128')
+                put(proc / str(pid) / 'fdinfo' / str(fd),
+                    f'drm-client-id:\t{cid}\ndrm-engine-gfx:\t{gfx} ns\ndrm-engine-compute:\t{compute} ns\n')
+
+            client(10, 3, 1, 0)
+            gpu = Clients(proc)
+            app = {(10, 0): ('a', 0, 0, 'Game')}
+            self.assertEqual(gpu.sample(100, app), {})
+            # Game opens a second client: its fd count changes, so it is found at once and counts from zero.
+            client(10, 4, 2, 3 * 10**9)
+            counts[10] = 2
+            self.assertEqual(gpu.sample(110, app), {'Game': {'gpu': 3.0}})
+            # A process started since the last sample: its client counts from zero too.
+            client(11, 3, 3, 10**9)
+            both = {**app, (11, int(115 * TICKS)): ('b', 0, 0, 'Viewer')}
+            self.assertEqual(gpu.sample(120, both), {'Viewer': {'gpu': 1.0}})
+            # gfx and compute rings run concurrently; jobs overlap: capped at the interval.
+            client(10, 4, 2, 13 * 10**9, 9 * 10**9)
+            self.assertEqual(gpu.sample(130, both)['Game'], {'gpu': 10})
+            # An older process whose client only the periodic rescan found: unknown history, skipped.
+            client(12, 3, 4, 50 * 10**9)
+            gpu.rescan = 0
+            usage = gpu.sample(140, {**both, (12, 0): ('c', 0, 0, 'Old')})
+            self.assertNotIn('Old', usage)
+
+    def test_a_corrupt_archive_day_is_reported_not_fatal(self):
+        if power.zstd is None:
+            self.skipTest('no zstd')
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            put(directory / '2000-01-01.jsonl.zst', 'not zstd at all')
+            with mock.patch('power.stderr', new_callable=io.StringIO) as err:
+                log = PowerLog(directory)
+            self.assertIn('ZstdError', err.getvalue())
+            self.assertIn('2000-01-01.jsonl.zst', err.getvalue())
+            self.assertEqual(log.index['days']['2000-01-01']['records'], 0)
+
+
+def fake_machine(root, cpus=4):
+    """A /sys and /proc with what the collector reads: a battery, amdgpu power,
+    cpufreq, /proc/stat."""
+    sys, proc = root / 'sys', root / 'proc'
+    battery = sys / 'class/power_supply/BAT1'
+    for name, value in (('type', 'Battery'), ('status', 'Discharging'), ('power_now', '10000000'),
+                        ('capacity', '50'), ('charge_now', '2000000'), ('voltage_now', '15500000')):
+        put(battery / name, value)
+    put(sys / 'class/power_supply/ACAD/type', 'Mains')
+    put(sys / 'class/power_supply/ACAD/online', '0')
+    put(sys / 'class/hwmon/hwmon3/name', 'amdgpu')
+    put(sys / 'class/hwmon/hwmon3/power1_input', '8000000')
+    for cpu in range(cpus):
+        put(sys / f'devices/system/cpu/cpu{cpu}/cpufreq/scaling_cur_freq', '406000' if cpu % 2 else '3000000')
+        put(sys / f'devices/system/cpu/cpu{cpu}/cpufreq/scaling_min_freq', '406000')
+    put(proc / 'thread-self/stat', '7 (collector) R ' + ' '.join('0' for _ in range(4, 39)) + ' 0 0\n')
+    stat(proc, 0)
+    return sys, proc
+
+
+def stat(proc, busy_ticks, idle_ticks=0):
+    put(proc / 'stat', f'cpu  {busy_ticks} 0 0 {idle_ticks} 0 0 0 0 0 0\nctxt 100\nintr 50\n')
+
+
+class MonitorTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        root = Path(self.tmp.name)
+        self.sys, self.proc = fake_machine(root)
+        self.log, self.db = root / 'state/power', root / 'state/power.sqlite3'
+        self.uptime = [1000.0]
+        self.patches = [mock.patch('power.qol.votes', return_value=[]),
+                        mock.patch('power.Commands.read', return_value={}),
+                        mock.patch.dict(os.environ, {'XDG_STATE_HOME': str(root / 'xdg')})]
+        for patch in self.patches:
+            patch.start()
+        self.wall = time.time()
+
+    def tearDown(self):
+        for patch in reversed(self.patches):
+            patch.stop()
+        self.tmp.cleanup()
+
+    def monitor(self):
+        return Monitor(self.log, sys=self.sys, proc=self.proc, db=self.db, clock=lambda: self.uptime[0])
+
+    def tick(self, monitor, seconds=2, busy=None):
+        self.uptime[0] += seconds
+        if busy is not None:
+            stat(self.proc, busy)
+        return monitor.update(self.uptime[0], self.wall + self.uptime[0] - 1000, {})
+
+    def rows(self, sql):
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            return conn.execute(sql).fetchall()
+
+    def test_records_carry_the_active_clock_and_its_floor(self):
+        monitor = self.monitor()
+        for i in range(6):
+            self.tick(monitor, busy=i * 2 * TICKS)  # One core busy.
+        monitor.close()
+        (record,) = monitor.log.recent(0)
+        self.assertEqual(record['cpu']['mhz'], round((3000 + 406 + 3000 + 406) / 4))  # Unchanged meaning.
+        self.assertEqual((record['cpu']['mhz_active'], record['cpu']['active_n']), (3000, 1.0))  # cpu0 is ours.
+        self.assertEqual(record['settings']['min_mhz'], 406)
+        self.assertAlmostEqual(record['cpu']['busy_s'], 10.0, places=3)  # 2 s of CPU per 2 s, over 10 s.
+        self.assertEqual(self.rows('SELECT mhz_active, active_n, min_mhz FROM records'), [(3000.0, 1.0, 406.0)])
+        self.assertEqual(self.rows('SELECT ghz_active, purity FROM minutes'), [(3.0, 1.0)])
+
+    def test_counters_are_rated_over_their_own_snapshots(self):
+        # 12 cores flat out. The record's counter snapshot is read 0.5 s after the
+        # record's end (a slow scan): 10.5 s of CPU time against dt = 10 s.
+        delay = [0.0]
+
+        def clock():
+            at = self.uptime[0] + delay[0]
+            stat(self.proc, round((at - 1000) * 12 * TICKS))  # What /proc/stat holds by then.
+            return at
+        monitor = Monitor(self.log, sys=self.sys, proc=self.proc, db=self.db, clock=clock)
+        self.tick(monitor)
+        for _ in range(4):
+            self.tick(monitor)
+        delay[0] = 0.5
+        self.tick(monitor)
+        monitor.close()
+        busy, dt = self.rows('SELECT busy_s, dt FROM records')[0]
+        self.assertEqual(dt, 10.0)
+        self.assertAlmostEqual(busy / dt, 12.0, places=3)  # Not 12.6.
+
+    def test_a_suspend_while_recording_drops_the_record_and_reports_the_gap_with_pre_suspend_battery(self):
+        monitor = self.monitor()
+        for _ in range(6):
+            self.tick(monitor)  # One record, battery at 50 %.
+        for _ in range(4):
+            self.tick(monitor)
+        # The collector read the clocks, then the machine slept during the record.
+        put(self.sys / 'class/power_supply/BAT1/capacity', '40')
+        real = self.uptime[0] + 2
+        monitor.clock = lambda: real + 3600
+        self.assertIsNotNone(monitor.update(real, self.wall + real - 1000, {}))
+        monitor.clock = lambda: self.uptime[0]
+        self.uptime[0] = real + 3600
+        for _ in range(6):
+            self.tick(monitor)
+        monitor.close()
+        records = self.rows('SELECT t0, t1, dt, pct FROM records ORDER BY t1')
+        self.assertEqual(len(records), 2)
+        for t0, t1, dt, _ in records:
+            self.assertAlmostEqual(t1 - t0, dt, delta=0.01)  # None spans the suspend.
+        (gap,) = [json.loads(d) for (d,) in self.rows("SELECT data FROM events WHERE event = 'gap'")]
+        self.assertEqual((gap['bat_before']['pct'], gap['bat_after']['pct']), (50.0, 40.0))
+        self.assertAlmostEqual(gap['t0'], records[0][1], delta=0.01)  # From the last record kept.
+        self.assertGreater(gap['gap_s'], 3600)
+
+    def test_without_cpufreq_records_have_no_clock(self):
+        for path in self.sys.glob('devices/system/cpu/cpu*/cpufreq/scaling_cur_freq'):
+            path.unlink()
+        monitor = self.monitor()
+        for _ in range(6):
+            self.tick(monitor, busy=0)
+        monitor.close()
+        self.assertEqual(self.rows('SELECT mhz, mhz_active, active_n, busy_s FROM records'), [(None, None, None, 0.0)])
+        self.assertEqual(self.rows('SELECT ghz, ghz_active, load, busy FROM minutes'), [(None, None, None, 0.0)])
+
+    def test_a_broken_archive_and_database_never_stop_sampling(self):
+        if power.zstd is None:
+            self.skipTest('no zstd')
+        put(self.log / '2000-01-01.jsonl.zst', 'corrupt')
+        self.db.parent.mkdir(parents=True, exist_ok=True)
+        with contextlib.closing(sqlite3.connect(self.db)) as conn:
+            conn.execute(f'PRAGMA user_version = {store.VERSION + 1}')  # A newer build's layout.
+        with contextlib.redirect_stderr(io.StringIO()) as err, \
+                mock.patch('power.stderr', new_callable=io.StringIO) as log_err:
+            monitor = self.monitor()
+            for _ in range(6):
+                self.tick(monitor)
+        self.assertIn('2000-01-01.jsonl.zst', log_err.getvalue())
+        self.assertIn('only knows up to', log_err.getvalue() + err.getvalue())
+        monitor.close()
+        self.assertEqual(len(monitor.log.recent(0)), 1)  # The archive still has the record.
+
+    def test_maintain_reads_back_what_a_failed_write_missed(self):
+        monitor = self.monitor()
+        real = store.insert
+        with mock.patch('store.insert', side_effect=sqlite3.OperationalError('disk I/O error')), \
+                contextlib.redirect_stderr(io.StringIO()):
+            for _ in range(6):
+                self.tick(monitor)
+        self.assertEqual(self.rows('SELECT count(*) FROM records'), [(0,)])
+        for _ in range(5):
+            self.tick(monitor)  # Writes work again.
+        while monitor.maintain():
+            pass
+        monitor.close()
+        self.assertEqual(self.rows('SELECT count(*) FROM records'), [(2,)])
+        self.assertIs(store.insert, real)
 
 if __name__ == '__main__':
     unittest.main()

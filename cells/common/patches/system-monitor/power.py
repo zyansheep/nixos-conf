@@ -15,7 +15,6 @@ import gzip
 import json
 import os
 import shutil
-import sqlite3
 import subprocess
 import time
 from sys import stderr
@@ -33,6 +32,24 @@ SCHEMA = 3  # 3: `qol` is the record's 👍/👎 (+1/−1, 0 none) and each vote
 RECORD = 10        # seconds per log record
 WINDOW = 30 * 60   # seconds of history behind the menu
 TICKS = os.sysconf('SC_CLK_TCK')
+MISSES = 5         # failed reads in a row before a device path is looked up again
+
+
+def uptime():
+    """Seconds since boot, suspends included (what records and gaps are timed by)."""
+    return time.clock_gettime(time.CLOCK_BOOTTIME)
+
+
+def clocks(boot=uptime, wall=time.time):
+    """(boot, wall) read together. A suspend between the two reads would pair a
+    pre-suspend uptime with a post-resume wall time, so they are read again until
+    the uptime didn't move across the wall-clock read."""
+    while True:
+        before = boot()
+        now = wall()
+        after = boot()
+        if after - before < 1:
+            return after, now
 
 
 def read(path, default=None):
@@ -97,32 +114,57 @@ def find_hwmon(root, name):
     return None
 
 
+def find_chip(sys):
+    amdgpu = find_hwmon(sys / 'class/hwmon', 'amdgpu')
+    return next((amdgpu / name for name in ('power1_input', 'power1_average')
+                 if amdgpu and (amdgpu / name).exists()), None)
+
+
+def find_gpu_busy(sys):
+    return next(iter(sorted(sys.glob('class/drm/card*/device/gpu_busy_percent'))), None)
+
+
 class FastSampler:
-    """Battery and chip power several times per record; the EC updates about 1 Hz."""
+    """Battery and chip power several times per record; the EC updates about 1 Hz.
+
+    Device paths are looked up again after MISSES failed reads in a row (or while
+    missing): hwmon and power-supply directories can be re-created and renumbered.
+    """
 
     def __init__(self, sys=Path('/sys')):
         self.supplies = sys / 'class/power_supply'
-        self.battery = find_battery(self.supplies)
-        amdgpu = find_hwmon(sys / 'class/hwmon', 'amdgpu')
-        self.chip = next((amdgpu / name for name in ('power1_input', 'power1_average')
-                          if amdgpu and (amdgpu / name).exists()), None)
-        self.gpu_busy = next(iter(sorted(sys.glob('class/drm/card*/device/gpu_busy_percent'))), None)
+        self.find = {'battery': lambda: find_battery(self.supplies), 'chip': lambda: find_chip(sys),
+                     'gpu_busy': lambda: find_gpu_busy(sys)}
+        self.misses = collections.Counter()
+        self.battery, self.chip, self.gpu_busy = (self.find[name]() for name in ('battery', 'chip', 'gpu_busy'))
         self.reset()
 
     def reset(self):
         self.values = collections.defaultdict(list)
         self.status = None
 
+    def path(self, name):
+        """The device path, looked up again after MISSES failed reads (or, while
+        there is none, every MISSES samples)."""
+        if self.misses[name] >= MISSES:
+            setattr(self, name, self.find[name]())
+            self.misses[name] = 0
+        if (path := getattr(self, name)) is None:
+            self.misses[name] += 1
+        return path
+
+    def got(self, name, value):
+        self.misses[name] = 0 if value is not None else self.misses[name] + 1
+        return value
+
     def sample(self):
-        if self.battery is None:
-            self.battery = find_battery(self.supplies)
-        if self.battery is not None:
-            self.status, watts = battery_watts(self.battery)
-            if watts is not None:
+        if (battery := self.path('battery')) is not None:
+            self.status, watts = battery_watts(battery)
+            if self.got('battery', watts) is not None:
                 self.values['bat'].append(watts)
-        if self.chip is not None and (value := number(self.chip)) is not None:
+        if (chip := self.path('chip')) is not None and self.got('chip', value := number(chip)) is not None:
             self.values['soc'].append(value / 1e6)
-        if self.gpu_busy is not None and (value := number(self.gpu_busy)) is not None:
+        if (busy := self.path('gpu_busy')) is not None and self.got('gpu_busy', value := number(busy)) is not None:
             self.values['gpu_busy'].append(value)
 
     def take(self):
@@ -155,24 +197,71 @@ def cpu_times(proc=Path('/proc')):
 
 
 class IdleStates:
-    """Summed C-state residency per state name across CPUs."""
+    """C-state residency (seconds) per (state name, CPU): idle_deltas() sums the
+    per-CPU increases by name, so a CPU going offline (or back) moves nothing."""
 
     def __init__(self, sys=Path('/sys')):
         self.paths = [(read(state / 'name', state.name), state / 'time')
                       for state in sorted(sys.glob('devices/system/cpu/cpu[0-9]*/cpuidle/state[0-9]*'))]
 
     def read(self):
-        totals = collections.defaultdict(float)
-        for name, path in self.paths:
-            if (value := number(path)) is not None:
-                totals[name] += value / 1e6
-        return dict(totals)
+        return {(name, str(path)): value / 1e6 for name, path in self.paths if (value := number(path)) is not None}
 
 
-def cpu_frequency(sys=Path('/sys')):
-    values = [number(path) for path in sys.glob('devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq')]
-    values = [v / 1000 for v in values if v]
-    return (sum(values) / len(values), max(values)) if values else (None, None)
+def idle_deltas(after, before, scale=1.0):
+    totals = collections.defaultdict(float)
+    for key, value in after.items():
+        if key in before:
+            totals[key[0]] += max(0.0, value - before[key]) * scale
+    return {name: round(value, 4) for name, value in totals.items()}
+
+
+def own_cpu(proc=Path('/proc')):
+    """The CPU this thread last ran on (/proc/thread-self/stat field 39), or None."""
+    try:
+        stat = (proc / 'thread-self/stat').read_text()
+        return int(stat[stat.rindex(')') + 2:].split()[36])  # Fields after comm start at field 3.
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def cpu_frequency(sys=Path('/sys'), own=None):
+    """(mean MHz, peak MHz, active mean MHz, active count) over CPUs right now.
+
+    The mean and peak take every CPU's scaling_cur_freq, as always. Under
+    amd-pstate an idle CPU reads exactly its scaling_min_freq, a placeholder, so
+    the active mean and count take only CPUs reading anything else, leaving out
+    `own` (the collector's CPU, always busy while it reads). Active mean is None
+    when no CPU is active."""
+    values, active = [], []
+    for path in sys.glob('devices/system/cpu/cpu[0-9]*/cpufreq/scaling_cur_freq'):
+        if not (current := number(path)):
+            continue
+        values.append(current / 1000)
+        if path.parent.parent.name != f'cpu{own}' and current != number(path.with_name('scaling_min_freq')):
+            active.append(current / 1000)
+    if not values:
+        return None, None, None, 0
+    return sum(values) / len(values), max(values), sum(active) / len(active) if active else None, len(active)
+
+
+def clock_means(samples):
+    """A record's clock fields from (seconds, mean, peak, active mean, active count)
+    samples: `mhz` and `mhz_max` as ever (plain mean of the means, the peak);
+    `mhz_active` time-weighted over samples with an active CPU (absent if none
+    had one); `active_n` the time-weighted mean active count. A sample weighs
+    the time since the one before it."""
+    if not samples:
+        return {}
+    weights = [w for w, *_ in samples] if sum(w for w, *_ in samples) > 0 else [1.0] * len(samples)
+    result = {'mhz': round(sum(s[1] for s in samples) / len(samples)), 'mhz_max': round(max(s[2] for s in samples)),
+              'active_n': round(sum(w * s[4] for w, s in zip(weights, samples)) / sum(weights), 2)}
+    active = [(w, s[3]) for w, s in zip(weights, samples) if s[4]]
+    if active:
+        total = sum(w for w, _ in active)
+        result['mhz_active'] = round(sum(w * m for w, m in active) / total if total > 0
+                                     else sum(m for _, m in active) / len(active))
+    return result
 
 
 def interrupts(proc=Path('/proc')):
@@ -203,8 +292,11 @@ def network(sys=Path('/sys')):
         if iface.name == 'lo':
             continue
         stats = iface / 'statistics'
-        result[iface.name] = {key: int(number(stats / name, 0)) for key, name in (
+        values = {key: number(stats / name) for key, name in (
             ('rx', 'rx_bytes'), ('tx', 'tx_bytes'), ('rxp', 'rx_packets'), ('txp', 'tx_packets'))}
+        if None in values.values():
+            continue  # Going away mid-read: no reading, not zeros (a later one would count from zero).
+        result[iface.name] = {key: int(value) for key, value in values.items()}
         result[iface.name]['state'] = read(iface / 'operstate', '')
     return result
 
@@ -310,6 +402,9 @@ def settings(sys=Path('/sys')):
     }
     if (limit := number(cpu / 'cpu0/cpufreq/scaling_max_freq')) is not None:
         values['max_mhz'] = round(limit / 1000)
+    # The floor an idle CPU reads as its clock under amd-pstate (it follows the profile).
+    if (limit := number(cpu / 'cpu0/cpufreq/scaling_min_freq')) is not None:
+        values['min_mhz'] = round(limit / 1000)
     # The CPU's own maximum: boost raises it, a cap (max_mhz below it) doesn't.
     if (limit := number(cpu / 'cpu0/cpufreq/cpuinfo_max_freq')) is not None:
         values['cpu_max_mhz'] = round(limit / 1000)
@@ -409,16 +504,41 @@ def parse_fdinfo(text):
 
 
 class GpuClients:
-    """Per-app GPU engine time from DRM fdinfo, deduplicated by client id."""
+    """Per-app GPU engine time from DRM fdinfo, deduplicated by client id.
+
+    A process's DRM fds are looked up when it is new, when its number of open fds
+    changes, and every `rescan` seconds regardless. So a client is found in the
+    interval it opens, and one new since the last sample counts from zero if its
+    process was watched then (or started since); one only a periodic rescan
+    found has unknown history and waits a sample. Per app and engine group
+    (gpu: gfx + compute; video: decode, encode, …) engine-seconds are summed over
+    its clients and engines, then capped at the interval: concurrent rings and
+    overlapping jobs report more busy time than there was time.
+    """
 
     def __init__(self, proc=Path('/proc'), rescan=60):
         self.proc, self.rescan = proc, rescan
-        self.fds, self.scanned, self.previous = {}, {}, None
+        self.fds, self.scanned, self.counts, self.previous, self.since = {}, {}, {}, None, None
 
-    def scan(self, pid):
-        found = []
+    def fd_count(self, pid):
+        """Open fds: /proc/PID/fd's size (Linux 6.2+; 0 before, which leaves the periodic rescan)."""
+        try:
+            return os.stat(self.proc / str(pid) / 'fd').st_size
+        except OSError:
+            return None
+
+    def scan(self, pid, last=None):
+        """(DRM fds, every fd) of a process. Given the `last` scan, only fd
+        numbers new since are resolved (one reused meanwhile waits for the
+        periodic full scan)."""
+        found, names = [], set()
         try:
             for entry in os.scandir(self.proc / str(pid) / 'fd'):
+                names.add(entry.name)
+                if last is not None and entry.name in last[1]:
+                    if entry.name in last[0]:
+                        found.append(entry.name)
+                    continue
                 try:
                     if os.readlink(entry.path).startswith('/dev/dri/'):
                         found.append(entry.name)
@@ -426,30 +546,44 @@ class GpuClients:
                     continue
         except OSError:
             pass
-        return found
+        return found, names
 
     def sample(self, now, processes):
-        current = {}
+        current, fresh = {}, set()
         for key in list(self.scanned):
             if key not in processes:
-                del self.scanned[key], self.fds[key]
+                del self.scanned[key], self.fds[key], self.counts[key]
         for key, entry in processes.items():
-            if key not in self.scanned or now - self.scanned[key] >= self.rescan:
-                self.fds[key], self.scanned[key] = self.scan(key[0]), now
-            for fd in self.fds[key]:
+            known, count = key in self.scanned, self.fd_count(key[0])
+            periodic = known and now - self.scanned[key] >= self.rescan
+            if not known or periodic:
+                self.fds[key], self.scanned[key], self.counts[key] = self.scan(key[0]), now, count
+            elif count != self.counts[key]:
+                self.fds[key], self.counts[key] = self.scan(key[0], self.fds[key]), count
+            # Its fds were watched last sample (or it started since): a client new
+            # to us opened since. A periodic rescan may find an older one.
+            watched = (known and not periodic) or (self.since is not None and key[1] / TICKS >= self.since)
+            for fd in self.fds[key][0]:
                 client, engines = parse_fdinfo(read(self.proc / str(key[0]) / 'fdinfo' / fd, ''))
                 if client is not None and engines:
                     current.setdefault(client, (entry[3], engines))
+                    if watched:
+                        fresh.add(client)
         usage = collections.defaultdict(lambda: collections.defaultdict(float))
         if self.previous is not None:
             for client, (app, engines) in current.items():
                 before = self.previous.get(client)
-                if before is None:
-                    continue  # Opened since the last record; its history is unknown.
+                if before is None and client not in fresh:
+                    continue  # Its history is unknown.
                 for engine, ns in engines.items():
-                    if (delta := ns - before[1].get(engine, ns)) > 0:
+                    # amdgpu lists only engines a client has used: one new to it starts at zero.
+                    if (delta := ns - (before[1].get(engine, 0) if before else 0)) > 0:
                         usage[app][engine_group(engine)] += delta / 1e9
-        self.previous = current
+            interval = now - self.since
+            for groups in usage.values():
+                for group, seconds in groups.items():
+                    groups[group] = min(seconds, interval) if interval > 0 else seconds
+        self.previous, self.since = current, now
         return usage
 
 
@@ -641,7 +775,10 @@ class PowerLog:
         today = self.day_of(time.time())
         for path in sorted(directory.glob('*.jsonl')):
             if path.stem != today:
-                self.compress(path)
+                try:
+                    self.compress(path)
+                except Exception as error:  # A full disk, say: the plain file stays, compressed next start.
+                    print(f'waybar-monitor: compressing {path}: {type(error).__name__}: {error}', file=stderr)
         for path in sorted(directory.glob('*.jsonl*')):
             if path.suffix not in ('.jsonl', '.zst', '.gz'):
                 continue  # An interrupted compression's .part file.
@@ -664,8 +801,10 @@ class PowerLog:
                     except ValueError:
                         continue  # A torn final line after a crash.
                     PowerLog.count(stats, record)
-        except (OSError, EOFError, ValueError):
+        except (EOFError, ValueError):
             pass  # Includes torn compressed files; the counts so far still stand.
+        except Exception as error:  # Unreadable or corrupt (ZstdError is a plain Exception): so do they.
+            print(f'waybar-monitor: {path}: {type(error).__name__}: {error}', file=stderr)
         return stats
 
     @staticmethod
@@ -695,7 +834,10 @@ class PowerLog:
         if day != self.day:
             if self.handle is not None:
                 self.handle.close()
-                self.compress(self.directory / f'{self.day}.jsonl')
+                try:
+                    self.compress(self.directory / f'{self.day}.jsonl')
+                except Exception as error:  # Left plain; the next start compresses it.
+                    print(f'waybar-monitor: compressing {self.day}: {type(error).__name__}: {error}', file=stderr)
             self.handle, self.day = open(self.directory / f'{day}.jsonl', 'a'), day
         self.handle.write(json.dumps(record, separators=(',', ':'), ensure_ascii=False) + '\n')
         self.count(self.index['days'].setdefault(
@@ -777,25 +919,53 @@ def rounded(name, value):
     return round(value) if name == 'rss' else round(value, 4)
 
 
-def subtract(after, before):
-    return {key: round(after[key] - before[key], 4) for key in after
-            if key in before and isinstance(after[key], (int, float))}
+def subtract(after, before, scale=1.0):
+    """Increase of cumulative counters, never negative (/proc/stat iowait can step
+    back), times `scale`; integer counters stay integers."""
+    result = {}
+    for key, value in after.items():
+        if key in before and isinstance(value, (int, float)) and isinstance(before[key], (int, float)):
+            delta = max(0, value - before[key]) * scale
+            result[key] = round(delta) if isinstance(value, int) and isinstance(before[key], int) else round(delta, 4)
+    return result
+
+
+def device_deltas(after, before, scale=1.0):
+    """subtract() per device (interface, disk). A device new since `before` has no
+    delta yet, and one whose counters went down was re-created: its readings now
+    are the new baseline, and this interval counts nothing for it."""
+    result = {}
+    for name, values in after.items():
+        old = before.get(name)
+        if old is None or any(isinstance(v, (int, float)) and k in old and v < old[k] for k, v in values.items()):
+            result[name] = {}
+        else:
+            result[name] = subtract(values, old, scale)
+    return result
 
 
 class Monitor:
-    """Called every collector loop; writes a record every RECORD seconds."""
+    """Called every collector loop; writes a record every RECORD seconds.
 
-    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None, throttle=None):
-        self.sys, self.proc, self.experiment, self.throttle = sys, proc, experiment, throttle
+    `clock` is the uptime (BOOTTIME) source: a record that sees it jump by more
+    than RECORD while being taken (a suspend) is dropped, and the next update
+    reports the gap.
+    """
+
+    def __init__(self, directory, sys=Path('/sys'), proc=Path('/proc'), experiment=None, db=None, throttle=None,
+                 clock=uptime):
+        self.sys, self.proc, self.experiment, self.throttle, self.clock = sys, proc, experiment, throttle, clock
         self.log = PowerLog(directory)
         # The power database next to the archive (store.py). Read in any archive
-        # day it has never seen: the first run, or after it was deleted.
+        # day it has never seen (the first run, or after it was deleted) or holds
+        # more records of than the database (a write failed).
         self.db = store.Writer(db or directory.parent / 'power.sqlite3')
         try:
-            if days := store.import_logs(directory, self.db.db):
+            counts = {day: stats['records'] for day, stats in self.log.index['days'].items()}
+            if days := store.import_logs(directory, self.db.db, counts=counts):
                 print(f'waybar-monitor: imported {", ".join(days)} into {self.db.db}', file=stderr)
-        except sqlite3.Error as error:
-            print(f'waybar-monitor: {self.db.db}: {error}', file=stderr)
+        except Exception as error:  # Never a reason not to sample: the archive is still written.
+            print(f'waybar-monitor: {self.db.db}: {type(error).__name__}: {error}', file=stderr)
         self.models_path, self.models_stamp, self.params = directory / 'models.json', None, dict(PRIOR)
         self.refresh_models()
         self.fast, self.idle_states, self.commands = FastSampler(sys), IdleStates(sys), Commands()
@@ -820,8 +990,9 @@ class Monitor:
         self.fast.reset()
 
     def snapshot_counters(self):
-        return {'cpu': cpu_times(self.proc), 'idle': self.idle_states.read(), 'irq': interrupts(self.proc),
-                'net': network(self.sys), 'disk': disks(self.sys)}
+        """Cumulative counters, and the uptime they were read at (their rates' clock)."""
+        return {'at': self.clock(), 'cpu': cpu_times(self.proc), 'idle': self.idle_states.read(),
+                'irq': interrupts(self.proc), 'net': network(self.sys), 'disk': disks(self.sys)}
 
     def battery_state(self):
         battery = self.fast.battery
@@ -837,7 +1008,8 @@ class Monitor:
         return result
 
     def update(self, boot, wall, processes):
-        """`processes`: (pid, start ticks) → (label, cpu seconds, rss bytes, app)."""
+        """`processes`: (pid, start ticks) → (label, cpu seconds, rss bytes, app),
+        scanned just before `boot` and `wall` were read (together: clocks())."""
         self.fast.sample()
         if self.start_boot is None or boot - self.last_boot > RECORD:
             if self.start_boot is not None:
@@ -858,12 +1030,14 @@ class Monitor:
                 elif key[1] / TICKS >= self.last_boot:
                     self.cpu[entry[3]] += entry[1]
         self.cpu_seen = {key: entry[1] for key, entry in processes.items()}
-        self.last_boot = boot
-        mean, peak = cpu_frequency(self.sys)
-        if mean is not None:
-            self.frequencies.append((mean, peak))
+        since, self.last_boot = boot - self.last_boot, boot
+        clock = cpu_frequency(self.sys, own_cpu(self.proc))
+        if clock[0] is not None:
+            self.frequencies.append((since, *clock))
         if boot - self.start_boot >= RECORD:
             record = self.record(boot, wall, processes)
+            if record is None:
+                return self.menu  # Suspended while recording: the next update reports the gap.
             fresh = [(t, v) for t, v in qol.votes() if t > self.voted]
             for t, choice in fresh:
                 self.write({'v': SCHEMA, 'event': 'qol', 't1': t, 'boot': self.boot, 'vote': choice})
@@ -882,10 +1056,14 @@ class Monitor:
         return self.menu
 
     def record(self, boot, wall, processes):
+        """The record ending at `boot`, or None if a suspend began since then."""
         dt = boot - self.start_boot
         power, status = self.fast.take()
         counters = self.snapshot_counters()
         before, self.counters = self.counters, counters
+        # Counter deltas cover their own snapshots' interval: as rates, over dt.
+        span = counters['at'] - before['at']
+        scale = dt / span if span > 0 and abs(span - dt) < RECORD else 1.0
         apps_of = {key: entry[3] for key, entry in processes.items()}
         gpu = self.gpu.sample(boot, processes)
         io = self.io.sample(boot, process_io(self.proc, processes), apps_of)
@@ -901,19 +1079,17 @@ class Monitor:
                 apps[name].update(values)
         apps = {name: {k: rounded(k, v) for k, v in values.items() if v and not (k == 'rss' and v < 1)}
                 for name, values in apps.items()}
-        cpu = subtract(counters['cpu'], before['cpu'])
+        cpu = subtract(counters['cpu'], before['cpu'], scale)
         cpu['busy_s'] = round(sum(cpu.get(k, 0) for k in ('user', 'sys', 'irq', 'steal')), 4)
-        if self.frequencies:
-            cpu['mhz'] = round(sum(f[0] for f in self.frequencies) / len(self.frequencies))
-            cpu['mhz_max'] = round(max(f[1] for f in self.frequencies))
-        cpu['idle'] = subtract(counters['idle'], before['idle'])
-        irq = subtract(counters['irq'], before['irq'])
+        cpu.update(clock_means(self.frequencies))
+        cpu['idle'] = idle_deltas(counters['idle'], before['idle'], scale)
+        irq = subtract(counters['irq'], before['irq'], scale)
         net = {}
-        for name, values in counters['net'].items():
-            delta = subtract(values, before['net'].get(name, {}))
-            if any(delta.values()) or values['state'] == 'up':
-                net[name] = dict(delta, state=values['state'])
-        disk = {name: subtract(values, before['disk'].get(name, {})) for name, values in counters['disk'].items()}
+        for name, delta in device_deltas(counters['net'], before['net'], scale).items():
+            state = counters['net'][name]['state']
+            if any(delta.values()) or state == 'up':
+                net[name] = dict(delta, state=state)
+        disk = device_deltas(counters['disk'], before['disk'], scale)
         slow = self.commands.read(boot)
         shown = display(self.sys)
         if 'niri' in slow:
@@ -923,14 +1099,16 @@ class Monitor:
             system['throttle'] = throttle_state(self.throttle)
         if 'wifi_ps' in slow:
             system['wifi_ps'] = slow['wifi_ps']
-        battery = dict(self.battery_state(), **power.get('bat', {}))
-        self.last_battery = self.battery_state()
+        state = self.battery_state()
+        battery = dict(state, **power.get('bat', {}))
         record = {
             'v': SCHEMA, 't0': round(self.start_wall, 3), 't1': round(wall, 3), 'dt': round(dt, 3),
             'boot': self.boot, 'ac': mains_online(self.sys / 'class/power_supply'), 'status': status,
             'bat': battery, 'soc': power.get('soc', {}),
+            # Engine-seconds over apps, each app capped at the interval (GpuClients),
+            # and the sum at dt: the share of the record the GPU was busy.
             'gpu': {'busy': power.get('gpu_busy', {}).get('w', 0),
-                    **{k: round(sum(a.get(k, 0) for a in apps.values()), 4) for k in ('gpu', 'video')}},
+                    **{k: round(min(dt, sum(a.get(k, 0) for a in apps.values())), 4) for k in ('gpu', 'video')}},
             'cpu': cpu,
             'irq': dict(sorted(((k, v) for k, v in irq.items() if v > 0), key=lambda r: -r[1])[:12]),
             'apps': apps, 'net': net, 'wifi_dbm': wifi_signal(self.proc), 'disk': disk,
@@ -947,6 +1125,9 @@ class Monitor:
             pass
         if (assignment := experiment_assignment(self.experiment, record['t0'], record['t1'])) is not None:
             record['exp'] = assignment
+        if self.clock() - boot > RECORD:
+            return None  # A suspend since `boot`: the readings straddle it; bat_before stays pre-suspend.
+        self.last_battery = state
         return record
 
     def refresh_models(self):
@@ -962,6 +1143,14 @@ class Monitor:
     def write(self, record):
         self.log.write(record)
         self.db.write(record)
+
+    def maintain(self):
+        """Deferred database work, one piece per collector loop once sampling runs:
+        re-read archive days a failed write missed (flushed first), then recompute a
+        day of minutes a migration left stale. Returns whether work remains."""
+        if self.db.missed and self.db.conn is not None:
+            self.log.flush()
+        return self.db.catch_up(self.log.directory)
 
     def close(self):
         self.log.close()
