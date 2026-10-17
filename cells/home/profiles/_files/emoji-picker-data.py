@@ -5,7 +5,8 @@ shows and fuzzy-matches, so it carries every searchable name and keyword.
 
   emoji    Unicode emoji-test.txt (fully-qualified only, no bare components),
            names from the file, keywords from CLDR's English annotations.
-  kaomoji  the hand-made kaomoji.txt, grouped by mood, in file order.
+  kaomoji  the hand-made kaomoji.txt, grouped by mood; each group follows
+           the emoji its header names, so the two are interleaved.
   math     Unicode MathClassEx (what rofimoji's `math` set was built from),
            with its entity and TeX names (rArr, /wedge, /land) as keywords.
 """
@@ -32,6 +33,11 @@ def clean(text):
     return " ".join(text.split())
 
 
+def emoji_key(char):
+    """An emoji with its variation selectors dropped, so ☺ and ☺️ match."""
+    return char.replace("️", "")
+
+
 def cldr_keywords(paths):
     keywords = {}
     for path in paths:
@@ -39,7 +45,7 @@ def cldr_keywords(paths):
             if node.get("type") == "tts" or not node.text:
                 continue
             words = [clean(w) for w in node.text.split("|")]
-            keywords.setdefault(node.get("cp").replace("️", ""), words)
+            keywords.setdefault(emoji_key(node.get("cp")), words)
     return keywords
 
 
@@ -55,17 +61,19 @@ def emoji_entries(test_path, keywords):
             continue
         char, name = m.groups()
         name_words = set(re.findall(r"[\w'-]+", name.lower()))
-        extra = [w for w in keywords.get(char.replace("️", ""), [])
+        extra = [w for w in keywords.get(emoji_key(char), [])
                  if w.lower() != name.lower() and not set(w.lower().split()) <= name_words]
         yield char, name, extra
 
 
 # --- kaomoji ---------------------------------------------------------------
 
-def kaomoji_entries(path):
-    """(kaomoji, mood, keywords) from kaomoji.txt: `## mood · keywords`
-    groups of `kaomoji` lines, each optionally followed by two spaces and
-    keywords of its own. Mistakes fail the build rather than vanish."""
+def kaomoji_groups(path):
+    """{emoji: [(kaomoji, mood, keywords), ...]} from kaomoji.txt:
+    `## emoji mood · keywords` groups of `kaomoji` lines, each optionally
+    followed by two spaces and keywords of its own, plus where each emoji was
+    named. Mistakes fail the build rather than vanish."""
+    groups, where = {}, {}
     mood, group_words, seen = None, [], set()
     for n, line in enumerate(open(path, encoding="utf-8"), 1):
         line = line.rstrip("\n")
@@ -76,11 +84,17 @@ def kaomoji_entries(path):
             sys.exit(f"{path}:{n}: {why}: {line!r}")
 
         if line.startswith("## "):
-            mood, _, words = line[3:].partition(" · ")
+            head, _, words = line[3:].partition(" · ")
+            anchor, _, mood = head.partition(" ")
+            if not mood:
+                fail("expected `## emoji mood · keywords`")
+            anchor = emoji_key(anchor)
+            where.setdefault(anchor, f"{path}:{n}")
+            group = groups.setdefault(anchor, [])
             group_words = [w.strip() for w in words.split(",") if w.strip()]
             continue
         if mood is None:
-            fail("kaomoji before the first `## mood` line")
+            fail("kaomoji before the first `## emoji mood` line")
         if line[0].isspace():
             fail("leading whitespace")
         k, _, own = line.partition("  ")
@@ -92,7 +106,8 @@ def kaomoji_entries(path):
         seen.add(k)
         own_words = [w.strip() for w in own.split(",") if w.strip()]
         # dict.fromkeys drops a word the group already has, keeping order.
-        yield k, mood, list(dict.fromkeys(group_words + own_words))
+        group.append((k, mood, list(dict.fromkeys(group_words + own_words))))
+    return groups, where
 
 
 # --- math ------------------------------------------------------------------
@@ -153,10 +168,13 @@ def main():
             display = WORD_JOINER + display
         out.write(f"{value}\t{display.rstrip()}\n")
 
+    kaomoji, where = kaomoji_groups(args.kaomoji)
     for char, name, extra in emoji_entries(args.emoji_test, cldr_keywords(args.cldr)):
         emit("emoji", char, name, extra)
-    for value, mood, keywords in kaomoji_entries(args.kaomoji):
-        emit("kaomoji", value, mood, keywords)
+        for value, mood, keywords in kaomoji.pop(emoji_key(char), []):
+            emit("kaomoji", value, mood, keywords)
+    for anchor in kaomoji:
+        sys.exit(f"{where[anchor]}: {anchor} is not in the emoji list")
     for char, name, extra in math_entries(args.math_class, unicode_names(args.unicode_data)):
         emit("math", char, name, extra)
 

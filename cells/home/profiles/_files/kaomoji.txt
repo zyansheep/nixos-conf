@@ -1,8 +1,13 @@
 # Kaomoji for emoji-picker (see ../emoji.nix), hand-made and hand-picked.
 #
-# `## mood · keywords` starts a group. Each line under it is one kaomoji,
-# optionally followed by two or more spaces and its own extra keywords. The
-# picker shows and searches `kaomoji  mood · group keywords, own keywords`.
+# `## emoji mood · keywords` starts a group. Each line under it is one
+# kaomoji, optionally followed by two or more spaces and its own extra
+# keywords. The picker shows and searches `kaomoji  mood · group keywords,
+# own keywords`, and lists the group right after its emoji, so kaomoji sit
+# among the emoji they're like instead of after all ~3.9k emoji. That
+# holds in search too: Vicinae gives most matches the same score and keeps
+# list order among equals. Several groups may share an emoji (listed in
+# file order); one that isn't in the emoji list fails the build.
 # A kaomoji may appear only once and may not contain two spaces in a row
 # (the build fails otherwise). Lines starting with `# ` are comments.
 #
@@ -11,356 +16,346 @@
 # (ᵔ ᵕ ˃ ˂ ⁰) shrink to specks, so eyes and mouths use full-size glyphs
 # (^ > < ᴗ ω ▽ ᗜ), and stacked combining marks are avoided.
 
-## happy · smile, glad, cheerful, pleased
+## 😊 happy · smile, glad, cheerful, pleased
+(*^ᗜ^*)  beaming, grin
+(⌒ᴗ⌒)  closed eyes
+( ´ ▽ ` )  open smile
 (˶^ᴗ^˶)  soft, warm
+(◕‿◕✿)  flower
 (｡•ᴗ•｡)  bright
 (◍•ᴗ•◍)  round cheeks
-( ´ ▽ ` )  open smile
-(◕‿◕✿)  flower
 ( ˙꒳˙ )  small, content
-(⌒ᴗ⌒)  closed eyes
-(*^ᗜ^*)  beaming, grin
 
-## joy · delighted, overjoyed, yay, so happy
-(≧▽≦)
+## 😄 joy · delighted, overjoyed, yay, so happy
 ＼(≧▽≦)／  arms up
+(≧▽≦)
+٩(ˊᗜˋ*)و  cheer
+✧◝(^ᗜ^)◜✧  radiant, sparkle
 (๑>ᴗ<)و  fist pump
 ⸜(｡>ᴗ<｡)⸝  arms up
-٩(ˊᗜˋ*)و  cheer
-(ﾉ≧∀≦)ﾉ
-✧◝(^ᗜ^)◜✧  radiant, sparkle
 
-## excited · hyped, eager, can't wait, pumped
-✧*｡٩(ˊᗜˋ*)و✧*｡  sparkles
+## 😆 excited · hyped, eager, can't wait, pumped
 (☆▽☆)  star eyes
 ヽ(◕ヮ◕)ﾉ✧
-⁽⁽◝( •ω• )◜⁾⁾  bouncing, wiggle
 ☆*:.｡.o(≧▽≦)o.｡.:*☆  thrilled
+✧*｡٩(ˊᗜˋ*)و✧*｡  sparkles
 (ﾉ´ヮ`)ﾉ*: ･ﾟ  confetti
+⁽⁽◝( •ω• )◜⁾⁾  bouncing, wiggle
 
-## laughing · lol, haha, lmao, rofl
+## 😂 laughing · lol, haha, lmao, rofl
 (ᗒᗨᗕ)  wheeze
-(≧∇≦)/  haha
 (*≧▽≦)ﾉｼ))  slapping the table
-(ﾉ∀`*)  lol oops
+(≧∇≦)/  haha
 ( ×ᗜ× )  dying laughing, i'm dead
-ヽ(≧∀≦)ﾉ  cackling
 
-## giggle · hehe, tee-hee, snicker, chuckle
-( ´艸｀)  covering mouth
-(*´艸`*)
+## 🤭 giggle · hehe, tee-hee, snicker, chuckle
 (≧◡≦)
+(*´艸`*)
+( ´艸｀)  covering mouth
 (๑>ᴗ<๑)
-(ゝ∀･)  tehe
 
-## content · calm, peaceful, serene, relaxed, at ease
+## ☺️ content · calm, peaceful, serene, relaxed, at ease
 (˘ᴗ˘)
-(っ˘ω˘ς )  cuddly
-( ꈍᴗꈍ)  blissful
-(*´ω｀*)  warm
-(￣▽￣)  satisfied
 (◡ ‿ ◡ ✿)  peaceful
+(っ˘ω˘ς )  cuddly
+(*´ω｀*)  warm
 ( ˘ᴗ˘ )  zen
+( ꈍᴗꈍ)  blissful
+(￣▽￣)  satisfied
 
-## cozy · comfy, snug, warm, blanket
-(¦3[▒▒]  in bed
+## ☕ cozy · comfy, snug, warm, blanket
 ( ˘ᴗ˘ )っ旦~  tea
+(¦3[▒▒]  in bed
 
-## love · adore, heart, affection, ily
-(´｡• ω •｡`)♡
-♡(˶^ᴗ^˶)
+## 🥰 love · adore, heart, affection, ily
 (っ´▽`)っ♡  here's my heart
 ( ˶ˆᗜˆ˵ )♡
+(´｡• ω •｡`)♡
+♡(˶^ᴗ^˶)
 (◍•ᴗ•◍)♡ ✧*。
 (˘ᴗ˘)ʚ♡ɞ  winged heart
 
-## lovestruck · heart eyes, smitten, crush, swoon
+## 😍 lovestruck · heart eyes, smitten, crush, swoon
+( ˶♡ᗜ♡˶ )
 (♡ᴗ♡)
 (♡ω♡ )
 (๑♡⌓♡๑)
-(*♡∀♡)
-( ˶♡ᗜ♡˶ )
 
-## kiss · smooch, mwah, xoxo
+## 😘 kiss · smooch, mwah, xoxo
 ( ˘ ³˘)♡  blow a kiss
 (っ˘з(˘⌣˘ )  kissing
-(˘ε˘)~♡  mwah
 (づ￣ ³￣)づ  kiss attack
+(˘ε˘)~♡  mwah
 (〃ﾟ3ﾟ〃)
 
-## blushing · shy, bashful, embarrassed, flustered
+## 😳 blushing · shy, bashful, embarrassed, flustered
 (〃▽〃)
-(⸝⸝>ᴗ<⸝⸝)
-(⸝⸝˘ᴗ˘⸝⸝)
-(〃´ᴗ`〃)
-(*/ω＼*)  covering face
-(⁄ ⁄•⁄ω⁄•⁄ ⁄)  flustered
-( ˶>﹏<˶ )  squirming
-(〃ω〃)
 (>///<)
+(⸝⸝>ᴗ<⸝⸝)
+(*/ω＼*)  covering face
+(〃ω〃)
+(〃´ᴗ`〃)
+(⸝⸝˘ᴗ˘⸝⸝)
+( ˶>﹏<˶ )  squirming
+(⁄ ⁄•⁄ω⁄•⁄ ⁄)  flustered
 
-## squee · overwhelmed, too cute, can't handle it, fangirl
-(*/▽＼*)  too cute
+## 🥹 squee · overwhelmed, too cute, can't handle it, fangirl
 (˶>ᗜ<˶)
-(ノ*>∀<)ノ♡  fangirling
+(ﾉ>ᗜ<)ﾉ♡  fangirling
+(*/▽＼*)  too cute
 
-## hug · hugs, cuddle, embrace, come here
-(っ´▽`)っ  come here
-⊂(・▽・⊂)
-(つ≧▽≦)つ
+## 🤗 hug · hugs, cuddle, embrace, come here
 (ɔ ˘⌣˘)˘⌣˘ c)  hugging each other
-ʕ っ•ᴥ•ʔっ  bear hug
+(っ´▽`)っ  come here
+(つ≧▽≦)つ
 (っ◕‿◕)っ
-(つ´∀｀)つ  big hug
+⊂(・▽・⊂)
+ʕ っ•ᴥ•ʔっ  bear hug
 
-## cute · aww, adorable, kawaii, uwu, owo
+## 🥰 cute · aww, adorable, kawaii, uwu, owo
+(｡◕‿◕｡)
+(>ω<)  >w<
 (ᴜ ω ᴜ)  uwu
+(っ'ᴗ'c)  squishing cheeks
+(˶>ᴗ<˶)
 (ᴗ ω ᴗ)  uwu
 ( ˘ω˘ )
-(˶>ᴗ<˶)
-(>ω<)  >w<
 (°ω°)  owo
-(｡◕‿◕｡)
-(っ'ᴗ'c)  squishing cheeks
 
-## proud · pride, accomplished, nailed it, did it
+## 😤 proud · pride, accomplished, nailed it, did it
 ( •̀ ω •́ )✧
-✧٩(•́⌄•́๑)و ✧
 (๑•̀ᴗ•́)و ✧
+✧٩(•́⌄•́๑)و ✧
 
-## smug · smirk, heh, superior
+## 😏 smug · smirk, heh, superior
 ( ¬‿¬)
-(￣ω￣)
 (≖‿≖)
 (￢‿￢ )
+(￣ω￣)
 ( ͡° ͜ʖ ͡°)  lenny
 (˵ •̀ ᴗ - ˵ ) ✧  smug wink
 
-## cool · chill, sunglasses, deal with it, swag
+## 😎 cool · chill, sunglasses, deal with it, swag
 (⌐■_■)  deal with it
-( •_•)>⌐■-■  putting on sunglasses
 (⌐■‿■)
-( ´ー`)y-~~  smoking, chilling
+( •_•)>⌐■-■  putting on sunglasses
 ( ･ω･)ｖ  peace sign
+( ´ー`)y-~~  smoking, chilling
 
-## wink · ;), flirty, playful
+## 😉 wink · ;), flirty, playful
+(•ᴗ<)☆
+(◕‿-)♡
 (｡•̀ᴗ-)✧
 (^_~)
-(•ᴗ<)☆
 (ゝω・)☆
-(◕‿-)♡
 ( ͡~ ͜ʖ ͡°)  lenny
 
-## tehe · oops, whoops, teehee, tongue out, bleh, :p
+## 😜 tehe · oops, whoops, teehee, tongue out, bleh, :p
 (๑>ڡ<)☆
-(๑•ᴗ<)ﾉ☆
 (・ω<)☆
-(^ڡ^)  tongue
-(ゝ∀･)⌒☆
+(๑•ᴗ<)ﾉ☆
 (≧ڡ≦*)
+(^ڡ^)  tongue
 (>_<)ゞ  my bad
 
-## silly · goofy, derp, dork, doofy
+## 🤪 silly · goofy, derp, dork, doofy
 (◑‿◐)  derp
 (〜￣▽￣)〜  wiggly
 ( ᐛ )  doofy
-(ﾟ∀ﾟ)
 
-## mischievous · scheming, plotting, devious, evil, hehehe
-(≖ᴗ≖๑)  plotting
+## 😈 mischievous · scheming, plotting, devious, evil, hehehe
 ψ(≖‿≖ )ψ  devil
-(｀∀´)Ψ  mwahaha
+(｀▽´)Ψ  mwahaha
+(≖ᴗ≖๑)  plotting
 ( ¬ᴗ¬ )
 (¬‿¬ )ﾉ⌒✦  ninja star, sneaky
 
-## determined · fighting, motivated, let's go, you got this, ganbatte
+## 😤 determined · fighting, motivated, let's go, you got this, ganbatte
 (๑•̀ㅂ•́)و✧
 ( •̀ᴗ•́ )و
-(｀・ω・´)  serious
 ( •̀ω•́ )✧
+(｀・ω・´)  serious
 (￫_￩)  focused, locked in
 
-## strong · flex, muscle, power, gains, buff
+## 💪 strong · flex, muscle, power, gains, buff
 ᕦ(ò_óˇ)ᕤ
 ᕙ(⇀‸↼‶)ᕗ
-ᕦ( ˘ᴗ˘ )ᕤ  soft flex
 ᕙ( •̀ ᗜ •́ )ᕗ  power
+ᕦ( ˘ᴗ˘ )ᕤ  soft flex
 
-## cheering · yay, hooray, woohoo, go go
+## 🙌 cheering · yay, hooray, woohoo, go go
 ＼(＾▽＾)／
-ヽ(・∀・)ﾉ
-୧(>◡<)୨
 ٩(>ᴗ<)۶
-(ﾉ^ヮ^)ﾉ
 o(≧▽≦)o  go go
+(ﾉ^ヮ^)ﾉ
+୧(>◡<)୨
 
-## celebrating · party, congrats, confetti, hooray
-。*:☆(・ω・人・ω・)。:゜☆。  together
-ヽ(⌐■_■)ノ♪♬  party
+## 🥳 celebrating · party, congrats, confetti, hooray
 (ﾉ´ヮ`)ﾉ*: ･ﾟ✧
+ヽ(⌐■_■)ノ♪♬  party
+。*:☆(・ω・人・ω・)。:゜☆。  together
 ♪(๑ᴖ◡ᴖ๑)♪
 
-## dancing · dance, groove, vibing, boogie
+## 💃 dancing · dance, groove, vibing, boogie
 ♪┏(・o･)┛♪┗( ･o･)┓♪
-~(˘▾˘~) (~˘▾˘)~
-₍₍ ◝(•̀ㅂ•́)◟ ⁾⁾  energetic
 ┌(・。・)┘♪
+~(˘▾˘~) (~˘▾˘)~
 ƪ(˘⌣˘)ʃ  groove
+₍₍ ◝(•̀ㅂ•́)◟ ⁾⁾  energetic
 
-## singing · music, song, la la la, humming
-♪～(￣ε￣)  whistling, innocent
+## 🎤 singing · music, song, la la la, humming
 ヾ(´〇`)ﾉ♪♪♪  singing loudly
-♪ ~ ( ˘ᴗ˘ )  humming
+♪～(￣ε￣)  whistling, innocent
 (˘◡˘ )♫
+♪ ~ ( ˘ᴗ˘ )  humming
 
-## hello · hi, hey, wave, greeting, howdy
-(｡･ω･)ﾉﾞ
+## 👋 hello · hi, hey, wave, greeting, howdy
+(˶^ᴗ^˶)ﾉ ʰⁱ
 ( ´ ▽ ` )ﾉ
+(｡･ω･)ﾉﾞ
 (*・ω・)ﾉ
+( ˙▿˙ )/
 ヾ(•ω•`)o
 |・ω・)ﾉ  peeking
-(˶^ᴗ^˶)ﾉ ʰⁱ
-( ˙▿˙ )/
 
-## goodbye · bye, see you, later, farewell, cya
+## 👋 goodbye · bye, see you, later, farewell, cya
+(ˊᗜˋ)ﾉ ᵇʸᵉ
 ( ˘ᴗ˘ )/~~  waving a hankie
 ( ;ᴗ; )/~~  tearful
 ε=ε=(ノ≧∇≦)ノ  running off
-(ˊᗜˋ)ﾉ ᵇʸᵉ
 
-## good night · goodnight, gn, sleep well, nighty night
-(ᴗ˳ᴗ)ﾉﾞ☾
-(˘ᴗ˘ )ﾉ ᵍⁿ
+## 🌙 good night · goodnight, gn, sleep well, nighty night
 ☾⋆｡°(ᴗ˳ᴗ)ᶻᶻ
+(˘ᴗ˘ )ﾉ ᵍⁿ
+(ᴗ˳ᴗ)ﾉﾞ☾
 
-## sleepy · drowsy, yawn, tired, nodding off
-(´ぅω･`)  rubbing eyes
+## 🥱 sleepy · drowsy, yawn, tired, nodding off
 (￣ο￣)ᶻᶻ  yawn
 (-_-)゜zzz
+(´ぅω･`)  rubbing eyes
 
-## sleeping · asleep, zzz, nap, snooze
-(∪｡∪)｡｡｡zzZ
-( ᴗ_ᴗ)。o○  dreaming
+## 😴 sleeping · asleep, zzz, nap, snooze
 (－ω－) zzZ
+(∪｡∪)｡｡｡zzZ
 (￣ρ￣)..zzZZ  drooling
+( ᴗ_ᴗ)。o○  dreaming
 
-## tired · exhausted, drained, worn out, burnt out, done
+## 😫 tired · exhausted, drained, worn out, burnt out, done
 _(:3 」∠)_  collapsed
-_(┐「ε:)_  flopped
 (´-ω-`)
-(◞‸◟；)
 ( ꒪⌓꒪)  drained
+(◞‸◟；)
 (￣﹏￣；)
+_(┐「ε:)_  flopped
 
-## bored · meh, boring, whatever
+## 🥱 bored · meh, boring, whatever
 ( ˘_˘ )
+( ˙-˙ )
 ( ´_ゝ`)  i see
 (￣～￣)
-( ˙-˙ )
 
-## sad · unhappy, down, upset, sorrow, :(
+## 🙁 sad · unhappy, down, upset, sorrow, :(
 (｡•́︿•̀｡)
-(´• ω •`)
+( ´•︵•` )
 (︶︹︺)
+(´• ω •`)
 (｡ŏ﹏ŏ)
 ( ˘︹˘ )
-( ´•︵•` )
 (´・_・`)
 
-## crying · cry, tears, weep, teary
+## 😢 crying · cry, tears, weep, teary
+(╥﹏╥)
+(ಥ﹏ಥ)
 (╥_╥)
 ( ╥ω╥ )
-(╥﹏╥)
 o(╥﹏╥)o
-(;﹏;)
-(ಥ﹏ಥ)
-(｡T ω T｡)
 (ㅠ﹏ㅠ)
-(ノ_<。)  wiping tears
+(;﹏;)
+(｡T ω T｡)
 (ᗒᗣᗕ)՞  wailing
+(ノ_<。)  wiping tears
 
-## sobbing · bawling, wailing, ugly crying, waaah
+## 😭 sobbing · bawling, wailing, ugly crying, waaah
 (;´༎ຶД༎ຶ`)
-(ㄒoㄒ)
-(つд⊂)  face in hands
-(〒﹏〒)
 .｡･ﾟﾟ･(＞_＜)･ﾟﾟ･｡.
+(ㄒoㄒ)
+(〒﹏〒)
+(つд⊂)  face in hands
 
-## happy tears · touched, moved, emotional, tears of joy
-( ;ᴗ; )
-(;▽;)
-(´；ω；`)
+## 🥲 happy tears · touched, moved, emotional, tears of joy
 (T▽T)
+(;▽;)
+( ;ᴗ; )
+(´；ω；`)
 
-## lonely · alone, isolated
+## 😔 lonely · alone, isolated
 (っ◞‸◟c)  hugging myself
-(´；︵；`)
 (・_・ )…
+(´；︵；`)
 (ᴗ_ ᴗ。)
 
-## needy · need, want, attention, clingy, notice me, i need you, pls
+## 🥺 needy · need, want, attention, clingy, notice me, i need you, pls
 (っ◕︿◕)っ  reaching out
+(｡•́︿•̀｡)っ ⁿᵉᵉᵈ ʰᵘᵍ  need a hug
+(｡ŏ﹏ŏ)っ♡  need love
+( ˘ᴗ˘ )ﾉ ⁿᵒᵗⁱᶜᵉ ᵐᵉ  notice me
 (⊃｡•́‿•̀｡)⊃  clingy
 (つ﹏<。)
-(｡ŏ﹏ŏ)っ♡  need love
-(｡•́︿•̀｡)っ ⁿᵉᵉᵈ ʰᵘᵍ  need a hug
-( ˘ᴗ˘ )ﾉ ⁿᵒᵗⁱᶜᵉ ᵐᵉ  notice me
 ( ･ω･)σ)) ᵖᵒᵏᵉ  poke
 ʕっ´•ᴥ•`ʔっ  bear
 
-## disappointed · let down, dismayed, deflated, :/
+## 😞 disappointed · let down, dismayed, deflated, :/
+(◞‸◟)
 (￣ヘ￣)
 (´-﹏-`；)
-(◞‸◟)
-(ノ_ _)ノ  slumped
 (；一_一)
+(ノ_ _)ノ  slumped
 
-## despair · defeated, giving up, hopeless, kneeling
-orz
+## 😩 despair · defeated, giving up, hopeless, kneeling
 _|￣|○
-(｡ŏ_ŏ)
+orz
 (´；Д；`)
+(｡ŏ_ŏ)
 
-## sorry · apology, apologize, my bad, bow
+## 🙇 sorry · apology, apologize, my bad, bow
+(ᴗ_ᴗ) ˢᵒʳʳʸ
 m(_ _)m  bow
 (シ_ _)シ
 (｡-人-｡)
 m(｡≧ｴ≦｡)m
-(ᴗ_ᴗ) ˢᵒʳʳʸ
 
-## please · begging, pleading, puppy eyes, pretty please, pls
-(｡◕︿◕｡)  puppy eyes
+## 🥺 please · begging, pleading, puppy eyes, pretty please, pls
 (人 ◕︿◕ ) ᵖˡᵉᵃˢᵉ
-(っ✧ω✧)っ  gimme
-(人´∀`*)
+(｡◕︿◕｡)  puppy eyes
 。ﾟ･ (>人<) ･ﾟ｡  begging
+(っ✧ω✧)っ  gimme
 
-## thanks · thank you, grateful, appreciate, ty, thx
+## 🙏 thanks · thank you, grateful, appreciate, ty, thx
+( ˶ˆᗜˆ˵ ) ᵗʰᵃⁿᵏ ʸᵒᵘ
 (人 ˘ᴗ˘ )
 ( ˘ᴗ˘ )っ✿  flower
-( ˶ˆᗜˆ˵ ) ᵗʰᵃⁿᵏ ʸᵒᵘ
 (´｡• ᴗ •｡`) ♡
 
-## giving · gift, for you, here you go, present
+## 🎁 giving · gift, for you, here you go, present
 (っ˘ᴗ˘)っ🍪  cookie
 ( ˘ᴗ˘)っ旦  tea
 ( ˘▽˘)っ♨  hot food
 ( ´ ▽ ` )っ☆  star
 
-## yes · ok, okay, sure, agree, got it, roger, alright
-(｀・ω・´)ゞ  roger, salute
+## 👌 yes · ok, okay, sure, agree, got it, roger, alright
+( ˘ᴗ˘ )ゞ ᵒᵏ
 d(^ᴗ^)b
+(｀・ω・´)ゞ  roger, salute
 ( •̀ ω •́ )b  got it
 ( ´ ▽ ` )ｂ
-( ˘ᴗ˘ )ゞ ᵒᵏ
 
-## no · nope, nah, refuse, denied, reject
+## 🙅 no · nope, nah, refuse, denied, reject
+( •̀ - •́ ) ⁿᵒᵖᵉ
+(￣ε￣)ﾉ ✗  nah
 (¬_¬)乂
 ( ˘ ‸ ˘ )乂  no thanks
-(￣ε￣)ﾉ ✗  nah
-( •̀ - •́ ) ⁿᵒᵖᵉ
 
-## shrug · whatever, idk, dunno, oh well, eh
+## 🤷 shrug · whatever, idk, dunno, oh well, eh
 ¯\_(ツ)_/¯
 ┐(￣ヘ￣)┌
 ╮(︶▽︶)╭
@@ -369,382 +364,396 @@ d(^ᴗ^)b
 ¯\(°_o)/¯  confused
 ʅ(ˊᗜˋ)ʃ
 
-## indifferent · meh, don't care, apathetic, unbothered
+## 😐 indifferent · meh, don't care, apathetic, unbothered
 (￣ー￣)
-( ・_・)
 (ㆆ_ㆆ)
+( ・_・)
 
-## deadpan · unimpressed, blank stare, really, -_-
+## 😑 deadpan · unimpressed, blank stare, really, -_-
 (－_－)
-( ˙_˙ )
-(눈_눈)
 (￣_￣)
-( ._.)
+( ˙_˙ )
 ._.
+( ._.)
 .-.
+(눈_눈)
 
-## disapproval · judging, glare, really, look of disapproval
+## 😒 disapproval · judging, glare, really, look of disapproval
 ಠ_ಠ
-(ಠ‿ಠ)
+(ಠ ‸ ಠ)
 ಠ﹏ಠ
 ┌( ಠ_ಠ)┘  walking away
-(ಠ ‸ ಠ)
+(ಠ‿ಠ)
 
-## suspicious · sus, skeptical, doubtful, side eye, hmm
+## 🤨 suspicious · sus, skeptical, doubtful, side eye, hmm
 (¬_¬ )
+( ⚆ _ ⚆ )
 (￢_￢)
 (｡•ˇ‸ˇ•｡)
-( ⚆ _ ⚆ )
 (；¬_¬)
 
-## eye roll · ugh, whatever, annoyed, sarcastic
+## 🙄 eye roll · ugh, whatever, annoyed, sarcastic
 (◔_◔)
-( ◔ ‿ ◔ )  sarcastic smile
 (◔‸◔)
+( ◔ ‿ ◔ )  sarcastic smile
 (¬_¬")
 
-## confused · huh, what, puzzled, ???, lost
+## 😕 confused · huh, what, puzzled, ???, lost
 (・・?)
-(・_・ヾ  head scratch
 (⊙_◎)  wat
-(◎_◎;)
+(・_・ヾ  head scratch
 (｡･ω･｡)?
+(◎_◎;)
 ( ˙▿˙ )?
 ʕ ·ᴥ·ʔ?
 
-## thinking · hmm, pondering, considering, wondering
+## 🤔 thinking · hmm, pondering, considering, wondering, let me think, thonk
+( ˘ ‸ ˘ ).｡oO(?)  thought bubble
+(╭ರ_•́)  monocle, curious, gentleman
+( ˘ ‸ ˘ ) ʰᵐᵐ…
+(｡-`ω´-)ﾝｰ  nnn, concentrating, thinking hard
+(￣ヘ￣;)ｳｰﾝ  uun, stumped, troubled
+(´-ω-`)ｳｰﾝ…  eyes closed, mulling
+(╭ರ_•́) ⁱⁿᵗᵉʳᵉˢᵗⁱⁿᵍ  monocle, intrigued
 (・_・ )。o○  wondering
+(╭ರ_⊙)  monocle, doubtful
+(-`ω´-)ｳｰﾑ  uumu, considering
+( -_-).｡oO(∑∫∂)  math, calculating
 (￣～￣ )  hmm
-( ˘ ‸ ˘ )  pondering
 (・へ・)  puzzled
+( ˘ ‸ ˘ )  pondering
 
-## daydreaming · dreamy, imagining, wistful
+## 💡 idea · aha, eureka, lightbulb, got it, i know
+(・o・)ﾋﾟｺｰﾝ!  pikoon
+(・ω・)💡
+☝(⌐□_□) ᵘᵐ ᵃᶜᵗᵘᵃˡˡʸ  nerd, akshually, well actually, erm
+
+## 🤯 overthinking · brain fried, overloaded, spiraling, too much
+(@_@)ﾌﾟｼｭｰ  overheating, pushuu
+(◎_◎)ｸﾞﾙｸﾞﾙ  going in circles, guruguru
+
+## 💭 daydreaming · dreamy, imagining, wistful
 ( ˘ᴗ˘ )。o○
-( ´ ▽ ` ).｡ｏ♡  love
 (*˘︶˘*).｡.:*♡
+( ´ ▽ ` ).｡ｏ♡  love
 
-## curious · interested, ooh, intrigued, what's this, owo
-(・o・)  ooh
+## 🧐 curious · interested, ooh, intrigued, what's this, owo
 (⊙ω⊙)
-(ㅇㅅㅇ)
 ( •ᴗ•)?
+(・o・)  ooh
+(ㅇㅅㅇ)
 
-## peeking · peek, lurking, sneaky, behind the wall
-|ω･)
+## 🫣 peeking · peek, lurking, sneaky, behind the wall
 ┬┴┬┴┤･ω･)ﾉ  fence
+|ω･)
 ┬┴┬┴┤(･_├┬┴┬┴  wall
 |д･)  nervous
-|ʘ‿ʘ)╯  creepy
 |_・)  lurking
+|ʘ‿ʘ)╯  creepy
 
-## hiding · hide, covering face, don't look
+## 🙈 hiding · hide, covering face, don't look
 (/ω＼)
 (つ﹏⊂)
 (ノωヽ)  covering eyes
 
-## surprised · wow, oh, gasp, omg, whoa
+## 😮 surprised · wow, oh, gasp, omg, whoa
 (°o°)
-Σ(°ロ°)
-(⊙_⊙)
 w(°ｏ°)w  wow
+Σ(°ロ°)
 ( ˶°ㅁ°) !!
+(⊙_⊙)
 (ﾉﾟ0ﾟ)ﾉ~
 ( °٢° )  awe
 
-## shocked · stunned, horrified, jaw drop, aghast
-Σ(ﾟДﾟ)
+## 😲 shocked · stunned, horrified, jaw drop, aghast
 (ʘᗩʘ')
-(꒪ꇴ꒪|||)  horrified
+Σ(ﾟДﾟ)
+( ⊙ □ ⊙ )
 (￣□￣;)!!
 ∑(O_O；)
-( ⊙ □ ⊙ )
+(꒪ꇴ꒪|||)  horrified
 
-## scared · afraid, fear, terrified, eek, spooked
+## 😨 scared · afraid, fear, terrified, eek, spooked
 ((( ;°Д°)))  shaking
 (｡>﹏<｡)  eek
 (꒪ꇴ꒪ ;)
 ﾟ(ﾟ´Д｀ﾟ)ﾟ
 
-## nervous · anxious, worried, uneasy, sweating, gulp
-(；・∀・)
+## 😰 nervous · anxious, worried, uneasy, sweating, gulp
 (・_・;)
 (๑•﹏•)  worried
 (´°ω°`;)
 (゜ー゜;)
 
-## awkward · uh, cringe, embarrassing, nervous laugh
-(^_^;)
+## 😅 awkward · uh, cringe, embarrassing, nervous laugh
 (￣▽￣;)ゞ  head scratch
-(´∀`;)
+(^_^;)
 (^▽^;)
 (ーー;)
 
-## panic · panicking, freaking out, aaa, flailing, help
-ヽ(ﾟДﾟ)ﾉ
+## 😱 panic · panicking, freaking out, aaa, flailing, help
 ＼(º □ º l|l)/
+ヽ(ﾟДﾟ)ﾉ
 ヽ(°〇°)ﾉ
 (ノ°ο°)ノ  flailing
 
-## angry · mad, grr, upset, cross, irritated
-(｀Д´)
+## 😠 angry · mad, grr, upset, cross, irritated
 (#｀皿´)  gritted teeth
-( •̀ᴖ•́ )  grumpy
-(ꐦ ಠ皿ಠ )
-(ノ｀Д´)ノ
+(｀Д´)
 (╬ Ò﹏Ó)
 ( ◣_◢ )  glare
+(ノ｀Д´)ノ
+(ꐦ ಠ皿ಠ )
+( •̀ᴖ•́ )  grumpy
 
-## rage · furious, livid, fury, seething
+## 😡 rage · furious, livid, fury, seething
 ٩(╬ʘ益ʘ╬)۶
+(◣益◢)
 ヽ(#`Д´)ﾉ
 (ﾉಥ益ಥ)ﾉ  crying
-(◣益◢)
 ヽ(｀⌒´メ)ノ
 (╬≖_≖)  seething
 
-## annoyed · irritated, ugh, tsk, bothered
+## 😒 annoyed · irritated, ugh, tsk, bothered
 (－_－#)
-( ` ᴖ ´ )
-(｀へ´)
 (ꐦ¬_¬)
-( ´ Д ` )=3  ugh
+(｀へ´)
+( ´ Д ` )˙·.˳  ugh
+( ` ᴖ ´ )
 
-## pouting · pout, sulking, hmph, huff, grumpy
+## 🙎 pouting · pout, sulking, hmph, huff, grumpy
+( ｀ε´ )
 (￣^￣)  hmph
 (๑•́ ₃ •̀๑)
-( ｀ε´ )
 (＞へ＜)  sulking
 (〃￣^￣)  tsundere
 
-## frustrated · argh, stressed, gah, overwhelmed, fed up
-(@_@;)  overwhelmed
+## 😖 frustrated · argh, stressed, gah, overwhelmed, fed up
 o(｀ω´ )o  fists
 (ノ°益°)ノ
 (；￣Д￣)  fed up
+(@_@;)  overwhelmed
 
-## table flip · flip, rage quit, flip the table
+## 🤬 table flip · flip, rage quit, flip the table
 (╯°□°）╯︵ ┻━┻
 (ノಠ益ಠ)ノ彡┻━┻
 ┻━┻ ︵ヽ(`Д´)ﾉ︵ ┻━┻  double
-(╯ ˘ᴗ˘ )╯︵ ┻━┻  calm
 (ﾉ≧∇≦)ﾉ ﾐ ┸━┸  happy
+(╯ ˘ᴗ˘ )╯︵ ┻━┻  calm
 ʕノ•ᴥ•ʔノ ︵ ┻━┻  bear
 (╯°Д°)╯︵ /(.□ . \)  flip a person
 
-## table restore · unflip, put it back, calm down, respect tables
+## 🤬 table restore · unflip, put it back, calm down, respect tables
 ┬─┬ノ( º _ ºノ)
 (ヘ･_･)ヘ┳━┳
 ┬─┬ノ( ˘ᴗ˘ ノ)  gently
 
-## facepalm · smh, seriously, why, ugh
+## 🤦 facepalm · smh, seriously, why, ugh
 (－‸ლ)
 (ლ‸－)
 (／。＼)
 ლ(ಠ_ಠ ლ)  why
 
-## sigh · phew, exhale, haah
-( ´ー`)=3
-(´-ω-`)=3
-(；´Д`)=3
-(´Д`)ﾊｧ…  haa
-(－_－)=3  deadpan
-( ˘ ³˘)=3  long exhale
-(´ヘ`;)=3  troubled
-(ᴗ_ᴗ)=3  tired
-(◞‸◟)=3  disappointed
-( ´ー`)=3=3  big sigh
+## 😮‍💨 sigh · phew, exhale, haah
 ( ´ー`) ˢⁱᵍʰ
-(￣ε￣)=3  huff
+( ´ー`)˙·.˳
+(´-ω-`)~˳
+( ˘ ³˘)~~˳  long exhale
+(´ヘ`;)˙·.˳  troubled
+( ´ー`)˙·.˳ ˙·.˳  big sigh
+(；´Д`)˙·.˳
+(´Д`)ﾊｧ…  haa
+(ᴗ_ᴗ)ﾌｩ…  tired, fuu
+(◞‸◟)…  disappointed
+(－_－)…  deadpan
+(￣ε￣)~˳  huff
 
-## resigned · it is what it is, oh well, welp, can't be helped, sweat smile, such is life, nothing to be done, this is fine
-(˘ᴗ˘;)
-( ´ ᴗ ` ;)  gentle
-(^ᴗ^;)
-(⌒_⌒;)
-(⌒ᴗ⌒;)ゞ  head scratch
-(;^ω^)  troubled smile
-(^^;)
-(￣ー￣;)
+## 😅 resigned · it is what it is, oh well, welp, can't be helped, sweat smile, such is life, nothing to be done, this is fine
+( ˘ᴗ˘ ) ⁱᵗ ⁱˢ ʷʰᵃᵗ ⁱᵗ ⁱˢ
 ╮(￣▽￣;)╭  shrug
+( ´ ᴗ ` ;) ᵒʰ ʷᵉˡˡ
+(^ᴗ^;)
+🔥(˘ᴗ˘;)旦🔥  this is fine
+(￣▽￣;)ﾉ ʷᵉˡᵖ
 ┐(˘ᴗ˘;)┌  shrug
 ┐(´ー`;)┌  shrug
 ¯\_(ツ;)_/¯  shrug
-( ˘_˘ )…  thousand-yard stare
-🔥(˘ᴗ˘;)旦🔥  this is fine
+(⌒ᴗ⌒;)ゞ  head scratch
+(⌒_⌒;)
+(˘ᴗ˘;)
+( ´ ᴗ ` ;)  gentle
+(;^ω^)  troubled smile
+(^^;)
+(￣ー￣;)
 (^ᴗ^;) ᵃʰᵃʰᵃ  dry laugh
-(￣▽￣;)ﾉ ʷᵉˡᵖ
-( ´ ᴗ ` ;) ᵒʰ ʷᵉˡˡ
-( ˘ᴗ˘ ) ⁱᵗ ⁱˢ ʷʰᵃᵗ ⁱᵗ ⁱˢ
+( ˘_˘ )…  thousand-yard stare
 
-## relieved · phew, relief, finally, saved, close call
-(￣▽￣)=3
-( ˘ᴗ˘ )=3
+## 😌 relieved · phew, relief, finally, saved, close call
+(￣▽￣)~˳
+( ´ー`;)ﾌｩ…  close call, fuu
+( ˘ᴗ˘ )ﾎｯ  hotto
 ヽ(´ー`)ﾉ  carefree
-(´∀｀；)=3  close call
 
-## approval · thumbs up, good job, well done, nice, satisfied
+## 👍 approval · thumbs up, good job, well done, nice, satisfied
 d(￣▽￣)b
-( ･ω･)b
 (￣ー￣)ｂ  nailed it
+( ･ω･)b
 ( ˙▿˙ )b
 
-## headpat · pat pat, there there, comfort, it's okay
+## 🫂 headpat · pat pat, there there, comfort, it's okay
 (´・ω・)ﾉ(._.`)
-( ˘ᴗ˘ )ﾉ(._.`)
 (っ´ω`)ﾉ(╥ω╥)  comforting
+( ˘ᴗ˘ )ﾉ(._.`)
 
-## friends · together, buddies, besties, holding hands, high five
+## 🧑‍🤝‍🧑 friends · together, buddies, besties, holding hands, high five
 (*´・ω・)人(・ω・`*)
 (˶^ᴗ^˶)ﾉ☆ヽ(˶^ᴗ^˶)  high five
 (・ω・人・ω・)
-ヽ(・∀・)ﾉヽ(・∀・)ﾉ
 
-## pointing · you, this, look, finger guns, ayy
-(☞ﾟ∀ﾟ)☞  finger guns
-(☞ ᐛ )☞  finger guns
-(σ･∀･)σ  you!
-☜(˚▽˚)☞
+## 👉 pointing · you, this, look, finger guns, ayy
+(☞ﾟヮﾟ)☞  finger guns
+(σ･ω･)σ  you!
 ( ･ω･)☞  this
+(☞ ᐛ )☞  finger guns
+☜(˚▽˚)☞
 
-## running · run, flee, escape, hurry, zoom, dash
+## 🏃 running · run, flee, escape, hurry, zoom, dash
 ε=ε=ε=┌(;ﾟﾛﾟ)┘  fleeing
 ε=┌( ≧▽≦)┘  happy
-三三ᕕ( ᐛ )ᕗ  zoom
 ε=ε=┌( >_<)┘  embarrassed
+三三ᕕ( ᐛ )ᕗ  zoom
 
-## walking · stroll, skip, carefree, strut
+## 🚶 walking · stroll, skip, carefree, strut
 ᕕ( ᐛ )ᕗ  happy walk
 ヽ( ˘ ³˘)ﾉ ♪  strolling
 ┏( ˘ᴗ˘ )┛
 
-## hungry · food, eat, yummy, delicious, drool, nom, starving
+## 😋 hungry · food, eat, yummy, delicious, drool, nom, starving
 (*´﹃｀*)  drool
 (っ˘ڡ˘ς)  yummy
 (๑´ڡ`๑)  licking lips
 
-## drinking · tea, coffee, sip, cheers
-( ˘ ³˘)旦  sip
-(*￣▽￣)旦 且_(゜▽゜*)  tea for two
-( ´ ▽ ` )ﾉ凵  mug
+## 🍻 drinking · tea, coffee, sip, cheers
 (^ᗜ^)ノ凵☆凵ヽ(^ᗜ^)  cheers, toast
+( ˘ ³˘)旦  sip
+( ´ ▽ ` )ﾉ凵  mug
+(*￣▽￣)旦 且_(゜▽゜*)  tea for two
 
-## sick · ill, unwell, cold, flu, nauseous, fever
+## 🤒 sick · ill, unwell, cold, flu, nauseous, fever
 ( ˘ ▭ ˘ )  mask
 (꒪ཀ꒪)  nauseous
 (＿＿；)
 
-## hurt · ow, ouch, pain, bonk
+## 🤕 hurt · ow, ouch, pain, bonk
 (>_<)
 (×_×)⌒☆  bonk
 (ﾉ_<)
 (〃＞＿＜;〃)
 
-## dead · ded, ko, rip, game over
+## 💀 dead · ded, ko, rip, game over
 (×_×)
 (x_x)
 (✕╭╮✕)
 
-## dizzy · dazed, woozy, spinning, drunk
+## 😵‍💫 dizzy · dazed, woozy, spinning, drunk
 (@_@)
 (+_+)  dazed
-~(@ ∀ @)~  drunk
+~(@▽@)~ﾋｯｸ  drunk, hic
 
-## crazy · unhinged, chaos, feral, gremlin, wild
-(☉∀☉)
-ヽ(ﾟ∀ﾟ)ﾉ
-(◑∀◐)
+## 🤪 crazy · unhinged, chaos, feral, gremlin, wild
+(◑ᗜ◐)
 ᕕ(☉ᗜ☉)ᕗ  gremlin
+ヽ(◎ᗜ◎)ﾉ
 
-## magic · spell, wizard, sparkle, poof, abracadabra
+## 🪄 magic · spell, wizard, sparkle, poof, abracadabra
 (∩^ᗜ^)⊃━☆ﾟ.*･｡ﾟ
 (∩｀-´)⊃━☆ﾟ.*･｡ﾟ
-(ﾉ>ω<)ﾉ ･ﾟ✧*:･ﾟ✧
 (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧  sparkles
+(ﾉ>ω<)ﾉ ･ﾟ✧*:･ﾟ✧
 
-## starstruck · amazed, star eyes, sparkly, in awe, fan
+## 🤩 starstruck · amazed, star eyes, sparkly, in awe, fan
 (✪ω✪)
-(✧ω✧)
 (☆ω☆)
-(๑✧◡✧๑)
 ＼(☆o☆)／
+(๑✧◡✧๑)
+(✧ω✧)
 
-## writing · notes, studying, homework, taking notes
-φ(・ω・ )
-φ(..)
+## ✍️ writing · notes, studying, homework, taking notes
 __φ(．．)
-〆(・∀・＠)
+φ(..)
+φ(・ω・ )
 φ(￣ー￣ )
 
-## working · busy, typing, grinding, on it, productive
+## 💻 working · busy, typing, grinding, on it, productive
 ψ(._. )>  working on it
 ε=ε=┏( ・_・)┛  rushing
 
-## money · rich, cash, $$$, profit, stonks
+## 🤑 money · rich, cash, $$$, profit, stonks
 ($ᗜ$)
 ($_$)
 
-## fight · fight me, punch, attack, bring it, weapon
+## 👊 fight · fight me, punch, attack, bring it, weapon
 (ง •̀_•́)ง  fight me
 ─=≡Σ((( つ•̀ω•́)つ  charge
 ( •̀ᴗ•́ )︻デ═一  gun
 ( ˘ᴗ˘ )︻デ═一  calm
 
-## rude · middle finger, flip off, screw you
+## 🖕 rude · middle finger, flip off, screw you
+凸(｀⌒´メ)凸
 凸(￣ヘ￣)
 ( ︶︿︶)_╭∩╮
-凸(｀⌒´メ)凸
 
-## innocent · who me, angel, not me, nothing to see here
-ଘ( ˘ᴗ˘ )੭  angel
+## 😇 innocent · who me, angel, not me, nothing to see here
 (◕ᴗ◕ )σ?  who me
 (っ´ω`c)
+ଘ( ˘ᴗ˘ )੭  angel
 
-## guilty · ashamed, regret, shame
+## 😓 guilty · ashamed, regret, shame
 (꒪﹏꒪;)
 (・・;)ゞ
 
-## jealous · envious, jelly, envy
+## 😒 jealous · envious, jelly, envy
 (¬ε¬ )
 (￣ε￣＠)
 
-## sarcastic · yeah right, sure, totally, ok buddy
+## 🙃 sarcastic · yeah right, sure, totally, ok buddy
 (ㆆ ᴗ ㆆ)  fake smile
 ( ¬ ▽ ¬ )
 
-## praying · pray, hope, fingers crossed, wish, bless
+## 🙏 praying · pray, hope, fingers crossed, wish, bless
 (-人-)
 ✧( ˘ᴗ˘人)  wishing
 人(_ _*)
 
-## victory · win, winning, gg, peace sign
-(˘ᴗ˘ )ゞ ᵍᵍ
-(￣▽￣)ｖ
+## ✌️ victory · win, winning, gg, peace sign
 V(˘ᴗ˘)V
+(￣▽￣)ｖ
+(˘ᴗ˘ )ゞ ᵍᵍ
 
-## cat · kitty, kitten, neko, meow, nya
-≽^•⩊•^≼
-₍^. .^₎⟆
-/ᐠ - ˕ -マ  sleepy
-ฅ^•ﻌ•^ฅ
+## 😺 cat · kitty, kitten, neko, meow, nya
 (=^･ω･^=)
+ฅ^•ﻌ•^ฅ
+≽^•⩊•^≼
+ฅ(^•ω•^ฅ)  paws
 (=⌒‿‿⌒=)  happy
 (=^･ω･^)y＝  cool, smoking
 (=ↀωↀ=)  big eyes
-ᓚᘏᗢ  sitting
 (=｀ω´=)  angry
 (=ＴωＴ=)  crying
 (=˘ω˘=)zzZ  sleeping
-ฅ(^•ω•^ฅ)  paws
+ᓚᘏᗢ  sitting
+₍^. .^₎⟆
+/ᐠ - ˕ -マ  sleepy
 /ᐠ｡ꞈ｡ᐟ\
 
-## dog · puppy, doggo, woof
+## 🐶 dog · puppy, doggo, woof
+▼・ᴥ・▼
+U^ｪ^U
 ૮ ・ﻌ・ა
 ૮(^ᴗ^)ა  happy
-U^ｪ^U
-▼・ᴥ・▼
 ∪･ω･∪
 
-## bear · teddy
+## 🐻 bear · teddy
 ʕ•ᴥ•ʔ
 ʕ ^ᴥ^ ʔ  happy
 ʕ ꈍᴥꈍʔ  content
@@ -754,19 +763,19 @@ U^ｪ^U
 ʕ•̀ω•́ʔ✧  determined
 ʕ •ᴥ•ʔゝ☆  wink
 
-## bunny · rabbit, bun
-／(•ㅅ•)＼
+## 🐰 bunny · rabbit, bun
 ∩(•ㅅ•)∩  ears up
+／(•ㅅ•)＼
 (ᐢ•ﻌ•ᐢ)
 (ᐢ˶•ᴗ•˶ᐢ)  happy
 
-## bird · birb, chick, tweet
+## 🐤 bird · birb, chick, tweet
 (・θ・)
 ʚ(•Θ•)ɞ  flapping
 (◉Θ◉)  owl
 ⋛⋋( ՞ਊ ՞)⋌⋚  angry
 
-## critters · animal
+## 🐾 critters · animal
 <゜)))彡  fish
 ><((((ﾟ>  fish
 ( ´(00)` )  pig
@@ -774,16 +783,16 @@ U^ｪ^U
 ᗧ···ᗣ···ᗣ··  pac-man, ghosts
 
 # Kept last, so they only turn up when searched for.
-## horny · thirsty, aroused, lewd, frisky, nsfw
+## 🥵 horny · thirsty, aroused, lewd, frisky, nsfw
+(〃≖ᴗ≖〃) ʰᵒʳⁿʸ
 (*´Д`)ﾊｧﾊｧ  panting
+(˵ ͡° ͜ʖ ͡°˵)  blushing lenny
 (〃´ω`〃)ﾊｧﾊｧ  panting
 (〃ﾟ﹃ﾟ〃)  thirsty, drooling
-(˵ ͡° ͜ʖ ͡°˵)  blushing lenny
-(〃≖ᴗ≖〃) ʰᵒʳⁿʸ
 ( ͡°( ͡° ͜ʖ( ͡° ͜ʖ ͡°)ʖ ͡°) ͡°)  lenny army
 (｀ω´)ノ⌒☆ ᵍᵒ ᵗᵒ ʰᵒʳⁿʸ ʲᵃⁱˡ  bonk, horny jail
 
-## innuendo · suggestive, wink wink, nudge nudge, dirty joke, nsfw
+## 🍆 innuendo · suggestive, wink wink, nudge nudge, dirty joke, nsfw
 ( ͡° ͜ʖ ͡°)👉👌
 ( ͡~ ͜ʖ ͡°)ﾉ ʷⁱⁿᵏ ʷⁱⁿᵏ
 (￣ー￣)σ ⁿᵘᵈᵍᵉ ⁿᵘᵈᵍᵉ
@@ -795,7 +804,7 @@ U^ｪ^U
 [▒▒▒] ᶜʳᵉᵃᵏ ᶜʳᵉᵃᵏ  bed creaking
 (〃>﹏<〃)~♡ ᵃʰⁿ  moaning
 
-## explicit · nsfw, sex, body, dirty
+## 🍑 explicit · nsfw, sex, body, dirty
 ( . Y . )  boobs, tits
 ( . )( . )  boobs, tits
 ( ‿ˠ‿ )  butt, ass
