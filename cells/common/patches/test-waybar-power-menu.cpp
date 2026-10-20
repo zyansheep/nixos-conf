@@ -30,11 +30,15 @@ int main() {
   std::ofstream(snapshot) << R"({"timestamp": 1000, "battery": {
     "title": "Battery use", "footer": "Power log: 3 samples", "rows": [
     {"name": "Floorp", "value": "4.0 W"}, 3, {"name": "Niri"},
+    {"name": "Idle chip", "value": "8.2 W", "parts": [{"name": "Memory & I/O links", "value": "3.0 W"}, 4,
+      {"name": "Cores & graphics"}]},
     {"name": "Display", "value": "0.5 W"}]}})";
   const auto use = waybar::powerMenuBattery(snapshot, 1005, 5);
   assert(use.title == "Battery use" && use.footer == "Power log: 3 samples");
-  assert(use.rows.size() == 2 && use.rows[0].first == "Floorp" &&
-         use.rows[1].second == "0.5 W");
+  assert(use.rows.size() == 3 && use.rows[0].name == "Floorp" && use.rows[0].parts.empty() &&
+         use.rows[2].value == "0.5 W");
+  assert(use.rows[1].parts.size() == 1 && use.rows[1].parts[0].first == "Memory & I/O links" &&
+         use.rows[1].parts[0].second == "3.0 W");
   assert(waybar::powerMenuBattery(snapshot, 1005, 1).rows.size() == 1);
   assert(waybar::powerMenuBattery(snapshot, 1010).title.empty());  // stale
   std::ofstream(snapshot) << R"({"timestamp": 1000, "cpu": []})";   // older collector

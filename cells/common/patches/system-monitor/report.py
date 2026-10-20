@@ -52,7 +52,7 @@ GROUPS = [
                           'aw-', 'xdg-', 'swaylock', 'awww', 'wl-')),
 ]
 APP_GROUPS = [name for name, _ in GROUPS] + ['Other apps']
-CATEGORIES = ['Processor baseline', 'Rest of system', 'Display'] + APP_GROUPS
+IDLE = power.IDLE
 DEVICES = (('Display', 'bl'), ('Wi-Fi', 'wifi'), ('Storage', 'disk'), ('USB devices', 'usb'),
            ('Audio', 'audio'), ('Keyboard backlight', 'kbd'))
 CHIP_TERMS = ('floor', 'load', 'clock', 'gpu', 'video', 'clock_active')
@@ -146,6 +146,7 @@ MIN_ROWS = 20  # Battery minutes a fit needs; with fewer, fit_rows keeps the las
 IDLE_MINUTES = 30  # Minutes of a profile (on battery, or on AC) to learn its own idle clock.
 STATE_MINUTES = 30  # Battery minutes in each state for a setting to get its own model column.
 ACTIVE_MINUTES = 120  # Battery minutes with the active cores' clock (store layout 9) before the model uses it.
+RAIL_MINUTES = 30  # Battery minutes with the chip's rails (store layout 10) before the idle chip is split by them.
 
 
 def profile_of(m):
@@ -322,9 +323,35 @@ def fit_rows(rows, previous=None, minutes=None):
     yours = own_settings(source, top) if any(not m.get('exp') for m in source if m.get('set')) else None
     spec.update({f'own:{n}': float(yours[n]) if yours else on[n] / len(rows) for n in levers})
     model = dict(fit(*design(rows, spec), levers=levers), **spec)
+    model.update(rail_shares(rows, model))
     model.update(rows=float(len(rows)), experiment_rows=float(sum(1 for m in rows if m.get('exp'))),
                  active_rows=float(len(active)), t0=float(rows[0]['t']), t1=float(rows[-1]['t']), kept=0.0, prior=0.0)
     return model
+
+
+def rail_shares(rows, model):
+    """How the idle chip divides between the chip's rails (power.chip_rails):
+    {'rail:<rail>': share} (summing to 1) and 'rail_rows', or {} with fewer than
+    RAIL_MINUTES rows that measured them. Each rail is fitted on the chip
+    model's columns (design), and its idle part is its prediction where the
+    chip's baseline is: no load, GPU or video, the idle clock, your settings.
+    The rails add up to the chip, so their fits add up to the chip's fit.
+    Settings that never changed within these rows are left out (their
+    columns would be the intercept's)."""
+    rows = [m for m in rows if m.get('vdd') is not None and m.get('fabric') is not None]
+    if len(rows) < RAIL_MINUTES:
+        return {}
+    x = design(rows, model)[0]
+    y = np.array([[m['vdd'], m['soc'] - m['vdd'] - m['fabric'], m['fabric']] for m in rows])
+    point = np.zeros(x.shape[1])
+    point[0], point[CHIP_TERMS.index('clock')] = 1.0, model['idle_ghz']  # Active clock: at its idle, 0.
+    varies = np.r_[True, x[:, 1:].std(axis=0) > 1e-9]
+    coef = np.linalg.lstsq(x[:, varies], y, rcond=None)[0]
+    idle = dict(zip(('cores', 'links', 'fabric'), np.maximum(0.0, point[varies] @ coef)))
+    total = sum(idle.values())
+    if total <= 0:
+        return {}
+    return {**{f'rail:{rail}': float(idle[rail] / total) for rail in power.RAILS}, 'rail_rows': float(len(rows))}
 
 
 def setting_watts(m, model):
@@ -347,11 +374,13 @@ def typical_power(rows, model):
 
 
 def attribute(m, model):
-    """Watts for one minute: {'groups': {category: W}, 'apps': {app: W}, 'devices': {device: W}}."""
+    """Watts for one minute: {'groups': {category: W}, 'apps': {app: W},
+    'devices': {device: W}, 'idle': {part: W}} ('idle': the IDLE group's
+    parts, power.idle_parts)."""
     soc = m.get('soc')
     groups, apps, devices = collections.defaultdict(float), collections.defaultdict(float), {}
     if soc is None:
-        return {'groups': groups, 'apps': apps, 'devices': devices}
+        return {'groups': groups, 'apps': apps, 'devices': devices, 'idle': {}}
     on_battery = m['st'] == 'D' and m.get('bat') is not None
     k = model['chip'] if on_battery else 1.0
     if on_battery and soc > 0:
@@ -377,7 +406,8 @@ def attribute(m, model):
             watts = k * (soc - floor) * weight / total
             apps[name] += watts
             groups[group_of(name)] += watts
-    groups['Processor baseline'] += k * floor
+    groups[IDLE] += k * floor
+    idle = power.idle_parts(model, floor, k)
     if on_battery:
         rest = m['bat'] - k * soc
         parts = {name: model[term] * (m.get(term) or 0) for name, term in DEVICES}
@@ -386,7 +416,7 @@ def attribute(m, model):
         devices = {name: watts * shrink for name, watts in parts.items() if watts * shrink > 0.005}
         groups['Display'] += devices.get('Display', 0)
         groups['Rest of system'] += max(0.0, rest - modelled) + sum(w for n, w in devices.items() if n != 'Display')
-    return {'groups': groups, 'apps': apps, 'devices': devices}
+    return {'groups': groups, 'apps': apps, 'devices': devices, 'idle': idle}
 
 
 # --- What-if runtime ------------------------------------------------------------
@@ -1613,11 +1643,11 @@ def sleep_runtime(sleeps, energy_wh, z=1.2816, model=None):
 # --- Timeline --------------------------------------------------------------------
 
 def timeline(minutes, model):
-    """Per-minute stacks: [{'t', 'st', 'groups', 'apps', 'devices', 'bat', 'pct'}]."""
+    """Per-minute stacks: [{'t', 'st', 'groups', 'apps', 'devices', 'idle', 'bat', 'pct'}]."""
     out = []
     for m in minutes:
         parts = attribute(m, model)
         out.append({'t': m['t'], 'st': m['st'], 'groups': dict(parts['groups']), 'apps': dict(parts['apps']),
-                    'devices': parts['devices'], 'bat': m.get('bat'), 'soc': m.get('soc'),
+                    'devices': parts['devices'], 'idle': parts['idle'], 'bat': m.get('bat'), 'soc': m.get('soc'),
                     'pct': m.get('pct'), 'bl': m.get('bl'), 'exp': m.get('exp')})
     return out

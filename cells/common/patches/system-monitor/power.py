@@ -124,6 +124,33 @@ def find_gpu_busy(sys):
     return next(iter(sorted(sys.glob('class/drm/card*/device/gpu_busy_percent'))), None)
 
 
+def find_metrics(sys):
+    return next(iter(sorted(sys.glob('class/drm/card*/device/gpu_metrics'))), None)
+
+
+RAIL_OFFSET = 44  # gpu_metrics v2.x: average_soc_power, then average_gfx_power (uint16 mW each).
+
+
+def chip_rails(path):
+    """(VDD rail W, SoC rail W) from amdgpu's gpu_metrics (format 2, the APUs'),
+    or None. On this chip (SMU 13.0.4) the table's soc and gfx power fields are
+    its two measured rails: VDDCR_VDD, which feeds the CPU cores and graphics,
+    and VDDCR_SOC, the data fabric, memory controller, display and video engines
+    and I/O hub. Package power (PPT) less both is the rest: memory and I/O
+    interfaces, mostly (it rises with memory traffic)."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return None
+    if len(data) < RAIL_OFFSET + 4 or data[2] != 2:
+        return None
+    soc = int.from_bytes(data[RAIL_OFFSET:RAIL_OFFSET + 2], 'little')
+    vdd = int.from_bytes(data[RAIL_OFFSET + 2:RAIL_OFFSET + 4], 'little')
+    if 0xFFFF in (soc, vdd):  # Not reported.
+        return None
+    return vdd / 1000, soc / 1000
+
+
 class FastSampler:
     """Battery and chip power several times per record; the EC updates about 1 Hz.
 
@@ -134,9 +161,10 @@ class FastSampler:
     def __init__(self, sys=Path('/sys')):
         self.supplies = sys / 'class/power_supply'
         self.find = {'battery': lambda: find_battery(self.supplies), 'chip': lambda: find_chip(sys),
-                     'gpu_busy': lambda: find_gpu_busy(sys)}
+                     'gpu_busy': lambda: find_gpu_busy(sys), 'metrics': lambda: find_metrics(sys)}
         self.misses = collections.Counter()
-        self.battery, self.chip, self.gpu_busy = (self.find[name]() for name in ('battery', 'chip', 'gpu_busy'))
+        self.battery, self.chip, self.gpu_busy, self.metrics = (
+            self.find[name]() for name in ('battery', 'chip', 'gpu_busy', 'metrics'))
         self.reset()
 
     def reset(self):
@@ -166,6 +194,9 @@ class FastSampler:
             self.values['soc'].append(value / 1e6)
         if (busy := self.path('gpu_busy')) is not None and self.got('gpu_busy', value := number(busy)) is not None:
             self.values['gpu_busy'].append(value)
+        if (metrics := self.path('metrics')) is not None and self.got('metrics', rails := chip_rails(metrics)):
+            self.values['vdd'].append(rails[0])
+            self.values['fabric'].append(rails[1])
 
     def take(self):
         result = {name: {'w': round(sum(v) / len(v), 3), 'min': round(min(v), 3),
@@ -643,14 +674,40 @@ PRIOR = {'floor': 3.0, 'load': 0.12, 'clock': 3.0, 'idle_ghz': 1.0, 'gpu': 5.0, 
          'base': 0.5, 'chip': 1.3, 'bl': 3.0, 'wifi': 0.3, 'disk': 2.0, 'usb': 0.3, 'audio': 0.5, 'kbd': 0.3}
 
 
+# The chip's draw with nothing running, at its idle clock: the floor and the
+# clock term up to the idle clock (clock_split), at k per chip watt on battery.
+# Split by the chip's measured rails once report.fit_rows has learned their
+# shares of it ('rail:<rail>', power.chip_rails); the battery's watts beyond the
+# chip's (k − 1 per chip watt: voltage conversion, and board parts whose draw
+# follows the chip's) are power delivery.
+IDLE = 'Idle chip'
+IDLE_PARTS = (('links', 'Memory & I/O links'), ('fabric', 'Fabric & display engine'), ('cores', 'Cores & graphics'))
+DELIVERY = 'Power delivery & board'
+RAILS = tuple(rail for rail, _ in IDLE_PARTS)
+
+
+def idle_parts(params, chip, scale):
+    """The idle chip's `chip` W (or J) at `scale` battery W per chip W as
+    {part: amount}: the rails' shares of it and power delivery, or {IDLE: all}
+    until the shares are learned. The parts sum to scale × chip."""
+    shares = [params.get(f'rail:{rail}') for rail in RAILS]
+    if any(share is None for share in shares):
+        return {IDLE: scale * chip}
+    parts = {label: chip * min(1.0, scale) * share for (_, label), share in zip(IDLE_PARTS, shares)}
+    if scale > 1:
+        parts[DELIVERY] = chip * (scale - 1)
+    return parts
+
+
 def load_attribution(path):
     """Trained attribution parameters from battery-eta's models.json, or None:
-    PRIOR's keys and the idle clocks report.fit_rows learned (each profile's
-    'idle_ghz:<profile>[:ac]', and 'idle_ghz_active')."""
+    PRIOR's keys, the idle clocks report.fit_rows learned (each profile's
+    'idle_ghz:<profile>[:ac]', and 'idle_ghz_active') and the idle chip's
+    rail shares ('rail:<rail>')."""
     try:
         data = json.loads(Path(path).read_text())
         return {**PRIOR, **{k: float(v) for k, v in data['attribution'].items()
-                            if k in PRIOR or k.startswith('idle_ghz')}}
+                            if k in PRIOR or k.startswith(('idle_ghz', 'rail:'))}}
     except (OSError, ValueError, KeyError, TypeError, AttributeError):
         return None
 
@@ -699,8 +756,9 @@ def attribute(record, params):
     On battery each chip watt is scaled by the model's per-chip-watt cost (k),
     so apps carry their share of conversion losses; on AC only chip power is
     known. `params` are battery-eta's trained values (see PRIOR). The clock
-    term up to the profile's idle clock (clock_split) is processor baseline;
-    above it, apps share it by CPU time (theirs is what raised the clock).
+    term up to the profile's idle clock (clock_split) is the idle chip's (IDLE,
+    as idle_parts once its rails are learned: 'Idle chip/<part>' rows); above
+    it, apps share it by CPU time (theirs is what raised the clock).
     report.attribute splits a minute the same way, by load.
     """
     dt, rows = record['dt'], collections.defaultdict(float)
@@ -736,7 +794,8 @@ def attribute(record, params):
                 rows[name] += scale * (soc - floor) * dt * weight / total
     else:
         floor = soc
-    rows['Processor baseline'] += scale * floor * dt
+    for name, joules in idle_parts(params, floor * dt, scale).items():
+        rows[name if name == IDLE else f'{IDLE}/{name}'] += joules
     if on_battery:
         rest = record['bat']['w'] - scale * soc
         x = platform_features(record)
@@ -750,15 +809,37 @@ def attribute(record, params):
     return rows
 
 
+def percentages(values):
+    """Whole percentages of `values` that sum to 100 (largest remainders round up)."""
+    total = sum(values)
+    if total <= 0:
+        return [0] * len(values)
+    exact = [100 * v / total for v in values]
+    whole = [int(x) for x in exact]
+    for i in sorted(range(len(exact)), key=lambda i: whole[i] - exact[i])[:100 - sum(whole)]:
+        whole[i] += 1
+    return whole
+
+
+OTHERS = 'Everything else'
+TAIL = 3  # Rows of the rest named under it.
+
+
 def summarize(window, now, log_totals, limit=6):
-    """Menu block: average watts per row over the recent window."""
+    """Menu block: average watts per row over the recent window, the biggest
+    `limit` − 1 and the rest as one row (its biggest TAIL listed under it), so
+    the shares add up to 100%. A row split into parts ('Idle chip/<part>'
+    rows) lists them under it."""
     battery = [w for w in window if w[2]]
     use = battery or window
     seconds = sum(w[1] for w in use)
-    totals = collections.defaultdict(float)
+    totals, parts = collections.defaultdict(float), collections.defaultdict(lambda: collections.defaultdict(float))
     for _, _, _, rows in use:
         for name, joules in rows.items():
-            totals[name] += joules
+            parent, _, part = name.partition('/')
+            totals[parent] += joules
+            if part:
+                parts[parent][part] += joules
     energy = sum(totals.values())
     minutes = max(1, round(seconds / 60))
     if not use or seconds <= 0:
@@ -767,9 +848,23 @@ def summarize(window, now, log_totals, limit=6):
         title = f'Battery use · last {minutes} min on battery · {energy / seconds:.1f} W'
     else:
         title = f'On AC · chip power by app, last {minutes} min · {energy / seconds:.1f} W'
-    rows = [{'name': name, 'value': f'{joules / seconds:4.1f} W {100 * joules / energy:3.0f}%'}
-            for name, joules in sorted(totals.items(), key=lambda r: (-r[1], r[0]))[:limit]
-            if seconds > 0 and energy > 0 and joules / seconds >= 0.05]
+    rows = []
+    if seconds > 0 and energy > 0:
+        ranked = sorted(totals.items(), key=lambda r: (-r[1], r[0]))
+        shown = [r for r in ranked[:limit - 1 if len(ranked) > limit else limit] if r[1] / seconds >= 0.05]
+        rest = ranked[len(shown):]
+        if len(rest) > 1:
+            name = f'{OTHERS} ({len(rest)})'
+            shown.append((name, sum(j for _, j in rest)))
+            parts[name] = dict(r for r in rest[:TAIL] if r[1] / seconds >= 0.05)
+        elif rest:
+            shown.append(rest[0])
+        for (name, joules), pct in zip(shown, percentages([j for _, j in shown])):
+            row = {'name': name, 'value': f'{joules / seconds:4.1f} W {pct:3d}%'}
+            if parts.get(name):
+                row['parts'] = [{'name': part, 'value': f'{j / seconds:4.1f} W'}
+                                for part, j in sorted(parts[name].items(), key=lambda r: -r[1])]
+            rows.append(row)
     return {'title': title, 'rows': rows, 'footer': log_footer(*log_totals), 'timestamp': now}
 
 
@@ -1137,6 +1232,8 @@ class Monitor:
             'v': SCHEMA, 't0': round(self.start_wall, 3), 't1': round(wall, 3), 'dt': round(dt, 3),
             'boot': self.boot, 'ac': mains_online(self.sys / 'class/power_supply'), 'status': status,
             'bat': battery, 'soc': power.get('soc', {}),
+            # The chip's two measured rails (chip_rails): cores and graphics, and the SoC's.
+            **{rail: power[rail] for rail in ('vdd', 'fabric') if rail in power},
             # Engine-seconds over apps, each app capped at the interval (GpuClients),
             # and the sum at dt: the share of the record the GPU was busy.
             'gpu': {'busy': power.get('gpu_busy', {}).get('w', 0),

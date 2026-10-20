@@ -12,9 +12,17 @@ from unittest import mock
 import power
 import store
 from power import (PRIOR, Deltas, FastSampler, GpuClients, IdleStates, Monitor, PowerLog, attribute, battery_watts,
-                   clock_means, clock_split, clocks, cpu_frequency, device_deltas, experiment_assignment, idle_deltas,
-                   interrupts, load_attribution, log_footer, network, own_cpu, parse_fdinfo, settings, subtract,
-                   summarize, TICKS)
+                   chip_rails, clock_means, clock_split, clocks, cpu_frequency, device_deltas, experiment_assignment,
+                   idle_deltas, idle_parts, interrupts, load_attribution, log_footer, network, own_cpu, parse_fdinfo,
+                   percentages, settings, subtract, summarize, TICKS)
+
+
+def metrics(soc_mw, vdd_mw, revision=(2, 1)):
+    """A gpu_metrics v2.x table: header, then soc and gfx (VDD) power at bytes 44 and 46."""
+    data = bytearray(120)
+    data[0:2], data[2], data[3] = (120).to_bytes(2, 'little'), *revision
+    data[44:46], data[46:48] = soc_mw.to_bytes(2, 'little'), vdd_mw.to_bytes(2, 'little')
+    return bytes(data)
 
 
 def put(path, text):
@@ -140,13 +148,13 @@ class PowerTests(unittest.TestCase):
                   'cpu': {'busy_s': 10.0, 'mhz': 1200}, 'apps': {'Browser': {'cpu': 10.0}},
                   'settings': {'platform_profile': 'balanced'}}
         # 1.2 GHz is below balanced's idle clock: 0.3 GHz less baseline, 1.3 × (3 W + 3 W/GHz × 0.7 GHz) × 10 s.
-        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 66.3)
+        self.assertAlmostEqual(attribute(record, params)['Idle chip'], 66.3)
         record['settings']['platform_profile'] = None  # Unknown: the pooled idle clock, 1 GHz
-        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 78.0)
+        self.assertAlmostEqual(attribute(record, params)['Idle chip'], 78.0)
         record['settings']['platform_profile'] = 'balanced'
         record['cpu']['mhz_active'] = 2500  # The active clock instead: above its idle, so the baseline is whole
         rows = attribute(record, params)
-        self.assertAlmostEqual(rows['Processor baseline'], 78.0)
+        self.assertAlmostEqual(rows['Idle chip'], 78.0)
         self.assertAlmostEqual(sum(rows.values()), 200.0)
         record['bat']['w'] = 9.0  # Less than the chip at its cost per watt: the parts still add up to it.
         self.assertAlmostEqual(sum(attribute(record, params).values()), 90.0)
@@ -158,7 +166,7 @@ class PowerTests(unittest.TestCase):
                   'apps': {'Browser': {'cpu': 6.0}, 'Game': {'cpu': 2.0, 'gpu': 2.0}},
                   'display': {'bl': .5}, 'net': {'wlan0': {'rx': 0, 'tx': 0}}}
         rows = attribute(record, params)
-        self.assertAlmostEqual(rows['Processor baseline'], 78.0)        # 1.3 × (3 W + 3 W/GHz × 1 GHz) × 10 s
+        self.assertAlmostEqual(rows['Idle chip'], 78.0)        # 1.3 × (3 W + 3 W/GHz × 1 GHz) × 10 s
         self.assertAlmostEqual(rows['Kernel'] / rows['Browser'], 1 / 3)  # Unowned busy CPU; the clock above idle by CPU time
         self.assertGreater(rows['Game'], rows['Kernel'])                # Same CPU time, plus GPU time
         self.assertAlmostEqual(rows['Display'], 15.0)                    # 3 W × 0.5 brightness × 10 s
@@ -171,9 +179,9 @@ class PowerTests(unittest.TestCase):
         record['status'] = 'Charging'
         rows = attribute(record, params)
         self.assertNotIn('Display', rows)
-        self.assertAlmostEqual(rows['Processor baseline'], 60.0)        # On AC: chip watts only
+        self.assertAlmostEqual(rows['Idle chip'], 60.0)        # On AC: chip watts only
         record['cpu']['mhz'] = 800  # Below the idle clock: the whole clock term is baseline.
-        self.assertAlmostEqual(attribute(record, params)['Processor baseline'], 54.0)  # (3 W + 3 W/GHz × 0.8 GHz) × 10 s
+        self.assertAlmostEqual(attribute(record, params)['Idle chip'], 54.0)  # (3 W + 3 W/GHz × 0.8 GHz) × 10 s
 
     def test_experiment_assignment_marks_washout_and_ignores_paused_runs(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -192,7 +200,7 @@ class PowerTests(unittest.TestCase):
         window = [(1, 10, False, {'Browser': 100.0}), (2, 10, True, {'Browser': 50.0, 'Display': 30.0})]
         menu = summarize(window, 3, (3, 3600 * 5, None))
         self.assertTrue(menu['title'].startswith('Battery use · last 1 min on battery · 8.0 W'))
-        self.assertEqual(menu['rows'][0], {'name': 'Browser', 'value': ' 5.0 W  62%'})
+        self.assertEqual(menu['rows'][0], {'name': 'Browser', 'value': ' 5.0 W  63%'})
         self.assertIn('3 samples · 5.0 h', menu['footer'])
         self.assertIn('chip power by app', summarize(window[:1], 3, (0, 0, None))['title'])
         self.assertEqual(summarize([], 3, (0, 0, None))['rows'], [])
@@ -304,6 +312,74 @@ class PowerTests(unittest.TestCase):
             values, status = fast.take()
             self.assertEqual((values['bat']['w'], values['soc']['w'], status), (8.0, 5.0, 'Discharging'))
             self.assertEqual(fast.battery.name, 'BAT1')
+
+    def test_the_chips_rails_come_from_gpu_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            sys = Path(tmp)
+            table = sys / 'class/drm/card1/device/gpu_metrics'
+            table.parent.mkdir(parents=True)
+            table.write_bytes(metrics(1500, 2250))
+            self.assertEqual(chip_rails(table), (2.25, 1.5))  # (VDD, SoC)
+            table.write_bytes(metrics(1500, 0xFFFF))
+            self.assertIsNone(chip_rails(table))  # Not reported
+            table.write_bytes(metrics(1500, 2250, (3, 0)))
+            self.assertIsNone(chip_rails(table))  # Another layout (dGPUs, newer APUs)
+            table.write_bytes(metrics(1500, 2250)[:40])
+            self.assertIsNone(chip_rails(table))
+            self.assertIsNone(chip_rails(sys / 'missing'))
+            table.write_bytes(metrics(1500, 2250))
+            fast = FastSampler(sys)
+            fast.sample()
+            table.write_bytes(metrics(2500, 3250))
+            fast.sample()
+            values, _ = fast.take()
+            self.assertEqual((values['vdd']['w'], values['fabric']['w']), (2.75, 2.0))
+
+    def test_the_idle_chip_splits_by_its_rails_and_power_delivery(self):
+        self.assertEqual(list(idle_parts(PRIOR, 6.0, 1.3)), ['Idle chip'])  # Shares not learned yet
+        self.assertAlmostEqual(idle_parts(PRIOR, 6.0, 1.3)['Idle chip'], 7.8)
+        params = dict(PRIOR, **{'rail:links': .5, 'rail:fabric': .2, 'rail:cores': .3})
+        parts = idle_parts(params, 6.0, 1.3)
+        self.assertEqual({k: round(v, 9) for k, v in parts.items()},
+                         {'Memory & I/O links': 3.0, 'Fabric & display engine': 1.2, 'Cores & graphics': 1.8,
+                          'Power delivery & board': 1.8})
+        self.assertAlmostEqual(sum(parts.values()), 7.8)
+        self.assertNotIn('Power delivery & board', idle_parts(params, 6.0, 1.0))  # On AC: chip watts only
+        self.assertAlmostEqual(sum(idle_parts(params, 6.0, .9).values()), 5.4)  # Battery below the chip
+        record = {'dt': 10, 'status': 'Discharging', 'bat': {'w': 20.0}, 'soc': {'w': 10.0},
+                  'cpu': {'busy_s': 10.0, 'mhz': 2000}, 'apps': {'Browser': {'cpu': 6.0}}}
+        rows = attribute(record, params)
+        self.assertNotIn('Idle chip', rows)
+        self.assertAlmostEqual(sum(v for k, v in rows.items() if k.startswith('Idle chip/')), 78.0)
+        self.assertAlmostEqual(rows['Idle chip/Memory & I/O links'], 30.0)  # Half of the 60 J the idle chip drew
+        self.assertAlmostEqual(sum(rows.values()), 200.0)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'models.json'
+            path.write_text(json.dumps({'attribution': {'rail:links': .5, 'rail:fabric': .2, 'rail:cores': .3,
+                                                        'rail_rows': 40.0}}))
+            self.assertEqual(load_attribution(path)['rail:fabric'], .2)
+
+    def test_menu_shares_add_up_to_100_with_the_rest_in_one_row(self):
+        self.assertEqual(percentages([1, 1, 1]), [34, 33, 33])
+        self.assertEqual(percentages([60.4, 17.4, 8.6, 13.6]), [60, 17, 9, 14])  # Largest remainders up
+        self.assertEqual(percentages([0, 0]), [0, 0])
+        rows = {'Idle chip/Memory & I/O links': 300.0, 'Idle chip/Cores & graphics': 200.0, 'Display': 230.0,
+                'Floorp': 110.0, 'USB devices': 50.0, 'Rest of system': 40.0, 'Kernel': 30.0, 'Wi-Fi': 20.0,
+                'Signal': 10.0}
+        menu = summarize([(1, 100, True, rows)], 3, (1, 100, None))
+        names = [r['name'] for r in menu['rows']]
+        self.assertEqual(names, ['Idle chip', 'Display', 'Floorp', 'USB devices', 'Rest of system',
+                                 'Everything else (3)'])
+        self.assertEqual(sum(int(r['value'].rpartition(' ')[2].rstrip('%')) for r in menu['rows']), 100)
+        self.assertEqual(menu['rows'][0]['parts'], [{'name': 'Memory & I/O links', 'value': ' 3.0 W'},
+                                                    {'name': 'Cores & graphics', 'value': ' 2.0 W'}])
+        self.assertEqual(menu['rows'][-1]['value'], ' 0.6 W   6%')
+        self.assertEqual(menu['rows'][-1]['parts'], [{'name': 'Kernel', 'value': ' 0.3 W'},
+                                                     {'name': 'Wi-Fi', 'value': ' 0.2 W'},
+                                                     {'name': 'Signal', 'value': ' 0.1 W'}])
+        self.assertNotIn('parts', menu['rows'][1])
+        few = summarize([(1, 100, True, {'Display': 300.0, 'Floorp': 100.0, 'Kernel': 1.0})], 3, (1, 100, None))
+        self.assertEqual([r['name'] for r in few['rows']], ['Display', 'Floorp', 'Kernel'])  # The rest by name
 
     def test_gpu_clients_count_new_clients_from_zero_and_cap_at_the_interval(self):
         with tempfile.TemporaryDirectory() as tmp:

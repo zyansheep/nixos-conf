@@ -14,13 +14,15 @@ import report
 import store
 
 
-def record(t1, bat=15.0, soc=8.0, busy=2.0, mhz=2000, apps=None, exp=None, status='Discharging', bl=.5):
+def record(t1, bat=15.0, soc=8.0, busy=2.0, mhz=2000, apps=None, exp=None, status='Discharging', bl=.5, vdd=None,
+           fabric=None):
     r = {'v': 1, 't0': t1 - 10, 't1': t1, 'dt': 10, 'status': status, 'bat': {'w': bat, 'pct': 50, 'charge': 2e6,
          'volts': 15.5, 'unit': 'uAh'}, 'soc': {'w': soc}, 'cpu': {'busy_s': busy * 10, 'mhz': mhz},
          'gpu': {'gpu': 0, 'video': 0}, 'apps': apps or {}, 'display': {'bl': bl}, 'net': {}, 'disk': {},
          'settings': {}}
     if exp:
         r['exp'] = exp
+    r.update({rail: {'w': w} for rail, w in (('vdd', vdd), ('fabric', fabric)) if w is not None})
     return r
 
 
@@ -60,11 +62,32 @@ class ReportTests(unittest.TestCase):
              'apps': {'Floorp': [6.0, 0, 0], 'openroad': [2.0, 0, 0]}}
         parts = report.attribute(m, model)
         self.assertAlmostEqual(sum(parts['groups'].values()), 20.0)
-        self.assertAlmostEqual(parts['groups']['Processor baseline'], 8.4)  # 1.4 × (5 W + 1 W/GHz × 1 GHz idle)
+        self.assertAlmostEqual(parts['groups']['Idle chip'], 8.4)  # 1.4 × (5 W + 1 W/GHz × 1 GHz idle)
         self.assertAlmostEqual(parts['apps']['Floorp'] / parts['apps']['openroad'], 3)  # The clock above idle too
         self.assertAlmostEqual(parts['groups']['Display'], 1.5)
         parts = report.attribute(dict(m, ghz=.8), model)  # Below the idle clock: all of it is baseline.
-        self.assertAlmostEqual(parts['groups']['Processor baseline'], 1.4 * 5.8)
+        self.assertAlmostEqual(parts['groups']['Idle chip'], 1.4 * 5.8)
+
+    def test_the_idle_chip_divides_between_the_rails_as_their_fits_say(self):
+        rng = np.random.default_rng(3)
+        rows = []
+        for i in range(200):
+            load, ghz = rng.uniform(0, 30), rng.uniform(.8, 3)
+            links, fabric = 1.5 + .5 * ghz + .05 * load, .9 + .3 * ghz + .03 * load
+            vdd = .6 + 1.2 * ghz + .12 * load + rng.normal(0, .05)
+            soc = vdd + links + fabric
+            rows.append({'t': i * 60, 'dt': 60, 'st': 'D', 'load': load, 'ghz': ghz, 'soc': soc, 'bl': .5,
+                         'bat': 1.4 * soc + 1.5, 'vdd': vdd, 'fabric': fabric})
+        model = report.fit_rows(report.battery_rows(rows))
+        g = model['idle_ghz']
+        idle = {'links': 1.5 + .5 * g, 'fabric': .9 + .3 * g, 'cores': .6 + 1.2 * g}
+        for rail, watts in idle.items():
+            self.assertAlmostEqual(model[f'rail:{rail}'], watts / sum(idle.values()), delta=.01, msg=rail)
+        self.assertEqual(model['rail_rows'], 200)
+        few = [dict(m) for m in rows]
+        for m in few[report.RAIL_MINUTES - 1:]:
+            del m['vdd'], m['fabric']  # Logged before the rails were.
+        self.assertFalse(any(k.startswith('rail') for k in report.fit_rows(report.battery_rows(few))))
 
     def test_runtime_gain(self):
         self.assertAlmostEqual(report.runtime_gain(48, 16, 2), 60 * 48 * (1 / 14 - 1 / 16))
@@ -593,7 +616,10 @@ class AttributionTests(unittest.TestCase):
         parts = report.attribute(m, model)
         for name, watts in parts['apps'].items():
             self.assertAlmostEqual(per_record[name], watts, places=6, msg=name)
-        self.assertAlmostEqual(per_record['Processor baseline'], parts['groups']['Processor baseline'], places=6)
+        idle = sum(w for name, w in per_record.items() if name.partition('/')[0] == 'Idle chip')
+        self.assertAlmostEqual(idle, parts['groups']['Idle chip'], places=6)
+        for name, watts in parts['idle'].items():  # The collector's 'Idle chip/<part>' rows
+            self.assertAlmostEqual(per_record[name if name == 'Idle chip' else f'Idle chip/{name}'], watts, places=6)
         self.assertAlmostEqual(per_record.get('Display', 0), parts['groups'].get('Display', 0), places=6)
         self.assertAlmostEqual(sum(per_record.values()), sum(parts['groups'].values()), places=6)
         return parts
@@ -607,13 +633,19 @@ class AttributionTests(unittest.TestCase):
                                              (2400, 'Discharging', 'balanced', 3100)):
             with self.subTest(mhz=mhz, status=status, profile=profile, active=active):
                 self.assert_agree(*self.steady(mhz, status, profile, active), model)
+        rails = dict(model, **{'rail:links': .5, 'rail:fabric': .2, 'rail:cores': .3})
+        for status in ('Discharging', 'Charging'):
+            with self.subTest(rails=status):
+                parts = self.assert_agree(*self.steady(2400, status), rails)
+                self.assertEqual(len(parts['idle']), 4 if status == 'Discharging' else 3)  # Power delivery on battery
+                self.assertAlmostEqual(sum(parts['idle'].values()), parts['groups']['Idle chip'])
 
     def test_the_clock_above_the_profiles_idle_goes_to_apps_by_cpu_share(self):
         records, m = self.steady(1500)  # Balanced idles at 1.5 GHz: all of it baseline.
         parts = report.attribute(m, self.MODEL)
-        self.assertAlmostEqual(parts['groups']['Processor baseline'], 1.4 * (2.5 + 3.0 * 1.0))
+        self.assertAlmostEqual(parts['groups']['Idle chip'], 1.4 * (2.5 + 3.0 * 1.0))
         low = report.attribute(dict(m, set={'profile': 'low-power'}), self.MODEL)  # 0.5 GHz above its idle
-        self.assertAlmostEqual(low['groups']['Processor baseline'], parts['groups']['Processor baseline'])
+        self.assertAlmostEqual(low['groups']['Idle chip'], parts['groups']['Idle chip'])
         self.assertAlmostEqual(sum(low['apps'].values()), 1.4 * (8.0 - 5.5))  # The rest of the chip: apps'
         self.assertGreater(low['apps']['yosys'], parts['apps']['yosys'])  # Its CPU share of the raised clock
 

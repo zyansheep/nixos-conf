@@ -37,19 +37,17 @@ import os
 import sqlite3
 import sys
 import time
+from compression import zstd
 from pathlib import Path
-
-try:
-    from compression import zstd
-except ImportError:  # Python < 3.14
-    zstd = None
 
 STATE = Path(os.environ.get('XDG_STATE_HOME', Path.home() / '.local/state')) / 'waybar-monitor'
 DB = STATE / 'power.sqlite3'
-VERSION = 9  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
+VERSION = 10  # PRAGMA user_version; MIGRATIONS below. Migrate, never drop: this is primary data.
 NUMERIC = ('bat', 'soc', 'load', 'busy', 'gpu', 'video', 'bl', 'kbd', 'wifi', 'disk', 'usb', 'audio', 'ghz',
-           'ghz_active')
-BY_STATUS = ('bat', 'soc')  # Averaged over the minute's majority status only (signed watts don't mix).
+           'ghz_active', 'vdd', 'fabric')
+# Averaged over the minute's majority status only (signed watts don't mix; the
+# chip's rails go with its total).
+BY_STATUS = ('bat', 'soc', 'vdd', 'fabric')
 STATUS = {'Discharging': 'D', 'Charging': 'C', 'Not charging': 'F', 'Full': 'F'}
 CHUNK = 86400  # Seconds of stale minutes recomputed per transaction after a migration.
 
@@ -195,6 +193,11 @@ COLUMNS = (
     ('mhz_active', 'REAL', lambda r: part(r, 'cpu').get('mhz_active')),
     ('active_n', 'REAL', lambda r: part(r, 'cpu').get('active_n')),
     ('min_mhz', 'REAL', lambda r: part(r, 'settings').get('min_mhz')),
+    # The chip's measured rails (W, power.chip_rails), part of soc_w: VDDCR_VDD
+    # (CPU cores and graphics) and VDDCR_SOC (fabric, memory controller, display
+    # and video engines, I/O hub)
+    ('vdd_w', 'REAL', lambda r: part(r, 'vdd').get('w')),
+    ('fabric_w', 'REAL', lambda r: part(r, 'fabric').get('w')),
 )
 NAMES = [name for name, _, _ in COLUMNS]
 APP_FIELDS = (('cpu_s', 'cpu'), ('gpu_s', 'gpu'), ('video_s', 'video'), ('io_read', 'io_r'), ('io_write', 'io_w'))
@@ -267,6 +270,7 @@ class Minute:
             'audio': min(1, (row['audio_play'] or 0) + (row['audio_rec'] or 0)),
             'ghz': mhz / 1000 if mhz else None,  # Mean core clock, busy or not: the chip model's clock term.
             'ghz_active': active / 1000 if active else None,  # Mean clock of the CPUs above their idle floor.
+            'vdd': row.get('vdd_w'), 'fabric': row.get('fabric_w'),
         }
         for key, value in values.items():
             if value is not None:
@@ -399,6 +403,13 @@ def add_active_clock(conn):
     conn.execute(META_SQL)
 
 
+def add_rails(conn):
+    for column in ('vdd_w', 'fabric_w'):
+        add_column(conn, 'records', column, 'REAL')
+    for column in ('vdd', 'fabric'):
+        add_column(conn, 'minutes', column, 'REAL')
+
+
 # MIGRATIONS[n] takes layout n to n + 1: (schema change or None, whether Minute
 # changed). Schema changes run at once, in connect(). Minutes are derived, so a
 # Minute change only marks them stale, once, after the whole chain (against the
@@ -416,6 +427,8 @@ MIGRATIONS = {
     # (min_mhz); minutes ghz_active, `purity`, and bat/soc of the majority status
     # only; imports the archive's record count; and the meta table.
     8: (add_active_clock, True),
+    # Records and minutes gained the chip's two measured rails (older records have none to recompute).
+    9: (add_rails, False),
 }
 
 

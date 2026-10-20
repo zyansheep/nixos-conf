@@ -44,9 +44,14 @@ inline std::string powerMenuStats(const std::filesystem::path& root = "/sys/clas
   return result.empty() ? "Battery health: unavailable\nCycles: unavailable" : result;
 }
 
+struct PowerMenuUse {
+  std::string name, value;
+  std::vector<std::pair<std::string, std::string>> parts;  // What the row is made of, if split (the idle chip).
+};
+
 struct PowerMenuBattery {
   std::string title;
-  std::vector<std::pair<std::string, std::string>> rows;
+  std::vector<PowerMenuUse> rows;
   std::string footer;
 };
 
@@ -68,8 +73,12 @@ inline PowerMenuBattery powerMenuBattery(const std::filesystem::path& snapshot, 
   if (battery["rows"].isArray()) {
     for (const auto& entry : battery["rows"]) {
       if (result.rows.size() >= limit) break;
-      if (entry.isObject() && entry["name"].isString() && entry["value"].isString())
-        result.rows.emplace_back(entry["name"].asString(), entry["value"].asString());
+      if (!entry.isObject() || !entry["name"].isString() || !entry["value"].isString()) continue;
+      PowerMenuUse row{entry["name"].asString(), entry["value"].asString(), {}};
+      for (const auto& part : entry["parts"])
+        if (part.isObject() && part["name"].isString() && part["value"].isString())
+          row.parts.emplace_back(part["name"].asString(), part["value"].asString());
+      result.rows.push_back(std::move(row));
     }
   }
   return result;

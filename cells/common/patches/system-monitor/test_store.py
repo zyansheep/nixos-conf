@@ -16,12 +16,14 @@ from test_report import record
 # Columns each old layout's tables didn't have yet (later migrations added them):
 # (records, minutes). Layouts 2 and 3 had layout 1's and 4's tables; imports
 # lacked `records` and there was no meta table before 9.
+RAILS = ({'vdd_w', 'fabric_w'}, {'vdd', 'fabric'})  # Added by layout 10.
 LACKED = {
-    1: ({'qol', 'cpu_max_mhz', 'gpu_dpm', 'throttle', 'mhz_active', 'active_n', 'min_mhz'},
-        {'qol', 'present', 'ghz', 'ghz_active', 'purity'}),
-    4: ({'cpu_max_mhz', 'gpu_dpm', 'throttle', 'mhz_active', 'active_n', 'min_mhz'}, {'ghz', 'ghz_active', 'purity'}),
-    7: ({'mhz_active', 'active_n', 'min_mhz'}, {'ghz', 'ghz_active', 'purity'}),
-    8: ({'mhz_active', 'active_n', 'min_mhz'}, {'ghz_active', 'purity'}),
+    1: ({'qol', 'cpu_max_mhz', 'gpu_dpm', 'throttle', 'mhz_active', 'active_n', 'min_mhz', *RAILS[0]},
+        {'qol', 'present', 'ghz', 'ghz_active', 'purity', *RAILS[1]}),
+    4: ({'cpu_max_mhz', 'gpu_dpm', 'throttle', 'mhz_active', 'active_n', 'min_mhz', *RAILS[0]},
+        {'ghz', 'ghz_active', 'purity', *RAILS[1]}),
+    7: ({'mhz_active', 'active_n', 'min_mhz', *RAILS[0]}, {'ghz', 'ghz_active', 'purity', *RAILS[1]}),
+    8: ({'mhz_active', 'active_n', 'min_mhz', *RAILS[0]}, {'ghz_active', 'purity', *RAILS[1]}),
 }
 
 
@@ -192,8 +194,9 @@ class StoreTests(unittest.TestCase):
                 old_layout(db, version, self.records)
                 self.assertNotIn('ghz_active', store.load_range(*self.span, db)[0][0])  # Readable before migrating.
                 store.connect(db).close()  # Schema changes only: quick, no minute is recomputed yet.
-                self.assertTrue({'mhz_active', 'active_n', 'min_mhz', 'qol', 'throttle'} <= columns(db, 'records'))
-                self.assertTrue({'ghz', 'ghz_active', 'purity', 'qol', 'present'} <= columns(db, 'minutes'))
+                self.assertTrue({'mhz_active', 'active_n', 'min_mhz', 'qol', 'throttle', *RAILS[0]}
+                                <= columns(db, 'records'))
+                self.assertTrue({'ghz', 'ghz_active', 'purity', 'qol', 'present', *RAILS[1]} <= columns(db, 'minutes'))
                 self.assertIn('records', columns(db, 'imports'))
                 self.assertFalse(store.minutes_ready(db))
                 self.assertEqual(store.load_range(*self.span, db)[0][0]['set'], {})  # Still the old minute.
@@ -205,6 +208,30 @@ class StoreTests(unittest.TestCase):
                 self.assertEqual(store.load_range(*self.span, db)[0], store.aggregate(self.records + [later])[0])
                 with contextlib.closing(sqlite3.connect(db)) as conn:
                     self.assertEqual(conn.execute('PRAGMA user_version').fetchone()[0], store.VERSION)
+
+    def test_layout_9_gains_the_rails_without_recomputing_minutes(self):
+        db = Path(self.tmp.name) / 'layout9.sqlite3'
+        writer = store.Writer(db)
+        for r in self.records:
+            writer.write(r)
+        writer.close()
+        with contextlib.closing(sqlite3.connect(db)) as conn:
+            for table, names in zip(('records', 'minutes'), RAILS):
+                for name in names:
+                    conn.execute(f'ALTER TABLE {table} DROP COLUMN {name}')
+            conn.execute('PRAGMA user_version = 9')
+            conn.commit()
+        before = store.load_range(*self.span, db)[0]
+        store.connect(db).close()
+        self.assertTrue(RAILS[0] <= columns(db, 'records') and RAILS[1] <= columns(db, 'minutes'))
+        self.assertTrue(store.minutes_ready(db))  # Old records have no rails: nothing to recompute.
+        self.assertEqual(store.load_range(*self.span, db)[0], before)
+        writer = store.Writer(db)
+        later = record(self.span[1] + 3600, bat=9, vdd=2.0, fabric=1.5)
+        self.assertTrue(writer.write(later))
+        writer.close()
+        minute = next(m for m in store.load_range(-1e18, 1e18, db)[0] if m['t'] == store.minute_of(later['t1']))
+        self.assertEqual((minute['vdd'], minute['fabric']), (2.0, 1.5))
 
     def test_minute_recompute_goes_a_day_at_a_time_newest_first_beside_live_writes(self):
         base = self.span[0] + 3600
@@ -386,7 +413,7 @@ class StoreTests(unittest.TestCase):
         parts = report.attribute(minute, params)
         for app in ('Browser', 'Game', 'Kernel'):
             self.assertAlmostEqual(joules[app] / 60, parts['apps'][app], places=3)
-        self.assertAlmostEqual(joules['Processor baseline'] / 60, parts['groups']['Processor baseline'], places=3)
+        self.assertAlmostEqual(joules['Idle chip'] / 60, parts['groups']['Idle chip'], places=3)
         self.assertAlmostEqual(sum(joules.values()) / 60, sum(parts['groups'].values()), places=3)
 
 if __name__ == '__main__':

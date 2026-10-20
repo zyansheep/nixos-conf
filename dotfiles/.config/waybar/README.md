@@ -144,8 +144,12 @@ mode and apply settings by accident:
   combinations.
 
 Below that, battery use over the last 30 minutes on battery ranks apps and
-hardware together in average watts and share, with the size of the long-term
-power log underneath (see [Battery use and the power log](#battery-use-and-the-power-log)).
+hardware together in average watts and share: the five biggest, then
+“Everything else (N)” for the rest with its three biggest named under it, so
+the shares add up to 100% (rounded by largest remainder; before 2026-10-19 the
+tail was dropped, ~5–20%). “Idle chip” lists what it is made of under it. The size of
+the long-term power log is underneath (see
+[Battery use and the power log](#battery-use-and-the-power-log)).
 AC plug/unplug events still select Balanced / Power saver through udev rules.
 
 Wi-Fi lights another curved bar at 25%, 50%, and 75%; unlit bars stay faintly
@@ -201,7 +205,7 @@ battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
   mostly idle. Load is busy CPU time × clock² (GHz): dynamic power grows with
   frequency and voltage. The clock term is split at the *idle clock* (where
   the clock sits when almost nothing runs, a low percentile of the logged
-  minutes): the part up to it belongs to the floor (“Processor baseline”),
+  minutes): the part up to it belongs to the floor (“Idle chip”, below),
   the part above it is raised by whatever ran and is shared among the apps by
   their busy time. Idle cores report a placeholder clock that the platform
   profile sets (0.41 GHz under power-saver, 1.12 GHz under balanced, and
@@ -218,6 +222,26 @@ battery power (`current_now × voltage_now`) and whole-chip power (amdgpu's
   the clock term: battery ≈ 0.3 + 1.39 × chip + 3.0 × backlight W on one-minute
   means, R² 0.945; busy time alone explained 45% of chip power, 73% with the
   clock² weighting.)
+- **What the idle chip is.** The floor plus the clock term up to the idle
+  clock is what the chip draws with nothing running: 6.1 chip W with the
+  models of 2026-10-19, 8.3 W of battery (60% of a typical 13.7 W) at k =
+  1.37. Since layout 10 the collector also logs the chip's two measured rails
+  from amdgpu's `gpu_metrics` (`power.chip_rails`; the SMU fills the table's
+  soc and gfx power with them): **VDD**, which feeds the CPU cores and
+  graphics, and **SoC**, which feeds the data fabric, memory controller,
+  display and video engines and I/O hub. Package power less both is the
+  rest, mostly the memory and I/O interfaces (a memory copy raised it 1.7 W,
+  the SoC rail 1.4 W, the cores' 0.3 W). Once 30 battery minutes have the
+  rails, battery-eta fits each rail on the chip model's columns and takes its
+  prediction where the baseline is (no load, idle clock, your settings): its
+  share of the idle chip (`rail:links|fabric|cores` in models.json). The idle
+  chip is then shown as **Memory & I/O links**, **Fabric & display engine**
+  and **Cores & graphics**, plus **Power delivery & board**: the battery
+  watts beyond the chip's own, (k − 1) per chip watt (voltage conversion, and
+  board parts whose draw follows the chip's; the battery model's base is 0,
+  so constant board draw lands here too). A quiet 8 s sample (2026-10-19):
+  6.8 W chip = 1.9 W VDD + 1.5 W SoC + 3.4 W memory & I/O. The panel's
+  timeline tooltip lists the same parts under “Idle chip”.
 - **Battery − k × chip → hardware.** Display (backlight), Wi-Fi (traffic),
   storage (busy time), USB devices, audio and keyboard backlight use learned
   watts per unit of activity; the unexplained remainder is “Rest of system”.
@@ -249,6 +273,7 @@ raw archive (finished days become `.jsonl.zst`). An archive record:
 | `t0`, `t1`, `dt`, `boot` | wall-clock interval, its boottime length, boot id prefix |
 | `ac`, `status`, `bat` | mains, battery status; mean/min/max signed W (discharge positive), %, charge, volts |
 | `soc`, `gpu` | chip W (mean/min/max); GPU busy %, summed GPU/video engine seconds |
+| `vdd`, `fabric` | the chip's VDD (cores, graphics) and SoC rail W, mean/min/max (from `gpu_metrics`; part of `soc`) |
 | `cpu` | user/sys/irq/iowait/idle seconds, `busy_s`, mean/max MHz, C-state residency, `ctxt`, `intr` |
 | `irq` | top interrupt sources by count |
 | `apps` | per coarse app: processes `n`, `rss` MiB, `cpu`/`gpu`/`video` seconds, `io_r`/`io_w` bytes |
@@ -286,7 +311,9 @@ a minute's `bat`/`soc` now come from its majority status only. Its minute
 recompute is lazy, one day per transaction, newest first: for the first
 ~30–40 s after an update older minutes still hold old values
 (`store.minutes_ready` is false; the battery panel's data line says so, and an
-open panel reloads its history once it turns true).
+open panel reloads its history once it turns true). Layout 10 adds
+`records.vdd_w` and `fabric_w` and `minutes.vdd` and `fabric` (majority status
+only, like `soc`); older records have no rails, so nothing is recomputed.
 
 Only the archive keeps idle apps' process counts and memory, the per-interrupt
 and per-interface breakdowns and display layouts. On startup the collector

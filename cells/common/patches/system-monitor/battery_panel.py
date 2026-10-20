@@ -33,7 +33,7 @@ from report import PHRASES  # noqa: E402
 # Categorical slots in validated order (dark surface #222226): adjacent stack
 # pairs clear CVD ΔE 8.4 / normal 19.3. Neutrals carry the always-on baseline.
 COLORS = {
-    'Processor baseline': '#707076', 'Rest of system': '#aaaab0',
+    'Idle chip': '#707076', 'Rest of system': '#aaaab0',
     'Browser': '#3987e5', 'Builds & EDA': '#d95926', 'Coding tools': '#199e70', 'Display': '#c98500',
     'Chat & media': '#d55181', 'Other apps': '#008300', 'Desktop & system': '#9085e9',
 }
@@ -191,11 +191,13 @@ class TimelineChart(Chart):
             if not points:
                 merged.append(None)
                 continue
-            groups = {}
+            groups, idle = {}, {}
             for p in points:
                 for name, watts in p['groups'].items():
                     groups[name] = groups.get(name, 0) + watts / len(points)
-            merged.append({'groups': groups, 'points': points, 'battery': sum(p['st'] == 'D' for p in points) * 2 > len(points),
+                for name, watts in (p.get('idle') or {}).items():
+                    idle[name] = idle.get(name, 0) + watts / len(points)
+            merged.append({'groups': groups, 'idle': idle, 'points': points, 'battery': sum(p['st'] == 'D' for p in points) * 2 > len(points),
                            'pct': next((p['pct'] for p in reversed(points) if p.get('pct') is not None), None)})
         return merged, plot / count
 
@@ -296,6 +298,9 @@ class TimelineChart(Chart):
                 for name in sorted(column['groups'], key=lambda n: -column['groups'][n]):
                     if column['groups'][name] >= .05:
                         lines.append((f"{column['groups'][name]:.1f} W", name, COLORS[name]))
+                    if name == report.IDLE and set(column['idle']) != {report.IDLE}:  # Its rails, once learned.
+                        lines += [(f'{w:.1f} W', f'   {part}', None) for part, w in
+                                  sorted(column['idle'].items(), key=lambda kv: -kv[1]) if w >= .05]
                 apps = {}
                 for p in points:
                     for name, watts in p['apps'].items():
