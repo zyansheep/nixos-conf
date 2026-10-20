@@ -12,8 +12,10 @@
     zathura # vim pdf viewer
     swayimg
   ];
-  services.logind.powerKey = "ignore"; # ignore power key
-  services.logind.lidSwitch = "suspend"; # lid switch triggers suspend
+  services.logind.settings.Login = {
+    HandlePowerKey = "ignore";
+    HandleLidSwitch = "suspend";
+  };
 
   # Ensure correct power profile based on plug-in status
   services.udev.extraRules = ''

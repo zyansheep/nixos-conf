@@ -442,7 +442,6 @@ binds {
     // per-open decode of every cliphist entry).
     Mod+C hotkey-overlay-title="📋 Clipboard History: Vicinae" { spawn "vicinae" "cmd" "launch" "clipboard:history"; }
     Mod+Shift+C hotkey-overlay-title="🖼️ Show Last Clipboard Image" { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then nomacs /tmp/clipimg; else exec notify-send \"No Image in Clipboard to Display\"; fi"; }
-    // Mod+Shift+E { spawn "sh" "-c" "id=$(cliphist list | head -n1 | cut -f1); cliphist decode \"$id\" > /tmp/clipimg; if file -b /tmp/clipimg | grep -qi \"image\"; then swappy -f /tmp/clipimg; else exec notify-send \"No Image in Clipboard\" \"Latest clipboard item is not an image\"; fi"; }
     // emoji-picker lists emoji, kaomoji like (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯, and
     // math symbols in a Vicinae dmenu, then inserts via the clipboard —
     // Vicinae's own emoji grid can't paste without its input server and has
@@ -459,10 +458,6 @@ binds {
 
     // Suspend keybind
     Ctrl+Mod+S hotkey-overlay-title="💤 Suspend System" { spawn "systemctl" "suspend"; }
-
-    // You can also use a shell. Do this if you need pipes, multiple commands, etc.
-    // Note: the entire command goes as a single argument in the end.
-    // Mod+T { spawn "bash" "-c" "notify-send hello && exec alacritty"; }
 
     // Example volume keys mappings for PipeWire & WirePlumber.
     // The allow-when-locked=true property makes them work even when the session is locked.
@@ -545,15 +540,6 @@ binds {
     Mod+Shift+WheelScrollUp        { focus-column-left; }
     Mod+Ctrl+Shift+WheelScrollDown { move-column-right; }
     Mod+Ctrl+Shift+WheelScrollUp   { move-column-left; }
-
-    // Similarly, you can bind touchpad scroll "ticks".
-    // Touchpad scrolling is continuous, so for these binds it is split into
-    // discrete intervals.
-    // These binds are also affected by touchpad's natural-scroll, so these
-    // example binds are "inverted", since we have natural-scroll enabled for
-    // touchpads by default.
-    // Mod+TouchpadScrollDown { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.02+"; }
-    // Mod+TouchpadScrollUp   { spawn "wpctl" "set-volume" "@DEFAULT_AUDIO_SINK@" "0.02-"; }
 
     // You can refer to workspaces by index. However, keep in mind that
     // niri is a dynamic workspace system, so these commands are kind of

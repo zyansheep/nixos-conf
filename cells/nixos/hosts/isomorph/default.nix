@@ -181,43 +181,13 @@
   services.blueman.enable = true;
   services.fwupd.enable = true; # firmware update
   services.fprintd.enable = true; # fingerprint
-  # programs.kdeconnect.enable = true; # kde connect
-  # services.paperless.enable = true; # paperless doc ocr
-  # services.paperless.settings = {
-  #   PAPERLESS_ADMIN_USER = "admin";
-  #   PAPERLESS_ADMIN_PASSWORD = "password";
-  #   PAPERLESS_AUTO_LOGIN_USERNAME = "admin";
-  # };
-  # programs.firejail.enable = true;
-  # Firefox Nightly
-  # programs.firefox.package = inputs.firefox.packages.${system}.firefox-nightly-bin;
-  programs.firefox.enable = false;
+  programs.firefox.enable = false; # core.common's default; Floorp (home packages) instead
   services.flatpak.enable = true; # enable flatpak
-  # services.connman.enable = true;
-  # services.tailscale.enable = true;
 
   # Waydroid configuration
   virtualisation.waydroid.enable = true;
-  # services.logmein-hamachi.enable = true; # enable logmein
-  # Nix Helper
-  /* programs.nh = {
-       enable = true;
-       clean.enable = true;
-       clean.extraArgs = "--keep-since 4d --keep 3";
-       flake = "/home/zyansheep/nixos-conf";
-     };
-  */
-
-  # enable command-not-found
-  /* environment.etc."programs.sqlite".source =
-       inputs.flake-programs-sqlite.packages.${system}.programs-sqlite;
-     programs.command-not-found.enable = true;
-     programs.command-not-found.dbPath = "/etc/programs.sqlite";
-  */
 
   home-manager.users.zyansheep.programs.command-not-found.enable = true;
-
-  # services.plantuml-server.enable = true;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

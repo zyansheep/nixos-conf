@@ -16,11 +16,6 @@
     };
   };
 
-  /* services.udev.extraRules = ''
-    SUBSYSTEM=="pci", ATTR{power/control}="auto"
-    ACTION=="add", SUBSYSTEM=="usb", TEST=="power/control", ATTR{power/control}="auto"
-  ''; */
-
   # Panel ABM (AMD Adaptive Backlight Management) on battery.
   #
   # amdgpu exposes it as panel_power_savings (0 = off … 4 = max) on the eDP

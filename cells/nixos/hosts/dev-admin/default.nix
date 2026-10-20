@@ -48,10 +48,6 @@
 
   networking.firewall.enable = false;
 
-  /* services.udev.packages = [
-       pkgs.android-udev-rules
-     ];
-  */
   users.users.zyansheep.extraGroups = ["uucp"];
 
   environment.systemPackages = with pkgs; [

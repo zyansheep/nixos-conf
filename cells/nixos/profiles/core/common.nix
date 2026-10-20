@@ -72,12 +72,6 @@ let
       libxshmfence
     ];
 in {
-  imports = [
-    # Include minimal configuration
-    # inputs.nixos.nixosProfiles.core.minimal
-    #builtins.trace [inputs common] ./minimal
-  ];
-
   # default packages
   environment.systemPackages = with pkgs; [ pkg-config ] ++ commonPackages;
   programs.firefox.enable = lib.mkDefault true;
