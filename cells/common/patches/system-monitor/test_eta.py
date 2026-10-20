@@ -2,6 +2,7 @@ import contextlib
 import io
 import json
 import math
+import re
 import sqlite3
 import sys
 import tempfile
@@ -220,6 +221,10 @@ class EtaTests(unittest.TestCase):
         fill = int(next(c for c in out['class'] if c.startswith('fill'))[4:])
         self.assertLess(fill, 33)                 # Energy fraction is below the charge fraction here.
         self.assertRegex(out['text'], r'</span> \d+:\d\d <span[^>]*>±\d+:\d\d</span> <span[^>]*>15\.0W</span>$')
+        shown = re.search(r'</span> (\d+):(\d\d) ', out['text'])     # eta.json's hours, as the menu reads them:
+        self.assertAlmostEqual(out['detail']['hours'] * 60, int(shown[1]) * 60 + int(shown[2]), delta=1)  # the label's.
+        self.assertLess(out['detail']['low'], out['detail']['hours'])
+        self.assertLess(out['detail']['hours'], out['detail']['high'])
         (self.root / 'class/power_supply/BAT1/status').write_text('Not charging')
         plugged = live.estimate()
         self.assertIn('plugged', plugged['class'])
@@ -841,6 +846,21 @@ class EtaTests(unittest.TestCase):
         live.estimate()
         self.assertEqual(len(offs), 1)
 
+    def test_timed_by_the_forecast_alone_it_waits_for_the_charge_to_near_the_cutoff(self):
+        # No gauge slope yet: the rate is the draw's, 11.3 W at 13.8 V = 0.23 mAh/s, so the 45 s lead
+        # (and the interval's half again) needs the charge within ~19 mAh of the cutoff.
+        battery(self.root, **dict(LOW, charge_now=140000))
+        offs, clock = [], Clock()
+        live = make_live(self.root, clock, poweroff=lambda: offs.append(1) or True)
+        live.params = dict(self.params, cutoff=0.056, deaths=5)
+        timing = {'seconds': 30.0, 'early': 20.0, 'late': 40.0, 'rate': None, 'source': 'forecast'}
+        state = {'watts': 11.3, 'volts': 13.8, 'pct': 4.5, 'charge': 0.140, 'full': 3.125, 'mains': False}
+        with mock.patch('os.fsync'):
+            live.maybe_power_off(state, timing, clock.m, clock.m)                      # 84 mAh above it:
+            self.assertEqual(offs, [])                                                 # a wild forecast.
+            live.maybe_power_off(dict(state, charge=0.066), timing, clock.m, clock.m)  # 10 mAh above it.
+        self.assertEqual(offs, [1])
+
     def charger_trace(self, plug_at, weak_rate, recover=None):
         """A gauge falling 0.2 mAh/s to the cut at 300 s; mains comes online `plug_at` s in
         while the status stays Discharging, the gauge then falling `weak_rate` (and the
@@ -979,6 +999,7 @@ class EtaTests(unittest.TestCase):
 
     def test_clock_format(self):
         self.assertEqual(eta.clock(1.5), '1:30')
+        self.assertEqual((eta.clock(2.0), eta.clock(10.25)), ('2:00', '10:15'))
         self.assertEqual(eta.clock(0.01), '0:01')
         self.assertEqual(eta.clock(float('inf')), '--')
 

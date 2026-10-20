@@ -97,9 +97,40 @@ inline std::string powerMenuTimeOfDay(double epoch) {
   return text;
 }
 
+// A duration as "46.20 minutes" under an hour, "1.35 hours" from one up.
+inline std::string powerMenuSpan(double seconds) {
+  long hundredths = std::lround(std::max(0.0, seconds) / 0.6);  // Of a minute.
+  std::string unit = " minutes";
+  if (hundredths >= 6000) {
+    hundredths = std::lround(seconds / 36);  // Of an hour.
+    unit = " hours";
+  }
+  return std::to_string(hundredths / 100) + (hundredths % 100 < 10 ? ".0" : ".") + std::to_string(hundredths % 100) +
+         unit;
+}
+
 inline std::string powerMenuTenths(double value) {
   const long tenths = std::lround(value * 10);
   return std::to_string(tenths / 10) + "." + std::to_string(std::labs(tenths % 10));
+}
+
+// Whether more automatic testing pays (report.testing_value: power-experiment's
+// `worth`), as an inequality for the amount of testing that pays best:
+// "30 h more: saves 50 Wh > costs 0.8 Wh" (saved over the next 30 days, spent
+// now; ≤ when nothing pays). Empty until priced.
+inline std::string powerMenuWorth(const Json::Value& worth) {
+  const Json::Value* best = nullptr;
+  auto net = [](const Json::Value& row) { return row["saves"].asDouble() - row["costs"].asDouble(); };
+  for (const auto& row : worth["rows"])
+    if (row.isObject() && (best == nullptr || net(row) > net(*best))) best = &row;
+  if (best == nullptr) return "";
+  auto wh = [](double value) {
+    value = std::max(0.0, value);
+    return (value >= 9.5 ? std::to_string(std::lround(value)) : powerMenuTenths(value)) + " Wh";
+  };
+  const auto& row = *best;
+  return std::to_string(std::lround(row["hours"].asDouble())) + " h more: saves " + wh(row["saves"].asDouble()) +
+         (net(row) > 0 ? " > " : " ≤ ") + "costs " + wh(row["costs"].asDouble());
 }
 
 // battery-eta's estimate: title line plus the time-left (or time-to-limit)
@@ -196,7 +227,10 @@ struct PowerMenuGoal {
 
 struct PowerMenuModes {
   bool experiments = false;
-  std::string status;  // "Testing block 12", "Paused: on AC power", or empty while off.
+  // "Testing block 12 for 46.20 minutes", "Paused: on AC power", or empty while off; then, once
+  // priced, a line with whether more testing pays (powerMenuWorth).
+  std::string status;
+  bool settled = false;  // Paused because more testing isn't worth it: the goal's combination is set.
   bool comfort = false;  // The goal: comfort, or battery.
   std::map<std::string, PowerMenuGoal> best;  // By goal.
 };
@@ -210,12 +244,21 @@ inline PowerMenuModes powerMenuModes(const std::filesystem::path& state, const s
   const auto run = powerMenuJson(runtime / "experiment.json");
   const bool automatic = run["mode"].asString() == "auto";
   if (modes.experiments) {
-    if (automatic && run["status"].asString() == "running")
-      modes.status = "Testing block " + std::to_string(run["block"].asInt());
-    else if (automatic && run["status"].asString() == "paused")
+    if (automatic && run["status"].asString() == "running") {
+      // Time tested this run: the blocks before this one (awake), and this one so far.
+      const double start = run["block_start"].asDouble(), length = run["block_end"].asDouble() - start;
+      const double tested = run["tested"].asDouble() + std::clamp(now - start, 0.0, std::max(0.0, length));
+      modes.status = "Testing block " + std::to_string(run["block"].asInt()) + " for " + powerMenuSpan(tested);
+    } else if (automatic && run["status"].asString() == "paused") {
       modes.status = "Paused: " + run["reason"].asString();
-    else
+      modes.settled = run["settled"].asBool();
+    } else {
       modes.status = "Starting…";
+    }
+    if (automatic) {
+      const auto worth = powerMenuWorth(run["worth"]);
+      if (!worth.empty()) modes.status += "\n" + worth;
+    }
   }
   const auto recommend = powerMenuJson(runtime / "recommend.json");
   if (recommend.isObject() && now - recommend["updated"].asDouble() < 3600)

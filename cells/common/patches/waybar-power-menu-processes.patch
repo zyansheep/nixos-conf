@@ -1,6 +1,6 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,236 @@
+@@ -12,9 +12,238 @@
  
  namespace waybar {
  
@@ -87,7 +87,9 @@
 +  };
 +  line("battery-experiments-status", modes.status);
 +  // goal --apply applies nothing while a run owns the settings, and disable restores stock.
-+  line("battery-modes-note", modes.experiments ? "While experiments run, this only sets the goal" : "");
++  line("battery-modes-note", !modes.experiments ? ""
++                             : modes.settled ? "Testing is paused: switching sets the goal's combination"
++                                             : "While experiments run, this only sets the goal");
 +  for (const std::string goal : {"battery", "comfort"}) {
 +    auto* row = findPowerMenuWidget(menu, ("battery-mode-" + goal).c_str());
 +    auto* change = findPowerMenuWidget(menu, ("battery-mode-" + goal + "-change").c_str());

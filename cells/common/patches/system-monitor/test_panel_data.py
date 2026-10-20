@@ -331,6 +331,38 @@ class ScopeTests(unittest.TestCase):
         self.assertNotIn(t, [s['start'] for s in result['sleeps_all'] + result['sleeps']])
         self.assertEqual(len(result['sleeps_all']), 4)  # Each night's, battery to battery.
 
+    def test_a_period_that_starts_in_the_night_keeps_that_nights_suspend(self):
+        now = time.time()
+        start = now - 1.5 * 86400  # Asleep then, since the evening before.
+        result = panel_data.gather(start, now, history_of(self.minutes, self.events))
+        overlapping = [s['end'] for s in result['sleeps_all'] if s['end'] > start and s['start'] < now]
+        self.assertEqual([s['end'] for s in result['sleeps']], overlapping)
+        self.assertLess(result['sleeps'][0]['start'], start)
+
+    def test_the_value_of_more_testing_in_words(self):
+        value = {'horizon_days': 30, 'horizon_hours': 163.0, 'loss': 1.42, 'cost': 0.02, 'worth': True,
+                 'rows': [{'hours': 10, 'loss': 1.36, 'saves': 8.8, 'costs': 0.2},
+                          {'hours': 30, 'loss': 1.06, 'saves': 47.4, 'costs': 0.66},
+                          {'hours': 100, 'loss': 0.74, 'saves': 42.6, 'costs': 2.2}]}
+        text, rows = panel_data.value_text(value, typical=9.0)
+        self.assertEqual(rows[1], ('30 more hours', 'saves 47 Wh (~5 h 16 m on battery)', 'costs 0.7 Wh'))
+        self.assertTrue(text.startswith('More testing is worth it: 30 more hours of blocks would save 47 Wh'))
+        self.assertIn('1.4 W more than the best combination', text)
+        text, rows = panel_data.value_text(dict(value, worth=False, rows=[dict(value['rows'][0], saves=-.3, costs=-.1)]))
+        self.assertEqual(rows, [('10 more hours', 'saves 0.0 Wh', 'costs nothing')])
+        self.assertTrue(text.startswith('More testing would cost more than it saves'))
+        retest = {'version': 'Linux 6.18, BIOS 3.20', 'tested': 9000}
+        self.assertIn('New kernel or BIOS (Linux 6.18, BIOS 3.20): testing runs 10 hours first (2.5 done).',
+                      panel_data.value_text(value, retest=retest)[0])
+        self.assertTrue(panel_data.value_text(dict(value, rows=[]))[0].startswith('Too little battery time'))
+        self.assertEqual(panel_data.value_text(None), ('', []))
+        banner = panel_data.banner_text({'mode': 'auto', 'status': 'paused', 'settled': True, 'goal': 'comfort',
+                                         'reason': experiment.SETTLED}, True)
+        self.assertTrue(banner.startswith('Paused: more testing would cost more than it saves. Meanwhile the '
+                                          'Comfort goal'))
+        result = panel_data.gather(time.time() - 86400, time.time(), history_of(self.minutes, self.events))
+        self.assertTrue(result['plan']['value']['rows'])  # The panel's own plan prices it too.
+
     def test_recommendations_leave_settings_outside_the_pool_as_they_are(self):
         now, pool = time.time(), [n for n in LEVERS if n not in ('aspm', 'abm')]
         with mock.patch.object(experiment, 'pool', lambda specs=None: pool):

@@ -115,8 +115,14 @@ press-drag from the bar does nothing, so opening the menu can't flip Comfort
 mode and apply settings by accident:
 
 - **Automatic experiments** (`power-experiment enable|disable`), with the
-  runner's status under it: testing block N, or paused and why (AC power, a
-  👎 rest, a setting unavailable or failing to change, nothing to test).
+  runner's status under it: testing block N for how long this run has
+  tested so far (minutes, then hours; suspends and pauses don't count), or
+  paused and why (AC power, a 👎 rest, a setting unavailable or failing to
+  change, nothing to test, or more testing would cost more than it saves:
+  then the goal's combination is set, and switching goals switches it).
+  Once the runner has priced testing, a second line gives the amount that
+  pays best as an inequality: `30 h more: saves 50 Wh > costs 0.8 Wh`
+  (saved over the next 30 days, spent now; `≤` when nothing pays).
   Turning them off restores a stock baseline; it no longer applies a
   recommendation (Comfort mode or the panel's Apply does that).
 - **Comfort mode** picks the goal (`power-experiment goal comfort|battery
@@ -389,7 +395,28 @@ experiments only. Tabs:
     quarantine. A boot that died asleep or ended without a shutdown only stops
     the run until the next login (the s2idle crashes happen without
     experiments too). The panel shows the model's accuracy over the allowed
-    combinations and where it is least certain. `power-experiment start
+    combinations and where it is least certain.
+
+    **Whether testing is still worth it** (`report.testing_value`, in Wh over
+    the next 30 days: every model fits the last 30 days, so that is how long
+    a block's information is used). What testing improves is the choice you
+    get — the recommendation, which changes your settings only where a change
+    saves with 90% certainty (Benjamini-Hochberg across settings) — so the
+    *loss* is the W that choice is expected to draw above the best
+    combination, under the plan's posterior. For 10, 30 and 100 more hours of
+    blocks drawn as the plan draws them, the posterior's covariance then is
+    known and its mean moves by the difference, so the choice then and its
+    loss are simulated together (10,000 draws): testing h hours *saves*
+    (battery hours in 30 days − h) × (loss now − loss then) and *costs* h × the
+    W blocks draw above the recommendation. When no amount saves more than
+    it costs, the runner pauses ("more testing would cost more than it
+    saves") with the goal's combination set (recommend.json's; switching
+    goals switches it within a minute), and looks again every 6 hours or when
+    the pool changes. As old blocks leave the 30-day window the loss grows
+    back, so testing resumes by itself. After a kernel (major.minor) or BIOS
+    change it tests 10 hours first, whatever the value says. Too little
+    battery time logged to judge means testing goes on. The panel lists
+    what each amount would save and cost. `power-experiment start
     <settings…> --minutes N` still runs a fixed factorial run (it stops the
     automatic one meanwhile).
   - **Quality of life** — 👍 / 👎 votes on what stands out right now: 👍 for

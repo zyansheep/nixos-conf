@@ -18,7 +18,10 @@ stdenvNoCC.mkDerivation {
   doCheck = true;
   checkPhase = ''
     runHook preCheck
-    ${analysisPython}/bin/python3 -m unittest discover -s . -p 'test_*.py'
+    # One BLAS thread, as in the services (the tests import numpy before eta.py
+    # can pin it): with one per core, a busy machine took the suite from 21 s to
+    # 147 s and failed the panel's time budget.
+    OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 ${analysisPython}/bin/python3 -m unittest discover -s . -p 'test_*.py'
     runHook postCheck
   '';
   # Python resolves the bin symlinks, so each entry point finds its modules.

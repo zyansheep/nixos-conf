@@ -267,6 +267,66 @@ class ExperimentTests(unittest.TestCase):
         self.assertTrue(all(plans))
         self.assertGreaterEqual(final['blocks'], 5)
 
+    def test_the_time_tested_leaves_out_suspends_and_pauses(self):
+        clock = FakeClock()
+        cap = levered('cpu-cap', 'none', 'none', ('2000', 'none'))
+        clock.hooks.append(lambda now: clock.suspend(3600) if now == 1600 else None)  # 2 min into block 3.
+        final, states = self.run_automatic({'cpu-cap': cap}, clock, 1000 + 3600 + 20 * 60, ['cpu-cap'])
+        tested = {s['block']: s['tested'] for s in states if s['status'] == 'running'}
+        self.assertEqual(list(tested.values()), [0, 240, 480, 595, 835, 1075])  # Block 3 ran 115 s, then slept;
+        self.assertEqual(final['tested'], 1075 + 60)  # the last one ran 60 s before experiments were turned off.
+
+    def test_testing_that_isnt_worth_it_pauses_with_the_goals_combination_and_looks_again(self):
+        clock, recheck = FakeClock(), experiment_module.RECHECK
+        cap = levered('cpu-cap', 'none', 'none', ('2000', 'none'))
+        wifi = levered('wifi-ps', 'on', 'on', ('off', 'on'))
+        looks, meanwhile = [], []
+
+        def choose(names, present, run):
+            looks.append(clock.now)
+            return {n: True for n in names}, {'value': {'worth': clock.now >= 1000 + recheck, 'rows': []}}
+        clock.hooks.append(lambda now: meanwhile.append((cap.value, wifi.value)) if now == 4000 else None)
+        final, states = self.run_automatic({'cpu-cap': cap, 'wifi-ps': wifi}, clock, 1000 + recheck + 20 * 60,
+                                           ['cpu-cap', 'wifi-ps'], choose=choose,
+                                           best=lambda names: {'cpu-cap': '2000'},
+                                           version=lambda: 'Linux 6.18, BIOS 3.20')
+        settled = [s for s in states if s.get('settled')]
+        self.assertEqual((settled[0]['reason'], settled[0]['goal']), (experiment_module.SETTLED, 'battery'))
+        self.assertEqual(settled[0]['value'], {'cpu-cap': '2000', 'wifi-ps': 'on'})  # The goal's; the rest at stock.
+        self.assertEqual(meanwhile, [('2000', 'on')])
+        self.assertEqual([t for t in looks if t < 1000 + recheck], [1000])  # One look until RECHECK,
+        running = [s for s in states if s['status'] == 'running']
+        self.assertTrue(running and min(s['block_start'] for s in running) >= 1000 + recheck)  # then blocks again.
+        self.assertEqual((final['status'], cap.value, wifi.value), ('finished', 'none', 'on'))
+        self.assertTrue(all(s['worth'] == {'worth': False, 'rows': []} for s in settled))  # For the menu,
+        self.assertTrue(all(s['worth']['worth'] for s in running))  # in every state, as last priced.
+        self.assertNotIn('value', running[0]['plan'])
+
+    def test_a_restart_keeps_the_last_value_of_testing_while_fresh(self):
+        path = self.box.runtime / 'experiment.json'
+        worth = {'worth': True, 'rows': [{'hours': 30, 'saves': 50.0, 'costs': 0.8}]}
+        for priced, kept in ((1000 - 3600, True), (1000 - experiment_module.RECHECK - 1, False)):
+            experiment_module.write_state({'run': 'auto-1', 'status': 'finished', 'worth': worth, 'priced': priced},
+                                          path)
+            clock = FakeClock()
+            _, states = self.run_automatic({'cpu-cap': levered('cpu-cap', 'none', 'none', ('2000', 'none'))}, clock,
+                                           1000 + 60, ['cpu-cap'], battery=lambda: False)
+            self.assertEqual(states[0].get('worth'), worth if kept else None, priced)  # On AC: not priced yet.
+
+    def test_a_new_kernel_or_bios_is_tested_before_testing_may_stop(self):
+        clock = FakeClock()
+        cap = levered('cpu-cap', 'none', 'none', ('2000', 'none'))
+        first = experiment_module.retest_record('Linux 6.17, BIOS 3.20')
+        self.assertEqual(first['tested'], experiment_module.RETEST)  # What was logged before counts as its.
+        never = lambda names, present, run: ({n: True for n in names}, {'value': {'worth': False, 'rows': []}})
+        with mock.patch.object(experiment_module, 'RETEST', 600):
+            final, states = self.run_automatic({'cpu-cap': cap}, clock, 1000 + 3600, ['cpu-cap'], choose=never,
+                                               best=lambda names: {}, version=lambda: 'Linux 6.18, BIOS 3.20')
+        blocks = sorted({s['block'] for s in states if s['status'] == 'running'})
+        self.assertEqual(blocks, [1, 2, 3])  # 600 s of blocks on the new kernel (three of 240 s),
+        self.assertTrue(states[-1].get('settled'))  # then it may stop.
+        self.assertEqual(self.box.prefs()['retest'], {'version': 'Linux 6.18, BIOS 3.20', 'tested': 720.0})
+
     def test_a_missing_setting_sits_out_and_a_failing_one_backs_off(self):
         clock = FakeClock()
         cap = levered('cpu-cap', 'none', 'none', ('2000', 'none'))

@@ -1312,7 +1312,7 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     sharpening the model. The next block shares a baseline with the earlier
     blocks of its `group` (block_group: the running run, today), so it is
     compared with them; a block in a new group (`group` None) only pins down
-    its own baseline at first.
+    its own baseline at first. `value`: what more testing is worth (testing_value).
     """
     rng = rng or np.random.default_rng()
     blocks = lever_blocks(minutes)
@@ -1322,7 +1322,8 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     weights, y = block_weights(blocks), np.array([b['bat'] for b in blocks])
     qol = qol_model(minutes, events, noticeable)
     battery = [m for m in minutes if m['st'] == 'D' and m.get('set')]
-    now = lever_states(battery[-1]['set'], tops(minutes)) if battery else {}  # Settings outside `names`.
+    top = tops(minutes)
+    now = lever_states(battery[-1]['set'], top) if battery else {}  # Settings outside `names`.
     configs = [dict(zip(names, combo)) for combo in itertools.product((False, True), repeat=len(names))]
     allowed = ([c for c in configs if not present or qol_risk(qol, dict(now, **c)) <= QOL_RISK]
                or [dict.fromkeys(names, False)])
@@ -1330,6 +1331,7 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     contrast = np.array([features(c, names) for c in allowed]).reshape(len(allowed), len(keys))
     others = [n for n in SETTING if n not in names and len({b['x'][n] for b in blocks}) > 1]
     gain, mean, cov, sigmas = np.zeros(len(allowed)), np.zeros(len(keys)), np.zeros((len(keys), len(keys))), {}
+    fits = []
     for fit in sorted({mediators(key) for key in keys}, key=sorted):
         covariates = tuple(c for c in COVARIATES if c not in fit)
         own = np.array([mediators(key) == fit for key in keys])
@@ -1353,6 +1355,7 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
         gain += (cross ** 2).sum(axis=0) / (s ** 2 + np.einsum('ij,jk,ik->i', observed, post, observed))
         mean[own] = beta[k:][own]
         cov[np.ix_(own, own)] = post[k:, k:][np.ix_(own, own)]
+        fits.append((own, k, s, precision, observed))
     # W each candidate draws above every setting normal, per posterior draw.
     draws = rng.multivariate_normal(mean, cov, size=REGRET_DRAWS, method='eigh') @ contrast.T
     regret = (draws - draws.min(axis=1, keepdims=True)).mean(axis=0)
@@ -1360,10 +1363,98 @@ def plan(minutes, events, names, present=True, sigma=None, rng=None, noticeable=
     chance = score / score.sum() if score.sum() > 0 else np.full(len(allowed), 1 / len(allowed))
     index = rng.choice(len(allowed), p=chance)
     spread = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', contrast, cov, contrast), 0))
+    yours = {n: bool(own_settings(minutes, top).get(n, False)) for n in names}
+    days = min(HORIZON_DAYS, max(1.0, (minutes[-1]['t'] - minutes[0]['t']) / 86400)) if minutes else 1.0
+    on_battery = sum(m.get('dt', 60) for m in minutes if m['st'] == 'D') / 3600 / days
     return {'choice': allowed[index], 'cost': float(regret[index]), 'allowed': len(allowed), 'combinations': len(configs),
             'accuracy': float(1.645 * spread.mean()) if len(spread) else None,
             'least_certain': allowed[int(np.argmax(spread))] if len(spread) else None, 'qol': qol,
-            'sigma': sigmas.get(frozenset(), next(iter(sigmas.values()), None))}
+            'sigma': sigmas.get(frozenset(), next(iter(sigmas.values()), None)),
+            'value': testing_value(fits, mean, cov, names, allowed, gain, yours, on_battery)}
+
+
+HORIZON_DAYS = 30  # What a block teaches counts this long: every model fits the last 30 days (eta.WINDOW_DAYS).
+TEST_HOURS = (10, 30, 100)  # More testing testing_value prices.
+VALUE_DRAWS = 640_000  # Its posterior draws times combinations: 10000 draws for a pool of six settings.
+
+
+def cautious_choice(m, cov, options, yours, singles, flips, confidence=CONFIDENCE):
+    """The option recommendations would choose (best_config, approximately) were
+    the effects' posterior N(m, cov), for each column of `m`: from your settings
+    (options[yours]) only changes that save with `confidence` each on its own,
+    Benjamini-Hochberg over the settings (`singles`: your settings with one
+    changed), then the lowest-draw option that changes nothing else (`flips`:
+    which settings each option changes). Rows of `options` and `singles` are
+    features()."""
+    pred = options @ m
+    diff = singles - options[yours]
+    sd = np.sqrt(np.maximum(np.einsum('ij,jk,ik->i', diff, cov, diff), 1e-12))
+    p = ndtr(diff @ m / sd[:, None])  # The chance each change does not save.
+    order, n = np.argsort(p, axis=0), len(singles)
+    passing = np.take_along_axis(p, order, axis=0) <= (1 - confidence) * np.arange(1, n + 1)[:, None] / n
+    found = np.where(passing.any(axis=0), n - np.argmax(passing[::-1], axis=0), 0)
+    eligible = np.argsort(order, axis=0) < found
+    feasible = flips @ (~eligible).astype(float) == 0
+    return np.where(feasible, pred, np.inf).argmin(axis=0)
+
+
+def testing_value(fits, mean, cov, names, allowed, gain, yours, hours_per_day, hours=TEST_HOURS,
+                  draws=None, seed=0):
+    """What more automatic testing is worth, in Wh of battery over the next
+    HORIZON_DAYS: the battery time a block's information is used for before it
+    leaves every model's window.
+
+    What it improves is the choice you get: the recommendation, which changes
+    your settings only where a change surely saves (cautious_choice). `loss` is
+    the W that choice is expected to draw above the best of the combinations,
+    under plan()'s posterior (`fits`: its fits' precision and candidate rows,
+    `mean` and `cov` the effects'). After h more hours of blocks drawn as plan()
+    draws them (from `gain` over `allowed`; the regret from these draws, not
+    plan()'s fewer), the posterior covariance is known
+    (a linear Gaussian model) and its mean moves by the difference, so the
+    choice then and its loss are simulated together. h hours save
+    (horizon - h) × (loss now - loss then) and cost h × the W blocks draw
+    above the choice now (`cost`; under 0 when they draw less). `worth`: some
+    h saves more than it costs, or too little battery time is logged to judge
+    (no `rows`: none of `hours` fits in the horizon). Approximations: one baseline for all of those
+    blocks (each day has its own), and plan()'s fits taken as independent."""
+    keys = [*names, *itertools.combinations(names, 2)]
+    options = list(allowed) + ([] if yours in allowed else [yours])
+    x = np.array([features(c, names) for c in options]).reshape(len(options), len(keys))
+    you = options.index(yours)
+    singles = np.array([features(dict(yours, **{n: not yours[n]}), names) for n in names]).reshape(len(names), -1)
+    flips = np.array([[float(c[n] != yours[n]) for n in names] for c in options])
+    horizon = hours_per_day * HORIZON_DAYS
+    draws = draws or max(1000, VALUE_DRAWS // len(options))
+    z = np.random.default_rng(seed).standard_normal((2, len(keys), draws))
+
+    def root(s):
+        w, v = np.linalg.eigh((s + s.T) / 2)
+        return v * np.sqrt(np.clip(w, 0, None))
+
+    def loss(later):
+        centre = mean[:, None] + root(cov - later) @ z[0]
+        pred = x @ (centre + root(later) @ z[1])
+        chosen = cautious_choice(centre, later, x, you, singles, flips)
+        return float((pred[chosen, np.arange(draws)] - pred.min(axis=0)).mean())
+
+    pred = x[:len(allowed)] @ (mean[:, None] + root(cov) @ z[1])
+    score = gain / ((pred - pred.min(axis=0)).mean(axis=1) + REGRET_FLOOR) ** 2
+    chance = score / score.sum() if score.sum() > 0 else np.full(len(allowed), 1 / len(allowed))
+    choice = int(cautious_choice(mean[:, None], cov, x, you, singles, flips)[0])
+    now, cost = loss(cov), float(chance @ (x[:len(allowed)] @ mean) - x[choice] @ mean)
+    rows = []
+    for h in (h for h in hours if h < horizon):
+        later = np.zeros_like(cov)
+        for own, k, s, precision, observed in fits:
+            added = h * 60 / BLOCK_MINUTES * (observed * chance[:, None]).T @ observed / s ** 2
+            post = np.linalg.inv(precision + added)
+            later[np.ix_(own, own)] = post[k:, k:][np.ix_(own, own)]
+        then = loss(later)
+        rows.append({'hours': h, 'loss': then, 'saves': (horizon - h) * (now - then), 'costs': h * cost})
+    return {'horizon_days': HORIZON_DAYS, 'horizon_hours': horizon, 'loss': now, 'cost': cost,
+            'choice': options[choice], 'rows': rows,
+            'worth': not rows or any(r['saves'] > r['costs'] for r in rows)}
 
 
 REGRET_DRAWS = 300  # Posterior draws for each candidate's expected cost.

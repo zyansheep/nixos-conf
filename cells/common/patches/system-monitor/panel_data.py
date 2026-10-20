@@ -338,6 +338,7 @@ def collect(start, end, history, on_period, part, errors, timings, began):
         recommend), ({}, None))
     result.update(levers=levers, effects=freezes, pool=pool, plan=plan, quality=quality, recs=recs, recs_source=source,
                   goal=part('goal', experiment.goal, 'battery'), quarantine=quarantine,
+                  retest=part('retest', lambda: experiment.preferences().get('retest'), None),
                   risky=tuple(getattr(experiment, 'RISKY', ()) or ()),
                   psr=part('panel self-refresh', lambda: cached('psr', lambda: report.boot_effect(minutes_all, energy,
                                                                                                    typical)), None),
@@ -494,6 +495,40 @@ def typical_text(result):
         return ''
     return (f"Typical draw on battery {typical:.1f} W ({result.get('typical_note') or 'typical'}) → "
             f'{energy / typical:.1f} h per full charge ({energy:.0f} Wh usable); gains are at this draw. ')
+
+
+def value_text(value, typical=None, retest=None):
+    """Whether more automatic testing is worth it (report.testing_value): a
+    sentence, and a row per amount of testing: hours, what it saves over the
+    horizon, what it costs now."""
+    if not value:
+        return '', []
+    if not value.get('rows'):
+        return ('Too little battery time is logged yet to tell whether more testing is worth it; experiments go '
+                'on.'), []
+
+    def wh(x):
+        on = f' (~{duration(x / typical)} on battery)' if finite(typical) and typical > 0 and x >= 1 else ''
+        return f'{x:.0f} Wh{on}' if x >= 9.5 else f'{x:.1f} Wh{on}'
+    rows = [(f"{r['hours']:.0f} more hours", f"saves {wh(max(0.0, r['saves']))}",
+             f"costs {wh(r['costs'])}" if r['costs'] >= 0.05 else 'costs nothing') for r in value['rows']]
+    over = f"the next {value['horizon_days']} days (~{value['horizon_hours']:.0f} h on battery)"
+    top = max(value['rows'], key=lambda r: r['saves'] - r['costs'])
+    if value.get('worth'):
+        text = (f"More testing is worth it: {top['hours']:.0f} more hours of blocks would save {wh(top['saves'])} "
+                f"over {over}, " + (f"for {wh(top['costs'])} spent." if top['costs'] >= 0.05 else
+                                    'and cost next to nothing: blocks draw about what the recommendation does.'))
+    else:
+        text = (f"More testing would cost more than it saves over {over}, so automatic experiments pause with the "
+                f"goal's combination set and look again every {experiment.RECHECK // 3600} hours (old blocks leave "
+                f"the {value['horizon_days']}-day window, and testing is worth more again).")
+    text += (f" The savings: the recommendation changes only what surely saves, so it is expected to draw "
+             f"{value['loss']:.1f} W more than the best combination; testing narrows that. The costs: what blocks "
+             'draw beyond the recommendation.')
+    if isinstance(retest, dict) and retest.get('tested', math.inf) < experiment.RETEST:
+        text += (f" New kernel or BIOS ({retest.get('version')}): testing runs {experiment.RETEST / 3600:.0f} hours "
+                 f"first ({retest['tested'] / 3600:.1f} done).")
+    return text, rows
 
 
 def tally(quality, vote, name):
@@ -743,6 +778,10 @@ def banner_text(state, enabled, now=None, frozen='', quarantine=None):
         allowed = (f" ({plan['allowed']} of {plan['combinations']} combinations allowed)"
                    if plan.get('combinations') else '')
         text = f"Block {state.get('block', '?')}: {arms}{allowed}. {settling}"
+    elif auto and status == 'paused' and state.get('settled'):
+        text = (f"Paused: {state.get('reason') or experiment.SETTLED}. Meanwhile the "
+                f"{str(state.get('goal') or 'battery').capitalize()} goal's combination is set; experiments look "
+                f"again within {experiment.RECHECK // 3600} hours, or when the pool changes.")
     elif auto and status == 'paused':
         text = f"Paused: {state.get('reason') or 'no reason given'}; your settings are restored meanwhile."
     elif status == 'running':

@@ -1,4 +1,5 @@
 import collections
+import itertools
 import math
 import tempfile
 import unittest
@@ -6,6 +7,7 @@ from pathlib import Path
 from unittest import mock
 
 import numpy as np
+import scipy.stats
 
 import power
 import report
@@ -334,6 +336,67 @@ class PlanTests(unittest.TestCase):
         self.assertTrue(0.2 < apst < 0.8)  # …while the uncertain settings still go both ways.
         cost = lambda on: np.mean([p['cost'] for p in plans if p['choice']['aspm'] == on] or [np.nan])
         self.assertLess(cost(True), cost(False))  # The expected cost, in W above the best.
+
+    def test_more_testing_is_worth_it_while_the_recommendation_is_unsure(self):
+        names = ['aspm', 'apst', 'wifi-ps']
+
+        def value(blocks, saves, noise, gap):
+            rng, minutes, t = np.random.default_rng(4), [], 600_000
+            for block in range(blocks):
+                config = {n: bool(rng.integers(2)) for n in names}
+                minutes += block_minutes(t, config, block, bat=16 - saves * config['aspm'] + rng.normal(0, noise))
+                t += 240 + gap
+            return report.plan(minutes, [], names, present=False, rng=np.random.default_rng(0),
+                               group=report.block_group('auto-1', t))['value']
+        unsure = value(16, 1.0, 1.5, 0)                 # An hour of noisy blocks: ASPM's 1 W isn't sure yet.
+        sure = value(400, 3.0, 0.3, 29 * 86400 // 400)  # A month of clear ones, under an hour on battery a day.
+        self.assertTrue(unsure['worth'])
+        self.assertFalse(unsure['choice']['aspm'])      # The recommendation changes nothing yet,
+        self.assertGreater(unsure['loss'], 0.5)
+        self.assertGreater(unsure['rows'][0]['saves'], 3 * unsure['rows'][0]['costs'])  # and 10 h would help.
+        self.assertFalse(sure['worth'])
+        self.assertTrue(sure['choice']['aspm'])
+        self.assertLess(sure['loss'], 0.1)
+        self.assertAlmostEqual(sure['horizon_hours'], 400 * 4 / 60, delta=0.5)  # Its battery hours a day × 30.
+        for each in (unsure, sure):
+            for row in each['rows']:
+                self.assertAlmostEqual(row['saves'], (each['horizon_hours'] - row['hours']) * (each['loss'] - row['loss']))
+                self.assertAlmostEqual(row['costs'], row['hours'] * each['cost'])
+        self.assertTrue(report.plan([], [], names, present=False)['value']['worth'])  # Nothing logged: test.
+
+    def test_the_value_of_testing_matches_the_exact_answer_for_one_setting(self):
+        # ASPM saves 0.5 ± 0.5 W: not sure enough to change (it needs 90%). Blocks measure it with 10 W
+        # of noise each, so after h hours (15 blocks each) the posterior sd is s1 and its mean has moved
+        # by N(0, 0.25 - s1²); it changes iff that mean is 1.28 s1 below zero.
+        value = report.testing_value([(np.array([True]), 0, 10.0, np.array([[4.0]]), np.array([[0.0], [1.0]]))],
+                                     np.array([-0.5]), np.array([[0.25]]), ['aspm'], [{'aspm': False}, {'aspm': True}],
+                                     np.array([0.0, 1.0]), {'aspm': False}, 10.0, draws=200_000)
+        norm = scipy.stats.norm
+        above = lambda m, s: m * norm.cdf(m / s) + s * norm.pdf(m / s)  # E[max(0, N(m, s²))]
+
+        def exact(hours):
+            s1 = math.sqrt(1 / (4.0 + hours * 15 / 100))
+            spread = math.sqrt(0.25 - s1 ** 2)
+            m = np.linspace(-0.5 - 8 * spread, -0.5 + 8 * spread, 20001)
+            w = norm.pdf(m, -0.5, spread)
+            return float(w @ np.where(m <= s1 * norm.ppf(0.1), above(m, s1), above(-m, s1)) / w.sum())
+        self.assertFalse(value['choice']['aspm'])
+        self.assertAlmostEqual(value['loss'], above(0.5, 0.5), delta=0.005)  # E[max(0, -θ)] = 0.542 W.
+        for row in value['rows']:
+            self.assertAlmostEqual(row['loss'], exact(row['hours']), delta=0.005)
+        self.assertEqual([r['hours'] for r in value['rows']], [10, 30, 100])
+
+    def test_the_cautious_choice_changes_only_what_surely_saves(self):
+        names = ['aspm', 'apst']
+        options = [dict(zip(names, c)) for c in itertools.product((False, True), repeat=2)]
+        x = np.array([report.features(c, names) for c in options])
+        singles = np.array([report.features(c, names) for c in ({'aspm': True, 'apst': False},
+                                                                  {'aspm': False, 'apst': True})])
+        flips = np.array([[float(c[n]) for n in names] for c in options])
+        mean = np.array([[-2.0], [-0.5], [0.0]])  # ASPM saves 2 W for sure, APST 0.5 W perhaps; no interaction.
+        choose = lambda sd: options[report.cautious_choice(mean, np.diag(sd) ** 2, x, 0, singles, flips)[0]]
+        self.assertEqual(choose([0.1, 1.0, 0.01]), {'aspm': True, 'apst': False})  # Not the likeliest best,
+        self.assertEqual(choose([0.1, 0.1, 0.01]), {'aspm': True, 'apst': True})   # until APST is sure too.
 
     def test_the_design_covers_every_combination(self):
         names, minutes, t, rng = ['aspm', 'apst', 'wifi-ps'], [], 600_000, np.random.default_rng(3)
@@ -679,6 +742,27 @@ class BootTests(unittest.TestCase):
         self.assertAlmostEqual(effect['watts'], 1.5, delta=.5)  # Not 1.5 − 2 W × (0.6 − 0.1)
         self.assertLess(effect['watts_low'], effect['watts'])
         self.assertGreater(effect['minutes'], 0)
+
+    def test_the_boot_interval_is_welchs_over_the_boot_baselines(self):
+        # Without noise inside boots the fit returns each boot's baseline exactly; the
+        # interval is then Welch's t over them, with its own degrees of freedom.
+        on, off = [0.2, -0.4, 0.5, 0.1, -0.3], [0.6, 0.0, -0.2, 0.9, 0.3, -0.5, 1.4]
+        minutes, t = [], T0
+        for i, (psr, base) in enumerate([(True, b) for b in on] + [(False, b) for b in off]):
+            for j in range(60):
+                load = 1 + (7 * j + i) % 19
+                minutes.append(minute(t, load=load, set={'psr': psr, 'profile': 'low-power'},
+                                      bat=9 + .3 * load + base - 1.5 * psr, boot=f'b{i}'))
+                t += 60
+        effect = report.boot_effect(minutes, 48, 16)
+        a, b = np.array(on) + 9 - 1.5, np.array(off) + 9
+        va, vb = a.var(ddof=1) / len(a), b.var(ddof=1) / len(b)
+        df = (va + vb) ** 2 / (va ** 2 / (len(a) - 1) + vb ** 2 / (len(b) - 1))
+        half = scipy.stats.t.ppf(0.95, df) * math.sqrt(va + vb)
+        self.assertAlmostEqual(effect['watts'], b.mean() - a.mean(), places=6)
+        self.assertAlmostEqual(effect['df'], df, places=6)
+        self.assertAlmostEqual(effect['watts_low'], b.mean() - a.mean() - half, places=6)
+        self.assertAlmostEqual(effect['watts_high'], b.mean() - a.mean() + half, places=6)
 
     def test_boot_interval_covers_about_ninety_percent(self):
         hits = sum(e['watts_low'] <= 1.5 <= e['watts_high']

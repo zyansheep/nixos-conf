@@ -97,8 +97,31 @@ int main() {
   assert(modes.experiments && modes.comfort && modes.status == "Paused: on AC power");
   assert(modes.best.at("battery").change == "ASPM on" && modes.best.at("battery").interval == "−8 … +51");
   assert(modes.best.at("comfort").gain == "−6 min" && modes.best.at("comfort").delight == "2% → 9%");
-  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "running", "block": 12})";
-  assert(waybar::powerMenuModes(state, runtime, 1100).status == "Testing block 12");
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "running", "block": 12,
+    "tested": 2672, "block_start": 1000, "block_end": 1240})";
+  assert(waybar::powerMenuModes(state, runtime, 1100).status == "Testing block 12 for 46.20 minutes");
+  assert(waybar::powerMenuModes(state, runtime, 1300).status == "Testing block 12 for 48.53 minutes");  // Block over.
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "running", "block": 21,
+    "tested": 4800, "block_start": 1000, "block_end": 1240})";
+  assert(waybar::powerMenuModes(state, runtime, 1060).status == "Testing block 21 for 1.35 hours");
+  assert(waybar::powerMenuSpan(3599.9) == "1.00 hours" && waybar::powerMenuSpan(-5) == "0.00 minutes");
+  assert(waybar::powerMenuSpan(65) == "1.08 minutes");
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "paused", "settled": true,
+    "reason": "more testing would cost more than it saves"})";
+  modes = waybar::powerMenuModes(state, runtime, 1100);
+  assert(modes.settled && modes.status == "Paused: more testing would cost more than it saves");
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "running", "block": 3,
+    "tested": 0, "block_start": 1000, "block_end": 1240, "worth": {"worth": true, "rows": [
+      {"hours": 10, "saves": 11.6, "costs": 0.3}, {"hours": 30, "saves": 49.6, "costs": 0.84},
+      {"hours": 100, "saves": 44.8, "costs": 2.6}]}})";
+  assert(waybar::powerMenuModes(state, runtime, 1060).status ==
+         "Testing block 3 for 1.00 minutes\n30 h more: saves 50 Wh > costs 0.8 Wh");
+  std::ofstream(runtime / "experiment.json") << R"({"mode": "auto", "status": "paused", "settled": true,
+    "reason": "more testing would cost more than it saves",
+    "worth": {"worth": false, "rows": [{"hours": 10, "saves": -0.02, "costs": 0.78}]}})";
+  assert(waybar::powerMenuModes(state, runtime, 1100).status ==
+         "Paused: more testing would cost more than it saves\n10 h more: saves 0.0 Wh ≤ costs 0.8 Wh");
+  assert(waybar::powerMenuWorth(Json::Value()).empty() && waybar::powerMenuWorth(Json::objectValue).empty());
   std::filesystem::remove(state / "experiments-enabled");
   assert(waybar::powerMenuModes(state, runtime, 1100).status.empty());
   assert(waybar::powerMenuModes(state, runtime, 1000 + 3601).best.empty());  // Stale.

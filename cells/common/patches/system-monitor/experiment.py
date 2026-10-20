@@ -111,6 +111,9 @@ RESUME_SETTLE = 60  # s after resume without any change (the hooks and the Wi-Fi
 QUARANTINE_WINDOW = 15 * 60  # s before an incident whose changes the watchdog quarantines.
 WATCH_EVERY = 30  # s between kernel-log checks while running.
 BACKOFF, BACKOFF_MAX, FAILURES_MAX = 60, 3600, 4  # A failing setting: 60 s, 120 s, … then out for the run.
+RECHECK = 6 * 3600  # s between looks at whether testing is worth it again, while it isn't.
+RETEST = 10 * 3600  # s of blocks after a kernel (major.minor) or BIOS change before testing may stop.
+SETTLED = 'more testing would cost more than it saves'  # The runner's pause while testing isn't worth it.
 # s for a power-lab call: past its 10 s wait for another change's lock (it then
 # exits BUSY_EXIT) plus the change itself, so a busy lock reads as Busy, not as
 # a timeout that leaves power-lab applying the change after we gave up.
@@ -1285,12 +1288,42 @@ def next_block(names, present, run=None):
     minutes, events = report.load_range(now - 30 * 86400, now + 60)
     plan = report.plan(minutes, events, names, present=present, group=report.block_group(run, now) if run else None)
     return plan['choice'], {'accuracy': plan['accuracy'], 'cost': plan['cost'], 'allowed': plan['allowed'],
-                            'combinations': plan['combinations']}
+                            'combinations': plan['combinations'], 'value': plan.get('value')}
+
+
+def recommended_values(specs, names, chosen=None, recommend=None):
+    """The goal's best combination (recommend.json's) as the values of `names`
+    it covers."""
+    entry = ((recommend or recommendation)() or {}).get(chosen or goal()) or {}
+    values = {}
+    for assignment in entry.get('apply') or []:
+        name, _, value = assignment.partition('=')
+        if name in names and name in specs and specs[name].levels:
+            levels = specs[name].levels()
+            values[name] = levels[0] if value == 'saving' else levels[1] if value == 'normal' else value
+    return values
+
+
+def platform_version():
+    """The kernel (major.minor) and the BIOS: what can change what settings save."""
+    kernel = '.'.join(os.uname().release.split('.')[:2])
+    return f"Linux {kernel}, BIOS {read(SYS / 'class/dmi/id/bios_version') or '?'}"
+
+
+def retest_record(version=None):
+    """{'version', 'tested'}: seconds of blocks since this kernel or BIOS first ran
+    (at the first record, what was logged before counts as its: RETEST)."""
+    version = version or platform_version()
+    record = preferences().get('retest')
+    if not isinstance(record, dict) or record.get('version') != version:
+        record = {'version': version, 'tested': 0.0 if isinstance(record, dict) else float(RETEST)}
+        prefer(retest=record)
+    return record
 
 
 def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked, resting=qol.resting,
               enabled=None, names=pool, choose=next_block, block=BLOCK, washout=WASHOUT, state_path=None,
-              watchdog=None, ledger=None):
+              watchdog=None, ledger=None, best=None, version=platform_version):
     """Automatic experiments, for as long as they are enabled: each block, the
     combination of the pool's settings report.plan expects to sharpen the
     battery model most, among those unlikely to earn a 👎 while you are there.
@@ -1301,16 +1334,27 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
     (no Wi-Fi interface, power-profiles-daemon restarting) sits a block out; one
     that fails to set sits out BACKOFF, doubling, and after FAILURES_MAX failures
     the rest of the run. Risky settings are set last and hold (risky_allowed).
-    The watchdog runs before the first block and every WATCH_EVERY seconds."""
+    The watchdog runs before the first block and every WATCH_EVERY seconds.
+
+    While more testing would cost more battery than it saves (the plan's
+    `value`, report.testing_value), it pauses with the goal's best combination
+    (`best`: recommend.json's) set instead, and looks again every RECHECK or
+    when the pool changes: the value of testing grows back as old blocks leave
+    the models' window. After a kernel or BIOS change it tests RETEST first."""
     specs = specs if specs is not None else catalog()
+    best = best or (lambda which: recommended_values(specs, which))
     enabled = enabled or (lambda: ENABLED.exists())
     ledger = ledger or Ledger(clock=clock.time)
     watchdog = watchdog or Watchdog(ledger=ledger)
-    number, started, owned, failing = 0, clock.time(), set(), {}
+    number, tested, started, owned, failing = 0, 0.0, clock.time(), set(), {}  # tested: s awake in blocks.
     run_id = f'auto-{int(started)}'
-    resumed, tripped, pending = None, None, {}
+    resumed, tripped, pending, settled = None, None, {}, None
+    retest = retest_record(version())
     base = {'run': run_id, 'mode': 'auto', 'label': 'Automatic experiments', 'started': started,
             'block_seconds': block, 'washout_seconds': washout}
+    previous = load_state(state_path)  # Its value of testing, while fresh: the menu shows it in every state.
+    if previous.get('worth') and started - previous.get('priced', -math.inf) < RECHECK:
+        base.update(worth=previous['worth'], priced=previous['priced'])
 
     def stock_values(current):
         return {name: specs[name].stock_or_none(True) for name in current}
@@ -1398,10 +1442,27 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
                 pause(f'{specs[current[0]].label} unavailable' if len(current) == 1 else 'no setting available', 15,
                       excluded=excluded)
                 continue
-            choice, plan = choose(usable, not locked(), run_id)
+            if settled and (settled['names'] != current or now - settled['checked'] >= RECHECK):
+                settled = None  # The pool changed, or time to look again.
+            if settled is None:
+                choice, plan = choose(usable, not locked(), run_id)
+                worth = (plan or {}).pop('value', None) or {}
+                if worth:
+                    base.update(worth=worth, priced=now)
+                if not worth.get('worth', True) and retest['tested'] >= RETEST:
+                    settled = {'checked': now, 'names': current, 'at': -math.inf}
+            if settled and (now - settled['at'] >= 300 or settled.get('goal') != goal()):
+                try:  # The goal's combination: at once on a goal change, as recommend.json changes.
+                    settled.update(target=best(usable), at=now, goal=goal())
+                except Exception as error:  # noqa: BLE001 - stock meanwhile
+                    print(f'power-experiment: no recommended combination: {error}', file=sys.stderr)
+                    settled.update(target={}, at=now, goal=goal())
             values, held = {}, []
             for name in usable:
-                value = specs[name].levels()[0 if choice[name] else 1]
+                value = (settled['target'].get(name, specs[name].stock_or_none(True)) if settled else
+                         specs[name].levels()[0 if choice[name] else 1])
+                if value is None:
+                    continue
                 if name in RISKY:
                     present = specs[name].read()
                     if not risky_allowed(name, present, value, ledger, now, specs[name].stock_or_none(True)):
@@ -1409,7 +1470,7 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
                         held.append(name)
                 values[name] = value
             busy = None
-            for name in risky_last(usable):
+            for name in risky_last(list(values)):
                 try:
                     if specs[name].read() != values[name]:
                         change(specs[name], values[name], ledger, 'auto')
@@ -1433,26 +1494,36 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
             if not usable:
                 pause(f'could not set {", ".join(specs[n].label for n in excluded)}', 15, excluded=excluded)
                 continue
+            if settled:
+                pause(SETTLED, 60, settled=True, goal=settled['goal'], checked=settled['checked'],
+                      value={n: values[n] for n in usable if n in values}, held=held, excluded=excluded)
+                continue
             begin = clock.time()
             number += 1
             saving = {name: values[name] == specs[name].levels()[0] for name in usable}
-            state = dict(base, status='running', block=number, blocks=number, plan=plan,
+            state = dict(base, status='running', block=number, blocks=number, tested=tested, plan=plan,
                          config={name: 'B' if saving[name] else 'A' for name in usable},
                          arm=''.join('B' if saving[name] else 'A' for name in usable),
                          value={name: values[name] for name in usable}, excluded=excluded, held=held,
                          block_start=begin, washout_until=begin + washout, block_end=begin + block)
             write_state(state, state_path)
-            found = None
+            found, awake = None, begin
             while clock.time() < state['block_end']:
                 clock.sleep(5)
                 ledger.beat()
                 suspended, mark = clock.suspended_since(mark)
                 resumed = clock.time() if suspended else resumed
+                if not suspended:  # A suspend's time isn't testing.
+                    awake = min(clock.time(), state['block_end'])
                 if clock.time() - watched >= WATCH_EVERY:
                     found, watched = watchdog.poll(watched - 10, seen()), clock.time()
                 if (found or suspended or not battery() or not enabled() or names(specs) != current
                         or resting() > 0 or any(specs[name].read() != values[name] for name in usable)):
                     break
+            tested += awake - begin
+            if retest['tested'] < RETEST:  # Testing a new kernel or BIOS.
+                retest['tested'] += awake - begin
+                prefer(retest=retest)
             if clock.time() < state['block_end']:
                 write_state(dict(state, block_end=clock.time()), state_path)  # Ended early.
             if found:
@@ -1467,7 +1538,8 @@ def automatic(specs=None, clock=Clock, battery=on_battery, locked=screen_locked,
         finally:
             ledger.end()
             write_state(finished({'run': run_id, 'mode': 'auto', 'label': 'Automatic experiments'}, pending,
-                                 finished=clock.time(), blocks=number, originals=base.get('originals', {}),
+                                 finished=clock.time(), blocks=number, tested=tested,
+                                 originals=base.get('originals', {}),
                                  names=sorted(owned | set(pending)), watchdog=tripped), state_path)
 
 
@@ -1926,7 +1998,10 @@ def main(argv=None):
         if args.goal:
             prefer(goal=args.goal)
             if args.apply:
-                if running():  # At once, not after waiting for the lock a run holds for as long as it runs.
+                if running() and load_state().get('settled'):  # The paused runner sets the goal's combination.
+                    print('power-experiment: paused experiments switch to its combination within a minute',
+                          file=sys.stderr)
+                elif running():  # At once, not after waiting for the lock a run holds for as long as it runs.
                     not_applied([OWNED])
                 else:
                     with ownership(wait=30) as mine:

@@ -30,6 +30,20 @@ class MonitorTests(unittest.TestCase):
             (p/'cmdline').write_bytes(b'electron\0https://example.com/vesktop/app.asar\0')
             self.assertEqual(process_identity(p, 'electron'), ('Electron', ''))
 
+    def test_an_electron_helper_belongs_to_the_app_that_started_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for pid, parent, cmdline in [(50, 1, b'electron\0/nix/store/example/lib/vesktop/app.asar\0'),
+                                         (51, 50, b'electron\0--type=gpu-process\0')]:  # No app path of its own.
+                directory = root / str(pid)
+                directory.mkdir()
+                fields = ['0'] * 22
+                fields[0], fields[1], fields[19], fields[21] = 'S', str(parent), '100', '4'
+                (directory / 'stat').write_text(f'{pid} (electron) ' + ' '.join(fields))
+                (directory / 'exe').symlink_to('/nix/store/example-electron/bin/electron')
+                (directory / 'cmdline').write_bytes(cmdline)
+            self.assertEqual(processes(root)[(51, 100)][3], 'Vesktop')
+
     def test_browser_ancestry_when_executable_links_are_inaccessible(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
@@ -61,6 +75,13 @@ class MonitorTests(unittest.TestCase):
         state = h.sample(200, {(1, 101*TICKS): ('new', 2, 20)})
         self.assertEqual(state['coverage'], 0)
         self.assertEqual(state['cpu'], [])
+
+    def test_a_short_suspend_starts_the_window_over_too(self):
+        h = History(cores=1)
+        for t in range(0, 22, 2):
+            h.sample(t, {(1, 0): ('busy', t, 10)})                    # One core busy for 20 s,
+        state = h.sample(50, {(1, 0): ('busy', 20, 10)})               # then 30 s asleep: still in the
+        self.assertEqual((state['coverage'], state['cpu']), (0, []))   # 60 s window, but not shown.
 
     def test_exited_program_stays_in_window_and_names_aggregate(self):
         h = History(cores=1)
@@ -174,10 +195,12 @@ class MonitorTests(unittest.TestCase):
             power.update.assert_not_called()  # The next sample reports the gap instead.
             self.assertFalse((directory / 'snapshot.json').exists())
             boot, wall = began + 0.3, time.time()
+            self.addCleanup(os.umask, os.umask(0o022))
             with mock.patch('collector.clocks', return_value=(boot, wall)):
                 state = collector.collect(power, History(), directory, began, scan=lambda: {}, sensors=lambda: [])
             power.update.assert_called_once_with(boot, wall, {})  # Clocks read after the scan, together.
             self.assertEqual(json.loads((directory / 'snapshot.json').read_text())['battery'], state['battery'])
+            self.assertEqual((directory / 'snapshot.json').stat().st_mode & 0o777, 0o600)  # Its process names: yours.
 
 if __name__ == '__main__':
     unittest.main()

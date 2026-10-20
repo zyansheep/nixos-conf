@@ -28,7 +28,7 @@ import qol  # noqa: E402
 import report  # noqa: E402
 from panel_data import (GONE, NOTE_SECONDS, History, apply_note, banner_text, command_note, duration,  # noqa: E402
                         gather, health_text, interaction_clear, lever_rows, no_levers, picker, read_battery,
-                        read_estimate, status_line, typical_text, what_if_note)
+                        read_estimate, status_line, typical_text, value_text, what_if_note)
 from report import PHRASES  # noqa: E402
 
 # Categorical slots in validated order (dark surface #222226): adjacent stack
@@ -758,6 +758,11 @@ class BatteryPanel(Adw.Application):
         page.append(self.lever_list)
         self.accuracy = self.muted(wrapped())
         page.append(self.accuracy)
+        # Whether more testing is worth it: what it would save and cost.
+        self.worth = self.muted(wrapped())
+        page.append(self.worth)
+        self.worth_grid, self.worth_rows = Gtk.Grid(column_spacing=18, row_spacing=2, margin_start=12), None
+        page.append(self.worth_grid)
         self.together = self.muted(wrapped())
         page.append(self.together)
         best = Gtk.Box(spacing=8)
@@ -1093,6 +1098,17 @@ class BatteryPanel(Adw.Application):
                                    f"least certain: {least}. That is where the next blocks look.")
         else:
             self.accuracy.set_text('Include settings to experiment with.')
+        text, rows = value_text((plan or {}).get('value'), result.get('typical'), result.get('retest'))
+        self.worth.set_text(text)
+        self.worth.set_visible(bool(text))
+        if rows != self.worth_rows:  # Rebuilt only when they change.
+            while (child := self.worth_grid.get_first_child()) is not None:
+                self.worth_grid.remove(child)
+            for i, row in enumerate(rows):
+                for j, cell in enumerate(row):
+                    self.worth_grid.attach(self.muted(Gtk.Label(label=cell, xalign=0)), j, i, 1, 1)
+            self.worth_rows = rows
+        self.worth_grid.set_visible(bool(rows))
         interactions = levers.get('interactions') or []
         found = [i for i in interactions if interaction_clear(i)]
         if found:
@@ -1200,11 +1216,15 @@ class BatteryPanel(Adw.Application):
             return
         self.result['goal'] = goal
         self.fill_best()
-        # goal --apply applies nothing while a run owns the settings (as Apply is insensitive then).
-        owned = self.experiment_state().get('status') in ('running', 'paused')
+        # goal --apply applies nothing while a run owns the settings (as Apply is insensitive then);
+        # paused because testing isn't worth it, the runner sets the goal's combination itself.
+        state = self.experiment_state()
+        owned = state.get('status') in ('running', 'paused')
         assignments = self.goal_assignments(goal)
         self.command(['power-experiment', 'goal', goal, '--apply'],
-                     done=f'Goal: {goal.capitalize()}. Nothing applied: experiments own the settings.' if owned else
+                     done=f'Goal: {goal.capitalize()}. Paused experiments switch to its combination within a minute.'
+                     if owned and state.get('settled') else
+                     f'Goal: {goal.capitalize()}. Nothing applied: experiments own the settings.' if owned else
                      lambda out, err: apply_note(assignments, out, err))
 
     def goal_assignments(self, goal):
