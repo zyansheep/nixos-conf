@@ -28,8 +28,8 @@ stdenvNoCC.mkDerivation {
   installPhase = ''
     runHook preInstall
     install -Dm644 -t ${dir} power.py report.py store.py
-    install -Dm755 -t ${dir} collector.py experiment.py battery_panel.py eta.py qol.py throttle.py panel_data.py
-    sed -i '1s|.*|#!${python3}/bin/python3|' ${dir}/collector.py ${dir}/qol.py ${dir}/throttle.py
+    install -Dm755 -t ${dir} collector.py experiment.py battery_panel.py eta.py qol.py throttle.py freeze.py panel_data.py
+    sed -i '1s|.*|#!${python3}/bin/python3|' ${dir}/collector.py ${dir}/qol.py ${dir}/throttle.py ${dir}/freeze.py
     sed -i '1s|.*|#!${panelPython}/bin/python3|' ${dir}/battery_panel.py
     sed -i '1s|.*|#!${analysisPython}/bin/python3|' ${dir}/eta.py ${dir}/experiment.py ${dir}/panel_data.py
     mkdir -p $out/bin
@@ -38,6 +38,7 @@ stdenvNoCC.mkDerivation {
     ln -s ../libexec/waybar-monitor/eta.py $out/bin/battery-eta
     ln -s ../libexec/waybar-monitor/qol.py $out/bin/qol
     ln -s ../libexec/waybar-monitor/throttle.py $out/bin/app-throttle
+    ln -s ../libexec/waybar-monitor/freeze.py $out/bin/app-freeze
     ln -s ../libexec/waybar-monitor/panel_data.py $out/bin/battery-panel-check
     install -Dm644 ${../../../dotfiles/.config/waybar/menu-theme.css} $out/share/battery-panel/menu-theme.css
     cat > $out/bin/battery-panel <<'SCRIPT'

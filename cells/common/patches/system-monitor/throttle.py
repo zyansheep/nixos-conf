@@ -68,31 +68,50 @@ def on_battery(power=Path('/sys/class/power_supply')):
     return not any(read(supply / 'type') == 'Mains' and read(supply / 'online') == '1' for supply in power.glob('*'))
 
 
-class Throttle:
-    def __init__(self, apps=APPS, quota=QUOTA, keep=KEEP, battery=on_battery, proc=Path('/proc'), grace=GRACE,
-                 clock=time.monotonic):
-        self.apps, self.keep = apps, tuple(k.lower() for k in keep)
-        self.quota = quota * PERIOD // 100  # µs per period for a whole app.
-        self.limit = f'{self.quota} {PERIOD}'
-        self.battery, self.proc, self.grace, self.clock = battery, proc, grace, clock
+class Session:
+    """What the desktop is doing, from niri's and PipeWire's event streams:
+    which app has focus, which have windows, which play or record media.
+    app-throttle and app-freeze (freeze.py) act on it."""
+
+    def __init__(self, apps=APPS, battery=on_battery, proc=Path('/proc'), clock=time.monotonic):
+        self.apps, self.battery, self.proc, self.clock = apps, battery, proc, clock
         self.windows, self.focused, self.nodes = {}, None, {}  # window id → pid; PipeWire node id → what we know
-        self.current, self.left = None, {}  # The focused app; when each app last lost focus.
+        # Window id → its workspace, and when it last had focus (niri's focus_timestamp: CLOCK_MONOTONIC, s).
+        self.placed, self.focus_times = {}, {}
+        self.workspaces = {}  # Workspace id → [output, active]
+
+    def window(self, window):
+        self.windows[window['id']] = window.get('pid')
+        self.placed[window['id']] = window.get('workspace_id')
+        if stamp := window.get('focus_timestamp'):
+            self.focus_times[window['id']] = stamp.get('secs', 0) + stamp.get('nanos', 0) / 1e9
 
     def window_event(self, event):
         """One line of `niri msg -j event-stream`."""
         if 'WindowsChanged' in event:
             windows = event['WindowsChanged']['windows']
-            self.windows = {w['id']: w.get('pid') for w in windows}
+            self.windows, self.placed, self.focus_times = {}, {}, {}
+            for window in windows:
+                self.window(window)
             self.focused = next((w['id'] for w in windows if w.get('is_focused')), None)
         elif 'WindowOpenedOrChanged' in event:
             window = event['WindowOpenedOrChanged']['window']
-            self.windows[window['id']] = window.get('pid')
+            self.window(window)
             if window.get('is_focused'):
                 self.focused = window['id']
         elif 'WindowClosed' in event:
-            self.windows.pop(event['WindowClosed']['id'], None)
+            for known in (self.windows, self.placed, self.focus_times):
+                known.pop(event['WindowClosed']['id'], None)
         elif 'WindowFocusChanged' in event:
             self.focused = event['WindowFocusChanged']['id']
+        elif 'WorkspacesChanged' in event:
+            self.workspaces = {w['id']: [w.get('output'), bool(w.get('is_active'))]
+                               for w in event['WorkspacesChanged']['workspaces']}
+        elif 'WorkspaceActivated' in event:  # Active on its output, instead of the one there was.
+            output = self.workspaces.get(event['WorkspaceActivated']['id'], [None])[0]
+            for workspace, known in self.workspaces.items():
+                if known[0] == output:
+                    known[1] = workspace == event['WorkspaceActivated']['id']
 
     def media_event(self, objects):
         """One batch of `pw-dump --monitor`: nodes added, changed (possibly only
@@ -127,18 +146,53 @@ class Throttle:
                 return name if name.endswith('.scope') else None
         return None
 
+    def focused_app(self):
+        """The focused window's app (app_of), or None."""
+        return app_of(self.scope_of(self.windows.get(self.focused)) or '') or None
+
+    def playing(self):
+        """Apps with an audio or video stream running."""
+        return {app_of(self.scope_of(pid) or '') for pid in self.media.values()}
+
+    def shown(self):
+        """Apps with a window on a workspace that is active on its output: maybe
+        on screen (niri doesn't say which of its columns are in view)."""
+        return {app_of(self.scope_of(pid) or '') for window, pid in self.windows.items()
+                if self.workspaces.get(self.placed.get(window), [None, False])[1]}
+
+    def last_focused(self):
+        """{app: when one of its windows last had focus} (niri's clock, CLOCK_MONOTONIC)."""
+        out = {}
+        for window, stamp in self.focus_times.items():
+            app = app_of(self.scope_of(self.windows.get(window)) or '')
+            if app:
+                out[app] = max(out.get(app, stamp), stamp)
+        return out
+
+
+class Throttle(Session):
+    state_path = STATE
+
+    def __init__(self, apps=APPS, quota=QUOTA, keep=KEEP, battery=on_battery, proc=Path('/proc'), grace=GRACE,
+                 clock=time.monotonic):
+        super().__init__(apps, battery, proc, clock)
+        self.keep, self.grace = tuple(k.lower() for k in keep), grace
+        self.quota = quota * PERIOD // 100  # µs per period for a whole app.
+        self.limit = f'{self.quota} {PERIOD}'
+        self.current, self.left = None, {}  # The focused app; when each app last lost focus.
+
     def wanted(self):
         """{scope: cpu.max} for every app scope."""
         scopes = sorted(p.name for p in self.apps.glob('app-*.scope'))
         if not self.battery():
             return dict.fromkeys(scopes, UNLIMITED)
         now = self.clock()
-        focused = app_of(self.scope_of(self.windows.get(self.focused)) or '') or None
+        focused = self.focused_app()
         if focused != self.current:
             if self.current is not None:
                 self.left[self.current] = now
             self.current = focused
-        free = {app_of(self.scope_of(pid) or '') for pid in self.media.values()} | {focused}
+        free = self.playing() | {focused}
         self.left = {app: left for app, left in self.left.items() if now - left < self.grace}
         free |= set(self.left)
         free |= {app_of(s) for s in scopes if any(k in unescape(s).lower() for k in self.keep)}
@@ -166,6 +220,13 @@ class Throttle:
 
     def release(self):
         self.apply(dict.fromkeys((p.name for p in self.apps.glob('app-*.scope')), UNLIMITED))
+
+    def step(self, media_known):
+        """Apply what is wanted now; the state file's contents. Without stream
+        data (PipeWire down), apps that might be playing stay unthrottled."""
+        throttled = self.apply() if media_known else self.apply(dict.fromkeys(self.wanted(), UNLIMITED))
+        return {'quota': self.limit, 'on_battery': self.battery(),
+                'throttled': sorted({label(s) for s in throttled}, key=str.lower)}
 
 
 def app_of(scope):
@@ -245,7 +306,10 @@ def batches(stream):
         stream.buffer = text[end:]
 
 
-def run(throttle, niri_command=('niri', 'msg', '-j', 'event-stream'), pw_command=('pw-dump', '--monitor')):
+def run(agent, niri_command=('niri', 'msg', '-j', 'event-stream'), pw_command=('pw-dump', '--monitor')):
+    """Feed `agent` (a Session: Throttle, freeze.Freezer) niri's and PipeWire's
+    events and act (its step()) after each batch, or every RESCAN; its state
+    goes to agent.state_path. Stopping releases what it did."""
     selector = selectors.DefaultSelector()
     niri, pw = Stream(list(niri_command), selector), Stream(list(pw_command), selector)
     started, last = time.time(), None
@@ -255,29 +319,26 @@ def run(throttle, niri_command=('niri', 'msg', '-j', 'event-stream'), pw_command
                 stream = key.data
                 if not stream.read():
                     if stream is pw:
-                        throttle.nodes.clear()  # Unknown until it is back (apps are left alone meanwhile).
+                        agent.nodes.clear()  # Unknown until it is back (apps are left alone meanwhile).
                     continue
                 if stream is niri:
                     for event in lines(niri):
-                        throttle.window_event(event)
+                        agent.window_event(event)
                 else:
                     for batch in batches(pw):
-                        throttle.media_event(batch)
+                        agent.media_event(batch)
             for stream in (niri, pw):
                 if stream.process is None and time.monotonic() >= stream.retry:
                     stream.start()
-            # Without stream data (PipeWire down), apps that might be playing stay unthrottled.
-            throttled = throttle.apply() if pw.process else throttle.apply(dict.fromkeys(throttle.wanted(), UNLIMITED))
-            state = {'pid': os.getpid(), 'since': started, 'quota': throttle.limit, 'on_battery': throttle.battery(),
-                     'throttled': sorted({label(s) for s in throttled}, key=str.lower)}
+            state = {'pid': os.getpid(), 'since': started, **agent.step(pw.process is not None)}
             if state != last:
-                write_state(state)
+                write_state(state, agent.state_path)
                 last = state
     finally:
         niri.stop()
         pw.stop()
-        throttle.release()
-        STATE.unlink(missing_ok=True)
+        agent.release()
+        agent.state_path.unlink(missing_ok=True)
 
 
 def main(argv=None):

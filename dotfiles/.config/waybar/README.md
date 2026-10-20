@@ -585,6 +585,34 @@ experiments only. Tabs:
 `battery_panel.py --render
 DIR [6 h|Day|Week]` writes the three charts as PNGs without a window.
 
+### Cached-app freeze
+
+`app-freeze` (`freeze.py`, the `app-freeze` user service in `niri.nix`) is
+Android's cached-app freezer for apps you list: on battery, a listed app that
+hasn't had focus for 30 minutes and has no window on a workspace in view gets
+`cgroup.freeze` (all its scopes), so it uses no CPU at all. It thaws at once
+when you focus it or switch to its workspace (niri's events), when you start it
+again (a new scope with its name: a second instance hands its arguments to the
+frozen first one and would wait), on AC, and when PipeWire's stream data is
+missing; every 10 minutes it thaws for 10 s so timers, sync and connections
+catch up. An app busier than a quarter of a core over 5 minutes (a build, an
+export) or playing or recording media keeps running. The last focus comes from
+niri's `focus_timestamp`, so a restart doesn't reset it. Windows on the active
+workspace count as in view: niri doesn't report which columns are on screen
+(`tile_pos_in_workspace_view` is null here), and a frozen window that is
+visible wouldn't scroll or redraw.
+
+It only touches scopes it froze (a power-experiment freeze is left alone);
+stopping it, or `app-freeze --release` (the ExecStopPost, which reads
+`$XDG_RUNTIME_DIR/waybar-monitor/freeze.json`), thaws them. The list is the
+unit's arguments (scope-name patterns, as `app-throttle --keep`): `obsidian
+steam`. Android can freeze every cached app because its apps are written for
+it; desktop apps aren't. Chat apps would drop their connection, and an editor
+running a dev server would stop answering. Floorp would save the most (70% of a
+core on battery over the week to 2026-10-19, though how much of that is in the
+background isn't logged), but frozen it stops downloads and web-app
+notifications.
+
 ### Browser processes and readable labels
 
 Process rows use application names and roles where the executable or installed

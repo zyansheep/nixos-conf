@@ -269,6 +269,28 @@ in {
     };
   };
 
+  # Cached-app freeze (app-freeze, after Android's): on battery, these apps are
+  # frozen (cgroup freezer, no CPU at all) once they've gone 30 min without
+  # focus and have no window on a workspace in view; focusing one, switching to
+  # its workspace, starting it again or plugging in thaws it at once, and every
+  # 10 min it thaws for 10 s to catch up. Busy (over 1/4 core) or playing media,
+  # it runs. Only apps that tolerate it: not chat apps (connections drop), not
+  # editors running dev servers. Floorp would save the most (its background
+  # tabs), but a frozen browser stops downloads and web-app notifications.
+  systemd.user.services.app-freeze = {
+    description = "Freeze long-unused apps on battery";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    environment.PATH = lib.mkForce "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
+    serviceConfig = {
+      ExecStart = "${pkgs.waybar-monitor}/bin/app-freeze obsidian steam";
+      ExecStopPost = "${pkgs.waybar-monitor}/bin/app-freeze --release";
+      Restart = "on-failure";
+      RestartSec = 5;
+    };
+  };
+
   # Keep notification widgets and GTK4 loaded before the first panel toggle.
   systemd.user.services.swaync = {
     description = "Resident notification center";
