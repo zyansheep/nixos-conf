@@ -129,6 +129,7 @@
             packages
             kimi
             emoji
+            jisho
             dotfiles
           ];
         };

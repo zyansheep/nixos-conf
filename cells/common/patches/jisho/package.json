@@ -1,0 +1,19 @@
+{
+	"name": "jisho",
+	"title": "Jisho",
+	"description": "Japanese ↔ English dictionary with kanji, conjugations and offline translation",
+	"author": "zyansheep",
+	"license": "CC-BY-SA-4.0",
+	"icon": "icon.svg",
+	"categories": ["Productivity"],
+	"commands": [
+		{
+			"name": "search",
+			"title": "Japanese Dictionary",
+			"subtitle": "Jisho",
+			"description": "Look up words in English, Japanese or romaji, kanji, and translate sentences offline",
+			"mode": "view",
+			"keywords": ["jisho", "japanese", "dictionary", "translate", "kanji", "日本語", "辞書", "翻訳"]
+		}
+	]
+}

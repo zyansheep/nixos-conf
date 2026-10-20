@@ -447,6 +447,11 @@ binds {
     // Vicinae's own emoji grid can't paste without its input server and has
     // no kaomoji. See cells/home/profiles/emoji.nix.
     Mod+Semicolon hotkey-overlay-title="😀 Emoji & Kaomoji Picker: Vicinae" { spawn "emoji-picker"; }
+    // A Japanese dictionary in Vicinae: English, 日本語 or romaji, kanji and
+    // conjugations, and a sentence is translated offline. Shift looks up the
+    // selected text (or the clipboard). See cells/common/patches/jisho/README.md.
+    Mod+Apostrophe hotkey-overlay-title="📖 Japanese Dictionary: Vicinae" { spawn "vicinae" "deeplink" "vicinae://launch/@zyansheep/jisho/search"; }
+    Mod+Shift+Apostrophe hotkey-overlay-title="📖 Look Up the Selection in Japanese" { spawn "jisho-lookup"; }
     Mod+Shift+W hotkey-overlay-title="📶 Network Sidebar" { spawn "nm-sidebar" "--toggle"; }
     Mod+Shift+B hotkey-overlay-title="🔋 Battery Panel" { spawn "battery-panel"; }
 
