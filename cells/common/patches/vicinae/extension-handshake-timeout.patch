@@ -1,0 +1,25 @@
+--- a/src/typescript/extension-manager/src/index.ts	2026-10-19 22:31:26.739860249 -0700
++++ b/src/typescript/extension-manager/src/index.ts	2026-10-19 22:31:26.749860365 -0700
+@@ -171,17 +171,19 @@
+ 
+ 		logger.info(`Loaded extension ${workerInfo.displayId}`);
+ 
+-		// if handshake is not completed 1 second (!) later we auto unload the worker
++		// if handshake is not completed 5 seconds later we auto unload the worker
+ 		// we don't expect that to happen but we provide this as a safeguard
++		// (the server calls ready() once its view is up: the first one after a
++		// start compiles the QML views, which takes over 1 s on a slow CPU)
+ 		setTimeout(() => {
+ 			const worker = this.workerMap.get(sessionId);
+ 			if (worker?.status === "awaiting_handshake") {
+ 				logger.error(
+-					`worker for command ${worker.displayId} did not complete handshake under 1s, unloading...`,
++					`worker for command ${worker.displayId} did not complete handshake under 5s, unloading...`,
+ 				);
+ 				this.unload(sessionId);
+ 			}
+-		}, 1000);
++		}, 5000);
+ 
+ 		return { session_id: sessionId };
+ 	}

@@ -4,8 +4,14 @@ let
   # Vicinae 0.27.4: label desktop-entry sources and distinguish native/Flatpak
   # window PIDs for focus and quit. Unknown PIDs fall back to launching the app;
   # focus-existing therefore requires a compositor exposing host PIDs (Niri).
+  # And give an extension command 5 s, not 1 s, to come up: the first one after
+  # a server start waits on the QML views compiling, which on battery took >1 s,
+  # and a missed deadline unloads it (an "Extension crashed" screen 5 s later).
   launcher = pkgs.vicinae.overrideAttrs (old: {
-    patches = (old.patches or []) ++ [ ../../../common/patches/vicinae/flatpak-app-identity.patch ];
+    patches = (old.patches or []) ++ [
+      ../../../common/patches/vicinae/flatpak-app-identity.patch
+      ../../../common/patches/vicinae/extension-handshake-timeout.patch
+    ];
     postPatch = (old.postPatch or "") + ''
       cp ${../../../common/patches/vicinae/flatpak-identity.hpp} src/server/src/services/window-manager/flatpak-identity.hpp
       $CXX -std=c++20 -Wall -Wextra -Werror -I${../../../common/patches/vicinae} \
