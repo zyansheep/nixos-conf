@@ -1,18 +1,20 @@
 _:
 { lib, pkgs, config, ... }: {
   xdg.enable = true;
+  # Default apps, for every host: where an entry lists several, the first one
+  # installed wins (the niri and sway hosts have Nautilus and Floorp; Plasma
+  # has Dolphin; Firefox is on wherever core.common's default isn't turned off).
   xdg.mimeApps = {
     enable = true;
     associations.added = {
       "audio/mp4" = "mpv.desktop";
-      "inode/directory" = ["org.kde.dolphin.desktop" "codium.desktop" "org.kde.kate.desktop" "org.kde.gwenview.desktop"];
-      "text/html" = "firefox.desktop";
-      "x-scheme-handler/geo" = "qwant-maps-geo-handler.desktop";
-      "x-scheme-handler/http" = ["floorp.desktop" "firefox-nightly.desktop" "firefox.desktop"];
-      "x-scheme-handler/https" = ["floorp.desktop" "firefox-nightly.desktop" "firefox.desktop"];
+      "inode/directory" = ["org.gnome.Nautilus.desktop" "org.kde.dolphin.desktop" "codium.desktop"];
+      "text/html" = ["floorp.desktop" "firefox.desktop"];
+      "x-scheme-handler/http" = ["floorp.desktop" "firefox.desktop"];
+      "x-scheme-handler/https" = ["floorp.desktop" "firefox.desktop"];
       "x-scheme-handler/obsidian" = "obsidian.desktop";
-      "x-scheme-handler/sgnl" = ["signal-desktop.desktop" "signal.desktop"];
-      "x-scheme-handler/signalcaptcha" = ["signal-desktop.desktop" "signal.desktop"];
+      "x-scheme-handler/sgnl" = "signal.desktop";
+      "x-scheme-handler/signalcaptcha" = "signal.desktop";
       "x-scheme-handler/tel" = "org.kde.kdeconnect.handler.desktop";
       "x-scheme-handler/tg" = "org.telegram.desktop.desktop";
       "x-scheme-handler/tonsite" = "org.telegram.desktop.desktop";
@@ -37,19 +39,17 @@ _:
       "audio/x-ms-wma" = "mpv.desktop";
       "audio/x-vorbis+ogg" = "mpv.desktop";
       "audio/x-wav" = "mpv.desktop";
-      "inode/directory" = "org.kde.dolphin.desktop";
-      "x-scheme-handler/chrome" = "firefox.desktop";
-      "x-scheme-handler/geo" = "qwant-maps-geo-handler.desktop";
-      "x-scheme-handler/http" = "floorp.desktop";
-      "x-scheme-handler/https" = "floorp.desktop";
-      "x-scheme-handler/notion" = "notion-app-enhanced.desktop";
+      "inode/directory" = ["org.gnome.Nautilus.desktop" "org.kde.dolphin.desktop"];
+      "text/html" = ["floorp.desktop" "firefox.desktop"];
+      "x-scheme-handler/chrome" = ["floorp.desktop" "firefox.desktop"];
+      "x-scheme-handler/http" = ["floorp.desktop" "firefox.desktop"];
+      "x-scheme-handler/https" = ["floorp.desktop" "firefox.desktop"];
       "x-scheme-handler/obsidian" = "obsidian.desktop";
       "x-scheme-handler/sgnl" = "signal.desktop";
       "x-scheme-handler/signalcaptcha" = "signal.desktop";
       "x-scheme-handler/slack" = "slack.desktop";
       "x-scheme-handler/tel" = "org.kde.kdeconnect.handler.desktop";
-      "x-scheme-handler/sidequest" = "SideQuest.desktop";
-      "x-scheme-handler/logseq" = "Logseq.desktop";
+      "x-scheme-handler/sidequest" = "sidequest.desktop";
       "x-scheme-handler/discord" = "vesktop.desktop";
       "x-scheme-handler/tg" = "org.telegram.desktop.desktop";
       "x-scheme-handler/tonsite" = "org.telegram.desktop.desktop";

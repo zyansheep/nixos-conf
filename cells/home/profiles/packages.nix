@@ -69,7 +69,6 @@ _: {pkgs, ...}: {
     devenv
     duckdb
     gh
-    glfw
     google-cloud-sdk
     micromamba
     nasm
@@ -104,7 +103,6 @@ _: {pkgs, ...}: {
     iw
     jre
     localsend
-    logmein-hamachi
     # opendrop  # removed from nixpkgs 2026-08 (unmaintained upstream); localsend covers this
     openfortivpn
     qrencode # `qrencode -o - "text" | swayimg -` shows a QR on screen
@@ -114,7 +112,6 @@ _: {pkgs, ...}: {
     qbittorrent
     seahorse
     swappy
-    syncthing
     sysbench
     termscp
     trash-cli

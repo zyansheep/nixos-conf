@@ -2,7 +2,6 @@
 { lib, config, pkgs, ... }:
 with lib; {
   imports = [
-    # "./aliases.nix"
     ./aliases.nix
   ];
 
@@ -33,6 +32,5 @@ with lib; {
     nodejs
     gdb
     gitui # blazingly fast git ui!
-    obsidian # Note Taking Tool
   ];
 }
