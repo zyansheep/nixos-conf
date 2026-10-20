@@ -453,8 +453,8 @@ binds {
 
     // Recording and screenshot bindings from sway
     Mod+Shift+S hotkey-overlay-title="📸 Screenshot Region to Clipboard" { spawn "bash" "-c" "grim -g \"$(slurp)\" - | wl-copy"; }
-    Mod+Shift+G hotkey-overlay-title="🎥 Record Screen Region: wf-recorder" { spawn "bash" "-c" "f=~/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4; wf-recorder -g \"$(slurp)\" -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
-    Mod+Shift+F hotkey-overlay-title="🎬 Record Full Screen: wf-recorder" { spawn "bash" "-c" "f=~/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4; wf-recorder -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
+    Mod+Shift+G hotkey-overlay-title="🎥 Record Screen Region: wf-recorder" { spawn "bash" "-c" "d=~/Videos/Recordings; mkdir -p \"$d\"; f=\"$d/region_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4\"; wf-recorder -g \"$(slurp)\" -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
+    Mod+Shift+F hotkey-overlay-title="🎬 Record Full Screen: wf-recorder" { spawn "bash" "-c" "d=~/Videos/Recordings; mkdir -p \"$d\"; f=\"$d/screen_recording_$(date +\"%Y-%m-%d_%H:%M:%S\").mp4\"; wf-recorder -f \"$f\" && wl-copy --type text/uri-list \"file://$f\" && notify-send \"Recording saved\" \"$f (copied to clipboard)\""; }
     Mod+Shift+E hotkey-overlay-title="⏹️ Stop Screen Recording" { spawn "killall" "-s" "SIGINT" "wf-recorder"; }
 
     // Suspend keybind
