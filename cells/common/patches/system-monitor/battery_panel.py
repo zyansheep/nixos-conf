@@ -4,7 +4,6 @@ power experiments, drawn from the waybar-monitor power log (see report.py)."""
 import json
 import math
 import os
-import subprocess
 import threading
 import time
 import traceback
@@ -122,7 +121,6 @@ def time_ticks(start, end):
     span = end - start
     hours = 1 if span <= 6 * 3600 else 4 if span <= 86400 else 24
     day = time.localtime(start)
-    midnight = time.mktime((day.tm_year, day.tm_mon, day.tm_mday, 0, 0, 0, 0, 0, -1))
     ticks, k = [], 0
     while True:
         # mktime normalizes overflowing hours, so DST days still land on local boundaries.
@@ -361,7 +359,6 @@ class SleepChart(Chart):
             cr.fill()
             if self.hover and math.hypot(self.hover[0] - x, self.hover[1] - y) < best:
                 nearest, best = s, math.hypot(self.hover[0] - x, self.hover[1] - y)
-        span = end - start
         for t, label in time_ticks(start, end):
             text(cr, label, sx(t), height - 18, 8, MUTED, align='center')
         if nearest:

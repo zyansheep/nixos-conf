@@ -11,22 +11,17 @@ App names are coarse (no PIDs, command lines, browser origins or titles).
 """
 import collections
 import datetime
-import gzip
 import json
 import os
 import shutil
 import subprocess
 import time
+from compression import zstd
 from sys import stderr
 from pathlib import Path
 
 import qol
 import store
-
-try:
-    from compression import zstd
-except ImportError:  # Python < 3.14
-    zstd = None
 
 SCHEMA = 3  # 3: `qol` is the record's 👍/👎 (+1/−1, 0 none) and each vote is a qol event (2: a 0–3 level).
 RECORD = 10        # seconds per log record
@@ -809,7 +804,7 @@ class PowerLog:
                 except Exception as error:  # A full disk, say: the plain file stays, compressed next start.
                     print(f'waybar-monitor: compressing {path}: {type(error).__name__}: {error}', file=stderr)
         for path in sorted(directory.glob('*.jsonl*')):
-            if path.suffix not in ('.jsonl', '.zst', '.gz'):
+            if path.suffix not in ('.jsonl', '.zst'):
                 continue  # An interrupted compression's .part file.
             day = path.name.split('.')[0]
             if day == today or day not in self.index['days']:
@@ -850,10 +845,9 @@ class PowerLog:
         stats['last'] = max(filter(None, (stats['last'], record['t1'])))
 
     def compress(self, path):
-        target = path.with_name(path.name + ('.zst' if zstd else '.gz'))
+        target = path.with_name(path.name + '.zst')
         partial = target.with_name(target.name + '.part')
-        with open(path, 'rb') as source, (zstd.open(partial, 'wb', level=10) if zstd
-                                          else gzip.open(partial, 'wb')) as sink:
+        with open(path, 'rb') as source, zstd.open(partial, 'wb', level=10) as sink:
             shutil.copyfileobj(source, sink)
         partial.replace(target)
         path.unlink()

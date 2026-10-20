@@ -101,7 +101,6 @@ _: {pkgs, ...}: {
     cpulimit
     flyctl
     fontpreview
-    hello
     iw
     jre
     localsend

@@ -58,8 +58,7 @@ def load_minutes(start, end, apps=True):
 def minutes_ready():
     """False while the store recomputes its minutes after a layout change (the
     first ~30–40 s after an update: the newest days come back first)."""
-    ready = getattr(store, 'minutes_ready', None)
-    return bool(ready(store.DB)) if callable(ready) else True
+    return bool(store.minutes_ready(store.DB))
 
 
 def top_up(old, since, new):
@@ -204,7 +203,7 @@ def models_outdated():
         found = json.loads(eta.MODELS.read_text()).get('version')
     except (OSError, ValueError, AttributeError):
         return False
-    return found != getattr(eta, 'MODELS_VERSION', found)
+    return found != eta.MODELS_VERSION
 
 
 def read_recommend(path=None, now=None):
@@ -339,7 +338,7 @@ def collect(start, end, history, on_period, part, errors, timings, began):
     result.update(levers=levers, effects=freezes, pool=pool, plan=plan, quality=quality, recs=recs, recs_source=source,
                   goal=part('goal', experiment.goal, 'battery'), quarantine=quarantine,
                   retest=part('retest', lambda: experiment.preferences().get('retest'), None),
-                  risky=tuple(getattr(experiment, 'RISKY', ()) or ()),
+                  risky=tuple(experiment.RISKY),
                   psr=part('panel self-refresh', lambda: cached('psr', lambda: report.boot_effect(minutes_all, energy,
                                                                                                    typical)), None),
                   psr_arm=part('boot arm', experiment.psr_arm, None),

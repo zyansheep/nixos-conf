@@ -783,7 +783,6 @@ INCIDENTS = (
     ('amdgpu ring timeout', re.compile(r'amdgpu.*ring \S+ timeout')),
     ('NVMe timeout', re.compile(r'nvme nvme\d+: .*(?:timeout|controller is down)')),
 )
-SYNC_FLOOD = re.compile(r'Previous system reset reason \[0x08000800\]')
 # How the boot before this one ended (x86/amd, printed early in this boot): one
 # line per reason bit. Bit 11 carries no text and is always set here; the CF9
 # resets (reboot, also a panic or SysRq reboot) and the ACPI power state

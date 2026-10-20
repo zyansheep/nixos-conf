@@ -943,10 +943,8 @@ class EtaTests(unittest.TestCase):
         conn = sqlite3.connect(db)
         conn.execute(f'PRAGMA user_version = {store.VERSION - 1}')  # Mid-migration.
         conn.close()
-        ready = getattr(store, 'minutes_ready', None)
-        self.addCleanup(lambda: setattr(store, 'minutes_ready', ready) if ready else
-                        store.__dict__.pop('minutes_ready', None))
-        store.minutes_ready = None                                 # A store that can't say: the layout decides.
+        ready = store.minutes_ready
+        self.addCleanup(lambda: setattr(store, 'minutes_ready', ready))
         self.assertFalse(eta.db_ready(db))
         self.assertFalse(eta.db_ready(self.root / 'absent.sqlite3'))
         clock = Clock()
@@ -955,10 +953,6 @@ class EtaTests(unittest.TestCase):
         self.assertFalse(live.refit())
         self.assertIs(live.params, before)                         # Nothing trained on it,
         self.assertEqual(live.next_fit, clock.m + eta.RETRY)       # and again in a minute.
-        conn = sqlite3.connect(db)
-        conn.execute(f'PRAGMA user_version = {store.VERSION}')
-        conn.close()
-        self.assertTrue(eta.db_ready(db))
         asked = []
         store.minutes_ready = lambda path: asked.append(path) and False   # Minutes still to recompute.
         self.assertFalse(eta.db_ready(db))

@@ -638,7 +638,7 @@ BOOT_MINUTES = 10  # Battery minutes for a boot to count.
 MIN_BOOTS = 5  # Boots per arm before boot_effect estimates anything.
 
 
-def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_boots=MIN_BOOTS, min_rows=30):
+def boot_effect(minutes, energy, power, key='psr', min_boots=MIN_BOOTS, min_rows=30):
     """Boot-level setting effect on battery draw, adjusted for workload and settings.
 
     Least squares of battery W on load, GPU/video, backlight, Wi-Fi and disk,
@@ -649,7 +649,7 @@ def boot_effect(minutes, energy, power, key='psr', replicates=1000, seed=0, min_
     counts until each arm has `min_boots` boots with BOOT_MINUTES on battery.
     Simulated with boots' own baselines 1 W apart, the old bootstrap of 2
     boots against 7 covered 69% for a nominal 90%; this covers 90% from 5
-    boots each. (`replicates` and `seed` are no longer used.)"""
+    boots each."""
     rows = [m for m in battery_rows(minutes) if m.get('boot')]
     arms = {False: collections.defaultdict(list), True: collections.defaultdict(list)}
     for m in rows:
@@ -1190,10 +1190,6 @@ VOTE_PRIOR = {'down': {'quiet': (0.0, 1.0), 'noticeable': (0.9, 2.0)},
               'up': {'quiet': (0.0, 1.5), 'noticeable': (0.0, 2.0)}}
 
 
-def vote_times(events, vote):
-    return sorted(e['t1'] for e in events if e.get('event') == 'qol' and e.get('vote') == vote)
-
-
 def qol_windows(minutes, events):
     """(setting states, {vote: given}, in an experiment) per 4-minute window —
     an experiment block, or a stretch outside experiments — that you were there
@@ -1526,12 +1522,6 @@ def recommendations(levers, quality, energy=None, power=None, exclude=()):
                                                  best and best['changes'] and gain_text(best)]))
         out[goal] = entry
     return out
-
-
-def hours_needed(sigma, precision=0.5, block_minutes=BLOCK_MINUTES):
-    """Battery hours until each setting's 90% interval is ±`precision` W (balanced blocks)."""
-    blocks = (2 * 1.645 * sigma / precision) ** 2
-    return blocks * block_minutes / 60
 
 
 # --- Sleep ----------------------------------------------------------------------

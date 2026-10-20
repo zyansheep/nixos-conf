@@ -121,7 +121,7 @@ class ReportTests(unittest.TestCase):
                                 'bat': 9 + .3 * load - (1.5 if psr else 0) + rng.normal(0, .5),
                                 'boot': f'b{boot}', 'set': {'psr': psr}})
                 t += 60
-        effect = report.boot_effect(minutes, 48, 16, replicates=200)
+        effect = report.boot_effect(minutes, 48, 16)
         self.assertAlmostEqual(effect['watts'], 1.5, delta=.3)
         self.assertLess(effect['watts_low'], effect['watts'])
         self.assertGreater(effect['minutes'], 0)

@@ -57,7 +57,6 @@ with lib; {
     jq # Json processor
     util-linux # Linux utilities
     smartmontools # Drive Health tools
-    ffmpeg # Video Converter
     imagemagick # Image Converter
     sshfs # Mount remote filesystems
     mpv # video playing

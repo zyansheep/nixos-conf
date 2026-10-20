@@ -2,7 +2,6 @@ import contextlib
 import io
 import json
 import os
-import random
 import sqlite3
 import tempfile
 import time
@@ -207,7 +206,7 @@ class PowerTests(unittest.TestCase):
             log = PowerLog(directory)
             compressed = [p for p in directory.iterdir() if p.name.startswith(old)]
             self.assertEqual(len(compressed), 1)
-            self.assertIn(compressed[0].suffix, ('.zst', '.gz'))
+            self.assertEqual(compressed[0].suffix, '.zst')
             now = time.time()
             log.write({'v': 1, 'event': 'start', 't1': now})
             for i in range(3):
@@ -345,8 +344,6 @@ class PowerTests(unittest.TestCase):
             self.assertNotIn('Old', usage)
 
     def test_a_corrupt_archive_day_is_reported_not_fatal(self):
-        if power.zstd is None:
-            self.skipTest('no zstd')
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             put(directory / '2000-01-01.jsonl.zst', 'not zstd at all')
@@ -504,8 +501,6 @@ class MonitorTests(unittest.TestCase):
         self.assertEqual(self.rows('SELECT ghz, ghz_active, load, busy FROM minutes'), [(None, None, None, 0.0)])
 
     def test_a_broken_archive_and_database_never_stop_sampling(self):
-        if power.zstd is None:
-            self.skipTest('no zstd')
         put(self.log / '2000-01-01.jsonl.zst', 'corrupt')
         self.db.parent.mkdir(parents=True, exist_ok=True)
         with contextlib.closing(sqlite3.connect(self.db)) as conn:

@@ -60,7 +60,6 @@ import json
 import math
 import os
 import re
-import sqlite3
 import subprocess
 import sys
 import threading
@@ -658,24 +657,12 @@ def load_models(path=None, max_age=3600, version=MODELS_VERSION):
 
 def db_ready(db=None):
     """The power database is at this build's layout, its minutes recomputed after
-    any migration (store.minutes_ready; without it, PRAGMA user_version is
-    store.VERSION): before that a refit would read half-migrated minutes."""
-    db = db or store.DB
-    if callable(ready := getattr(store, 'minutes_ready', None)):
-        try:
-            return bool(ready(db))
-        except Exception:  # noqa: BLE001 - not ready is the safe answer
-            return False
+    any migration (store.minutes_ready): before that a refit would read
+    half-migrated minutes."""
     try:
-        conn = sqlite3.connect(Path(db).absolute().as_uri() + '?mode=ro', uri=True, timeout=30)
-    except sqlite3.Error:
+        return bool(store.minutes_ready(db or store.DB))
+    except Exception:  # noqa: BLE001 - not ready is the safe answer
         return False
-    try:
-        return conn.execute('PRAGMA user_version').fetchone()[0] == store.VERSION
-    except sqlite3.Error:
-        return False
-    finally:
-        conn.close()
 
 
 # --- Forecasts --------------------------------------------------------------------

@@ -32,7 +32,6 @@ import` re-reads every day, keeping what is already stored.
 import collections
 import contextlib
 import datetime
-import gzip
 import json
 import os
 import sqlite3
@@ -664,9 +663,7 @@ class Writer:
 # --- The JSONL archive -----------------------------------------------------------------------
 
 def open_log(path):
-    if path.suffix == '.zst' and zstd is not None:
-        return zstd.open(path, 'rt')
-    return gzip.open(path, 'rt') if path.suffix == '.gz' else open(path)
+    return zstd.open(path, 'rt') if path.suffix == '.zst' else open(path)
 
 
 def read_records(path):
@@ -686,7 +683,7 @@ def read_records(path):
 def log_days(log):
     days = {}
     for path in sorted(Path(log).glob('*.jsonl*')):
-        if path.name[:4].isdigit() and path.suffix in ('.jsonl', '.zst', '.gz'):
+        if path.name[:4].isdigit() and path.suffix in ('.jsonl', '.zst'):
             days.setdefault(path.name.split('.')[0], path)  # .jsonl sorts before .jsonl.zst
     return days
 

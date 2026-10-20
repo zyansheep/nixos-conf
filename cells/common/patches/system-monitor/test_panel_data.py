@@ -138,8 +138,7 @@ def hermetic():
 def quick():
     """Fewer bootstrap replicates: for tests of what the panel shows, not of the statistics."""
     return [mock.patch.object(report, name, functools.partial(getattr(report, name), replicates=replicates))
-            for name, replicates in (('lever_effects', 40), ('experiment_effects', 200), ('boot_effect', 100),
-                                     ('what_if', 40))]
+            for name, replicates in (('lever_effects', 40), ('experiment_effects', 200), ('what_if', 40))]
 
 
 class GatherTests(unittest.TestCase):

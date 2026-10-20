@@ -358,8 +358,6 @@ class StoreTests(unittest.TestCase):
         self.assertIn('ValueError: not sqlite', err.getvalue())
         self.assertTrue(writer.write(self.records[0]))
         writer.close()
-        if store.zstd is None:
-            return
         (self.log / '2000-01-01.jsonl.zst').write_bytes(b'\x28\xb5\x2f\xfd' + b'garbage' * 50)
         self.archive(self.records)
         self.db.unlink()
