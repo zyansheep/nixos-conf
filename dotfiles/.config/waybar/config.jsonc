@@ -60,26 +60,26 @@
     "orientation": "horizontal",
     "modules": [ "custom/battery-eta", "power-profiles-daemon" ]
   },
-  // Quality of life, as thumbs (qol.py): 👍 something is especially good right
+  // Quality of life, as thumbs (`drainhound vote`): 👍 something is especially good right
   // now, 👎 the laptop is worse than it should be — automatic experiments then
-  // restore your settings, rest 10 minutes (`qol resume` ends that early) and
+  // restore your settings, rest 10 minutes (`drainhound vote resume` ends that early) and
   // learn what to avoid. Right-click for
-  // the battery panel's Experiments tab. qol signals SIGRTMIN+12 on each vote.
+  // the battery panel's Experiments tab. Each vote signals SIGRTMIN+12.
   "custom/qol-up": {
-    "exec": "/run/current-system/sw/bin/qol waybar up",
+    "exec": "/run/current-system/sw/bin/drainhound waybar up",
     "return-type": "json",
     "interval": 15,
     "signal": 12,
-    "on-click": "/run/current-system/sw/bin/qol up",
-    "on-click-right": "/run/current-system/sw/bin/battery-panel experiments"
+    "on-click": "/run/current-system/sw/bin/drainhound vote up",
+    "on-click-right": "/run/current-system/sw/bin/drainhound panel experiments"
   },
   "custom/qol-down": {
-    "exec": "/run/current-system/sw/bin/qol waybar down",
+    "exec": "/run/current-system/sw/bin/drainhound waybar down",
     "return-type": "json",
     "interval": 15,
     "signal": 12,
-    "on-click": "/run/current-system/sw/bin/qol down",
-    "on-click-right": "/run/current-system/sw/bin/battery-panel experiments"
+    "on-click": "/run/current-system/sw/bin/drainhound vote down",
+    "on-click-right": "/run/current-system/sw/bin/drainhound panel experiments"
   },
   "custom/display": {
     // Sun (moon while the night light is on); click for brightness, night light
@@ -259,10 +259,10 @@
   // Discharging: time to empty, ± half its 80% interval, watts. Charging: time
   // on battery banked so far, time to the charge limit, watts.
   // The outline fill is remaining energy, not charge: near empty each percent
-  // holds ~15% less energy than near full. battery-eta (waybar-monitor) fits
+  // holds ~15% less energy than near full. drainhound (its eta service) fits
   // its models from the power log.
   "custom/battery-eta": {
-    "exec": "/run/current-system/sw/bin/battery-eta",
+    "exec": "/run/current-system/sw/bin/drainhound waybar battery",
     // Left-align inside the fixed-width slot, so the icon sits at the outline's
     // edge instead of floating in the middle of the spare width.
     "align": 0,
@@ -277,7 +277,7 @@
       "power-saver": "powerprofilesctl set power-saver",
       "balanced": "powerprofilesctl set balanced",
       "performance": "powerprofilesctl set performance",
-      "battery-panel": "/run/current-system/sw/bin/battery-panel"
+      "battery-panel": "/run/current-system/sw/bin/drainhound panel"
     }
   },
   "power-profiles-daemon": {
@@ -292,7 +292,7 @@
       "power-saver": "powerprofilesctl set power-saver",
       "balanced": "powerprofilesctl set balanced",
       "performance": "powerprofilesctl set performance",
-      "battery-panel": "/run/current-system/sw/bin/battery-panel"
+      "battery-panel": "/run/current-system/sw/bin/drainhound panel"
     },
     "format-icons": {
       "default": "",

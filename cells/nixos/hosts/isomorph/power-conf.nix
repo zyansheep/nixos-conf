@@ -27,9 +27,8 @@
   # add event at boot (ACAD appears before the DRM connector exists).
   # Measured 2026-09-02 (A/B/A/B, 40 s windows, browser + music workload):
   # abm0 15.35/13.02 W vs abm3 14.07/11.84 W → ~1.2 W.
-  # This is ABM's stock value for power-experiment: it restores ABM by running
-  # these rules again (`power-lab trigger power_supply`) and reads it back
-  # against experiment.ABM_POLICY (3 on battery, 0 on AC) — change both together.
+  # This is ABM's stock value for drainhound's experiments: services.drainhound
+  # below says 3 on battery, 0 on AC — change both together.
   services.udev.extraRules = let
     panelAbm = pkgs.writeShellScript "panel-abm" ''
       level=''${1:-}
@@ -54,10 +53,20 @@
   # module disables PSR (amdgpu.dcdebugmask=0x10) for hangs reported in 2024
   # (drm/amd#3647); PSR lets the display engine idle on a static screen. This
   # entry re-enables it: the later module parameter wins. Pick it for one boot
-  # with `power-experiment next-boot psr` (or the boot menu); the power log
+  # with `drainhound experiment next-boot psr` (or the boot menu); the power log
   # records the running dcdebugmask and the battery panel compares boots.
   specialisation.psr.configuration = {
     boot.kernelParams = lib.mkAfter [ "amdgpu.dcdebugmask=0x0" ];
+  };
+
+  # drainhound on this laptop (the service itself is in the niri profile):
+  # its root helper may run without a password for experiments' root-only
+  # settings, ABM's stock is the udev rule above, and the psr specialisation
+  # is a boot-level experiment arm.
+  services.drainhound = {
+    helper.users = [ "zyansheep" ];
+    settings.stock.abm = { battery = 3; ac = 0; };
+    settings.experiments.boot_arms.psr = "psr";
   };
 
   powerManagement = {

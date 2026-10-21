@@ -1,11 +1,12 @@
-_: {pkgs, ...}: {
+{inputs, ...}: {pkgs, ...}: {
   home.packages = with pkgs; [
     # Browsers
     brave
     chromium
     ((floorp-bin.override {
-      extraPrefsFiles = [ (pkgs.writeText "floorp-monitor.js"
-        (builtins.readFile ../../common/patches/system-monitor/floorp-bridge.js)) ];
+      # drainhound's browser bridge: per-process site labels for the CPU hover list.
+      extraPrefsFiles = [ (pkgs.writeText "firefox-bridge.js"
+        (builtins.readFile "${inputs.drainhound}/contrib/firefox-bridge.js")) ];
     }).overrideAttrs (old: {
       postBuild = (old.postBuild or "") + ''
         # Only the packaged AutoConfig script gets browser privileges. No debugger port.

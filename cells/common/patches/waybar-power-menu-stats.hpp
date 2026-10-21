@@ -55,7 +55,7 @@ struct PowerMenuBattery {
   std::string footer;
 };
 
-// Battery use by app and hardware, attributed by waybar-monitor from measured
+// Battery use by app and hardware, attributed by drainhound from measured
 // battery and chip power. Empty title when the snapshot is missing or stale.
 inline PowerMenuBattery powerMenuBattery(const std::filesystem::path& snapshot, double now,
                                          size_t limit = 6) {
@@ -123,7 +123,7 @@ inline std::string powerMenuTenths(double value) {
   return std::to_string(tenths / 10) + "." + std::to_string(std::labs(tenths % 10));
 }
 
-// Whether more automatic testing pays (report.testing_value: power-experiment's
+// Whether more automatic testing pays (report.testing_value: drainhound experiment's
 // `worth`), as an inequality for the amount of testing that pays best:
 // "30 h more: saves 50 Wh > costs 0.8 Wh" (saved over the next 30 days, spent
 // now; ≤ when nothing pays). Empty until priced.
@@ -142,7 +142,7 @@ inline std::string powerMenuWorth(const Json::Value& worth) {
          (net(row) > 0 ? " > " : " ≤ ") + "costs " + wh(row["costs"].asDouble());
 }
 
-// battery-eta's estimate: title line plus the time-left (or time-to-limit)
+// drainhound eta's estimate: title line plus the time-left (or time-to-limit)
 // density on a grid of hours. `valid` is false when stale or not estimating.
 struct PowerMenuEta {
   bool valid = false;
@@ -194,7 +194,7 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
               powerMenuClock(eta.median) + "   80%: " + powerMenuClock(eta.low) + "–" +
               powerMenuClock(eta.high);
   // The last minutes: the second the embedded controller cuts the power, or
-  // the clean power-off battery-eta does before it.
+  // the clean power-off drainhound eta does before it.
   if (eta.kind == "empty" && state["cutout"].isNumeric()) {
     const auto pm = " ±" + std::to_string(std::lround(state["cutout_pm"].asDouble())) + " s";
     const auto cutout = state["cutout"].asDouble();
@@ -227,8 +227,8 @@ inline Json::Value powerMenuJson(const std::filesystem::path& path) {
 }
 
 // The menu's experiment controls: automatic experiments (on while
-// power-experiment's flag file exists) with the runner's status, the goal, and
-// what each goal's best measured combination would change (battery-eta's
+// drainhound experiment's flag file exists) with the runner's status, the goal, and
+// what each goal's best measured combination would change (drainhound eta's
 // recommend.json, refitted every 15 minutes; missing when stale).
 struct PowerMenuGoal {
   std::string change, gain, interval, delight;  // "ASPM on", "+14 min", "−8 … +51", "2% → 9%"

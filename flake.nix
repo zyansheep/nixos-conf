@@ -36,6 +36,10 @@
 
     impermanence.url = "github:nix-community/impermanence";
 
+    # Battery use, time left and power experiments (the collector, panel and
+    # experiments that used to live in cells/common/patches/system-monitor).
+    drainhound.url = "github:zyansheep/drainhound";
+
     nixos-generators.url = "github:nix-community/nixos-generators";
     nixos-generators.inputs.nixpkgs.follows = "stable";
   };

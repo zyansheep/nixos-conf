@@ -67,7 +67,7 @@ class HoverMonitor : public sigc::trackable {
   }
   void update() {
     Json::Value state;
-    std::ifstream input(std::string(g_get_user_runtime_dir()) + "/waybar-monitor/snapshot.json");
+    std::ifstream input(std::string(g_get_user_runtime_dir()) + "/drainhound/snapshot.json");
     Json::CharReaderBuilder builder;
     std::string errors;
     bool valid = Json::parseFromStream(builder, input, &state, &errors) &&

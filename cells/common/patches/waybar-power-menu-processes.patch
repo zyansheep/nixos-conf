@@ -9,7 +9,7 @@
 +  for (GList* child = old; child; child = child->next) gtk_widget_destroy(GTK_WIDGET(child->data));
 +  g_list_free(old);
 +  const auto snapshot =
-+      std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "snapshot.json";
++      std::filesystem::path(g_get_user_runtime_dir()) / "drainhound" / "snapshot.json";
 +  const auto battery = powerMenuBattery(snapshot, g_get_real_time() / 1e6);
 +  auto* title = gtk_label_new(battery.title.empty() ? "Battery use: waiting for the system monitor…"
 +                                                    : battery.title.c_str());
@@ -43,12 +43,12 @@
 +}
 +
 +static std::filesystem::path powerMenuEtaPath() {
-+  return std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor" / "eta.json";
++  return std::filesystem::path(g_get_user_runtime_dir()) / "drainhound" / "eta.json";
 +}
 +
 +static PowerMenuModes currentPowerMenuModes() {
-+  return powerMenuModes(std::filesystem::path(g_get_user_state_dir()) / "waybar-monitor",
-+                        std::filesystem::path(g_get_user_runtime_dir()) / "waybar-monitor",
++  return powerMenuModes(std::filesystem::path(g_get_user_state_dir()) / "drainhound",
++                        std::filesystem::path(g_get_user_runtime_dir()) / "drainhound",
 +                        g_get_real_time() / 1e6);
 +}
 +
@@ -105,7 +105,7 @@
 +                                          : gtk_style_context_remove_class)(style, "active");
 +    const auto best = modes.best.find(goal);
 +    if (best == modes.best.end()) {
-+      gtk_label_set_markup(GTK_LABEL(change), powerMenuMarkup("waiting for battery-eta…", "").c_str());
++      gtk_label_set_markup(GTK_LABEL(change), powerMenuMarkup("waiting for drainhound…", "").c_str());
 +      gtk_label_set_text(GTK_LABEL(gain), "");
 +      continue;
 +    }
@@ -117,7 +117,7 @@
 +  }
 +}
 +
-+// battery-eta's lines: the time left (to the second in its last minutes) and
++// drainhound eta's lines: the time left (to the second in its last minutes) and
 +// asleep from now.
 +static void showPowerMenuEta(GtkWidget* menu) {
 +  const auto eta = powerMenuEta(powerMenuEtaPath(), g_get_real_time() / 1e6);
@@ -126,7 +126,7 @@
 +      gtk_label_set_text(GTK_LABEL(label), text.c_str());
 +  };
 +  if (auto* title = findPowerMenuWidget(menu, "battery-eta-title"); GTK_IS_LABEL(title))
-+    set(title, eta.title.empty() ? "Time left: waiting for battery-eta…" : eta.title);
++    set(title, eta.title.empty() ? "Time left: waiting for drainhound…" : eta.title);
 +  if (auto* asleep = findPowerMenuWidget(menu, "battery-eta-sleep"); GTK_IS_LABEL(asleep)) {
 +    set(asleep, eta.sleep);
 +    gtk_widget_set_no_show_all(asleep, TRUE);
@@ -134,7 +134,7 @@
 +  }
 +}
 +
-+// While the menu is open, its battery-eta lines tick every second (they would
++// While the menu is open, its drainhound eta lines tick every second (they would
 +// otherwise freeze mid-countdown); the timer ends once the menu is unmapped.
 +static gboolean tickPowerMenuEta(gpointer data) {
 +  auto* menu = GTK_WIDGET(data);
@@ -157,7 +157,7 @@
 +}
 +
 +// battery-experiments and battery-comfort: a click flips the row's switch and
-+// runs power-experiment, keeping the menu open (Enter does the same and closes
++// runs drainhound experiment, keeping the menu open (Enter does the same and closes
 +// it). The menu item's input window covers the switch, so the item gets every
 +// click.
 +static void togglePowerMenuRow(GtkWidget* item) {
@@ -166,7 +166,7 @@
 +  auto* toggle = findPowerMenuWidget(item, experiments ? "battery-experiments-switch" : "battery-comfort-switch");
 +  if (!GTK_IS_SWITCH(toggle) || menu == nullptr) return;
 +  const bool on = !gtk_switch_get_active(GTK_SWITCH(toggle));
-+  const std::string command = std::string("/run/current-system/sw/bin/power-experiment ") +
++  const std::string command = std::string("/run/current-system/sw/bin/drainhound experiment ") +
 +                              (experiments ? (on ? "enable" : "disable")
 +                                           : (on ? "goal comfort --apply" : "goal battery --apply"));
 +  GError* error = nullptr;

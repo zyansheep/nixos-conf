@@ -25,6 +25,7 @@ let
     wifiBackend = config.networking.networkmanager.wifi.backend;
   };
 in {
+  imports = [inputs.drainhound.nixosModules.default];
   environment.systemPackages = with pkgs; [
     grim # screenshot functionality
     slurp # rectangle selection for screenshot functionality
@@ -33,7 +34,6 @@ in {
     notificationCenter # GTK4 notification panel; background input passes through
     audio-sidebar # Audio devices, levels and per-app routing popup
     display-panel # Brightness, night light and grayscale popup
-    waybar-monitor # battery-panel and power-experiment CLIs (collector runs as a service)
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -114,8 +114,8 @@ in {
   # iterated on without absolute-pathing every binary. /run/wrappers/bin comes
   # first: the system profile's sudo is the non-setuid store binary ("sudo must
   # be owned by uid 0"), which half-applied the battery menu's combinations.
-  # iw is the one tool power-experiment (the menu's switches) needs that the
-  # system profile lacks (it is a per-user package): without it Wi-Fi power
+  # iw is the one tool `drainhound experiment` (the menu's switches) needs that
+  # the system profile lacks (it is a per-user package): without it Wi-Fi power
   # saving read as unavailable, so `disable` could not restore it and
   # `goal --apply` reported it failed.
   systemd.user.services.waybar.environment.PATH =
@@ -123,9 +123,8 @@ in {
   # Out-of-store dotfile symlinks keep the same target across rebuilds, so
   # explicitly restart Waybar when its configuration or artwork changes.
   systemd.user.services.waybar.restartTriggers = [
-    # battery-eta runs as Waybar's custom-module child, so a new build only
-    # takes effect when Waybar restarts.
-    pkgs.waybar-monitor
+    # `drainhound waybar` runs as Waybar's custom-module children.
+    config.services.drainhound.package
     ../../../../dotfiles/.config/waybar/config.jsonc
     ../../../../dotfiles/.config/waybar/style.css
     ../../../../dotfiles/.config/waybar/menu-theme.css
@@ -133,167 +132,31 @@ in {
     ../../../../dotfiles/.config/waybar/gauges
   ];
 
-  systemd.user.services.waybar-monitor = {
-    description = "Rolling process, temperature and battery-use statistics for Waybar";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    # `iw` (Wi-Fi power save) and `niri msg` (output modes) for the power log.
-    environment.PATH = lib.mkForce
-      "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      ExecStart = "${pkgs.waybar-monitor}/bin/waybar-monitor";
-      Restart = "on-failure";
-      # Slow enough that a crash loop never trips the start limit and stops logging.
-      RestartSec = 5;
-      RuntimeDirectory = "waybar-monitor";
-      RuntimeDirectoryMode = "0700";
-      # Long-term power log in ~/.local/state/waybar-monitor/power.
-      StateDirectory = "waybar-monitor";
-      NoNewPrivileges = true;
-      # No ProtectSystem/ProtectHome/PrivateTmp: in a user manager they imply a
-      # private user namespace, which hides /proc/PID/{fd,fdinfo,io,exe} of the
-      # session's apps (per-app GPU time and disk IO for battery attribution).
-    };
-  };
-
-  # Resident battery panel (history timeline, sleep drain, what-if runtime,
-  # experiments), toggled over D-Bus from the battery menu like display-panel.
-  systemd.user.services.battery-panel = {
-    description = "Resident battery history and experiments panel";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    requisite = [ "graphical-session.target" ];
-    # Experiment descriptions query iw, niri and powerprofilesctl.
-    environment.PATH = lib.mkForce
-      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      Type = "dbus";
-      BusName = "org.zyansheep.BatteryPanel";
-      ExecStart = "${pkgs.waybar-monitor}/libexec/waybar-monitor/battery_panel.py";
-      Restart = "on-failure";
-    };
-  };
-
-  # Randomized A/B power experiment, started by `power-experiment start` (the
-  # panel's Experiments tab). Root settings go through `sudo -n power-lab`, so
-  # no NoNewPrivileges; the stock values are restored (and read back) on stop,
-  # what could not be is retried by ExecStopPost and the reconcile timer, and
-  # power-lab's pre-sleep hook restores the s2idle crash workarounds.
-  # TimeoutStopSec covers a full restore: ~9 sudo calls of up to 15 s each.
-  systemd.user.services.power-experiment = {
-    description = "Randomized A/B battery experiment";
-    partOf = [ "graphical-session.target" ];
-    environment.PATH = lib.mkForce
-      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment run";
-      ExecStopPost = [
-        "${pkgs.waybar-monitor}/bin/power-experiment restore"
-        # A manual run stops automatic experiments (Conflicts below); bring them back.
-        "${pkgs.waybar-monitor}/bin/power-experiment resume"
-      ];
-      Restart = "no";
-      TimeoutStopSec = 180;
-    };
-  };
-
-  # Automatic experiments (the battery panel's Experiments switch, or
-  # `power-experiment enable`): each block tries the combination of settings
-  # the battery model expects to learn most from, among those unlikely to
-  # bother you; pauses on AC and while quality of life is below fine. Its
-  # watchdog reads the kernel log before and while it runs; an incident removes
-  # experiments-enabled (so it never comes back at the next login by itself).
-  # Ordered after the manual unit: when one starts and the other stops
-  # (Conflicts=), the stop and its restore finish before the start.
-  systemd.user.services.power-experiments = {
-    description = "Automatic battery experiments";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" "waybar-monitor.service" "power-experiment.service" ];
-    conflicts = [ "power-experiment.service" ];
-    unitConfig = {
-      ConditionPathExists = "%S/waybar-monitor/experiments-enabled";
-      # A runner that keeps crashing stops trying: at most 5 starts an hour.
-      StartLimitIntervalSec = 3600;
-      StartLimitBurst = 5;
-    };
-    environment.PATH = lib.mkForce
-      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment auto";
-      ExecStopPost = "${pkgs.waybar-monitor}/bin/power-experiment restore";
-      Restart = "on-failure";
-      RestartSec = 30;
-      TimeoutStopSec = 180;
-    };
-  };
-
-  # The reconciler, while no run owns the settings: retries restores a run
-  # could not finish (restore-pending, a crash), puts applied settings (the
-  # panel's Apply, `goal --apply`) back to stock on AC and sets them again on
-  # battery (risky ones also after a resume, once its wait and hold allow),
-  # is their watchdog (the kernel log, while any are applied), and notes your
-  # own power profile per power source.
-  systemd.user.services.power-experiment-reconcile = {
-    description = "Reconcile power-experiment settings with the power source";
-    after = [ "graphical-session.target" ];
-    environment.PATH = lib.mkForce
-      "/run/wrappers/bin:/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      Type = "oneshot";
-      ExecStart = "${pkgs.waybar-monitor}/bin/power-experiment reconcile";
-      TimeoutStartSec = 180;
-    };
-  };
-  systemd.user.timers.power-experiment-reconcile = {
-    description = "Reconcile power-experiment settings every minute";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    timerConfig = {
-      OnActiveSec = "1min";
-      OnUnitActiveSec = "1min";
-      AccuracySec = "10s";
-    };
-  };
-
-  # Background-app throttle (power-experiment's throttle-apps setting starts and
-  # stops it): on battery, every windowed app but the focused one, those
-  # playing or recording audio/video, terminals, editors/IDEs, T3 Code and
-  # fcitx5 gets a CPU quota (one per app, shared by its scopes).
-  systemd.user.services.app-throttle = {
-    description = "Throttle unfocused apps on battery";
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    environment.PATH = lib.mkForce "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      ExecStart = "${pkgs.waybar-monitor}/bin/app-throttle";
-      ExecStopPost = "${pkgs.waybar-monitor}/bin/app-throttle --release";
-      Restart = "on-failure";
-      RestartSec = 5;
-    };
-  };
-
-  # Cached-app freeze (app-freeze, after Android's): on battery, these apps are
-  # frozen (cgroup freezer, no CPU at all) once they've gone 30 min without
-  # focus and have no window on a workspace in view; focusing one, switching to
-  # its workspace, starting it again or plugging in thaws it at once, and every
-  # 10 min it thaws for 10 s to catch up. Busy (over 1/4 core) or playing media,
-  # it runs. Only apps that tolerate it: not chat apps (connections drop), not
-  # editors running dev servers. Floorp would save the most (its background
-  # tabs), but a frozen browser stops downloads and web-app notifications.
-  systemd.user.services.app-freeze = {
-    description = "Freeze long-unused apps on battery";
-    wantedBy = [ "graphical-session.target" ];
-    partOf = [ "graphical-session.target" ];
-    after = [ "graphical-session.target" ];
-    environment.PATH = lib.mkForce "/etc/profiles/per-user/%u/bin:/run/current-system/sw/bin";
-    serviceConfig = {
-      ExecStart = "${pkgs.waybar-monitor}/bin/app-freeze obsidian steam";
-      ExecStopPost = "${pkgs.waybar-monitor}/bin/app-freeze --release";
-      Restart = "on-failure";
-      RestartSec = 5;
+  # drainhound (github:zyansheep/drainhound): the power log, the battery
+  # menu's breakdown and time left, the panel (Mod+Shift+B), experiments, app
+  # throttling and freezing, as its own user services. Its data is in
+  # ~/.local/state/drainhound; host-specific settings are in the host's config.
+  services.drainhound = {
+    enable = true;
+    settings = {
+      # Power off cleanly just before the embedded controller cuts the power.
+      battery.poweroff = true;
+      # Android-style cached-app freeze for apps that tolerate it: not chat
+      # apps (connections drop), not editors running dev servers.
+      freeze.apps = ["obsidian" "steam"];
+      apps.names."nm-sidebar-gui" = "Wi-Fi panel";
+      apps.groups = {
+        "Browser" = ["floorp" "firefox" "chromium" "chrome" "brave" "zen"];
+        "Builds & EDA" = ["openroad" "yosys" "strands" "rustc" "cargo" "cc1" "c compiler" "c++ compiler" "ld"
+                          "make" "nix" "klayout" "verilator" "iverilog" "gcc" "clang" "cmake" "ninja"];
+        "Coding tools" = ["t3 code" "vscodium" "vs code" "electron" "claude" "codex" "node" "cursor" "kimi"];
+        "Chat & media" = ["vesktop" "signal" "obsidian" "pipewire" "wireplumber" "mpv" "spotify"];
+        "Desktop & system" = ["kernel" "niri" "waybar" "notifications" "wi-fi panel" "drainhound" "xwayland"
+                              "fcitx5" "vicinae" "systemd" "dbus" "networkmanager" "iwd" "tailscale" "swayidle"
+                              "aw-" "xdg-" "swaylock" "awww" "wl-"];
+      };
+      # The display panel's night light and grayscale, in every record.
+      log.extra.panel = "~/.local/state/display-panel/state.json";
     };
   };
 

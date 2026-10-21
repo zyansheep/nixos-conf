@@ -1,9 +1,10 @@
 # Continuous power history on isomorph
 
 > **Superseded proposal (2026-09-15), kept for its survey of the machine.**
-> What was built instead lives in `cells/common/patches/system-monitor/`
-> (package `cells/common/packages/waybar-monitor.nix`) and is documented in
-> [the Waybar README](../../../../dotfiles/.config/waybar/README.md#battery-use-and-the-power-log):
+> What was built instead is [drainhound](https://github.com/zyansheep/drainhound)
+> (in this repository's `cells/common/patches/system-monitor/` until
+> 2026-10-20; see also
+> [the Waybar README](../../../../dotfiles/.config/waybar/README.md#battery-use-the-panel-and-power-experiments-drainhound)):
 >
 > - No RAPL, no Scaphandre and no privileged collector. The unprivileged
 >   `waybar-monitor` samples battery power and amdgpu's readable `PPT` (chip
