@@ -20,11 +20,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1792644954,
-        "narHash": "sha256-tTKVTkCxo1t8BZdjExnirke51KsJmFwk0k1cN6nC4NI=",
+        "lastModified": 1792645879,
+        "narHash": "sha256-OW3wxJcmCQpR8j8tR4tA5aply3jimAiIOQq7TKMrsxs=",
         "owner": "zyansheep",
         "repo": "drainhound",
-        "rev": "e2b4637ba52e76638e4c9ca84069993b916a5177",
+        "rev": "734dee716d9a380690f1e71b0b078150c85d2e50",
         "type": "github"
       },
       "original": {
