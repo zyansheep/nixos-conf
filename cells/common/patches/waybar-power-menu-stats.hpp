@@ -183,8 +183,18 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
                 powerMenuLongHours(asleep["high"].asDouble()) + " at " +
                 powerMenuTenths(asleep["watts"].asDouble()) + " W";
   const auto status = state["status"].asString();
+  const auto at = [&](double hours) { return powerMenuHourMinute(now + hours * 3600); };
+  // Plugged in or charging: what unplugging now would leave (the time on battery
+  // banked so far, as the outline shows it).
+  const auto unplugged = [&] {
+    if (state["banked"].isNumeric())
+      eta.lines.push_back("If unplugged now: " + powerMenuClock(state["banked"].asDouble()) + " · cuts out " +
+                          at(state["banked"].asDouble()) + " (" + at(state["banked_low"].asDouble()) + "–" +
+                          at(state["banked_high"].asDouble()) + ")");
+  };
   if (!state["hours"].isNumeric() || !state["low"].isNumeric() || !state["high"].isNumeric()) {
     eta.title = status == "Discharging" || status == "Charging" ? "Estimating time left…" : "Plugged in";
+    if (status != "Discharging") unplugged();
     return eta;
   }
   // The density, when eta.json has one; the lines need only the median and the 80% ends.
@@ -204,7 +214,6 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
   // As the panel's answers: when it is full (or how long it lasts and when it
   // cuts out), and the 80% interval as clock times, the eight futures in ten
   // between them that futures.json draws.
-  const auto at = [&](double hours) { return powerMenuHourMinute(now + hours * 3600); };
   if (eta.kind == "full") {
     const auto target = state["target"].isNumeric() ? std::lround(state["target"].asDouble()) : 100;
     eta.title = "Full (" + std::to_string(target) + "%)";
@@ -230,12 +239,8 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
     else
       eta.title = "Cuts out at " + powerMenuTimeOfDay(cutout) + "   in " + powerMenuCountdown(cutout - now) + pm;
   }
-  // While charging: what unplugging now would leave (the time on battery
-  // banked so far, as the outline shows it), and what a minute plugged in buys.
-  if (eta.kind == "full" && state["banked"].isNumeric())
-    eta.lines.push_back("If unplugged now: " + powerMenuClock(state["banked"].asDouble()) + " · cuts out " +
-                        at(state["banked"].asDouble()) + " (" + at(state["banked_low"].asDouble()) + "–" +
-                        at(state["banked_high"].asDouble()) + ")");
+  // While charging: what unplugging now would leave, and what a minute plugged in buys.
+  if (eta.kind == "full") unplugged();
   if (eta.kind == "full" && state["ratio"].isNumeric())
     eta.lines.push_back("Plugged in: +" + powerMenuTenths(state["ratio"].asDouble()) + " min of use per minute");
   eta.valid = true;
@@ -259,6 +264,7 @@ struct PowerMenuScenario {
 
 struct PowerMenuFutures {
   bool valid = false;
+  bool onBattery = true;  // Else (plugged in or charging) `empty` is what unplugging now would do.
   double now = 0, pct = 0, cutoff = 0, target = 100;
   std::optional<PowerMenuScenario> empty, full;  // To the cutoff; to the target (charging).
 };
@@ -297,6 +303,8 @@ inline PowerMenuFutures powerMenuFutures(const std::filesystem::path& path, doub
     return futures;
   futures.now = state["now"].asDouble();
   futures.pct = state["pct"].asDouble();
+  const auto status = state["status"].asString();
+  futures.onBattery = status.empty() || status == "Discharging";
   futures.cutoff = state["cutoff_pct"].isNumeric() ? state["cutoff_pct"].asDouble() : 0.0;
   futures.target = state["target"].isNumeric() ? state["target"].asDouble() : 100.0;
   futures.empty = powerMenuScenario(state["empty"]);

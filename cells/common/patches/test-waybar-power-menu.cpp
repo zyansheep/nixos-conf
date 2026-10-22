@@ -58,7 +58,12 @@ int main() {
   assert(!waybar::powerMenuEta(eta, 1020).valid);  // stale
   std::ofstream(eta) << R"({"updated": 1000, "status": "Not charging"})";
   estimate = waybar::powerMenuEta(eta, 1001);
-  assert(!estimate.valid && estimate.title == "Plugged in");
+  assert(!estimate.valid && estimate.title == "Plugged in" && estimate.lines.empty());
+  std::ofstream(eta) << R"({"updated": 1000, "status": "Not charging", "banked": 1.7, "banked_low": 1.4,
+    "banked_high": 2.05})";
+  estimate = waybar::powerMenuEta(eta, 1001);  // Held at the limit: what unplugging now would leave.
+  assert(estimate.title == "Plugged in" && estimate.lines.size() == 1 &&
+         estimate.lines[0] == "If unplugged now: 1:42 · cuts out 01:58 (01:40–02:19)");
   std::ofstream(eta) << R"({"updated": 1000, "status": "Charging", "hours": 0.5, "low": 0.4, "high": 0.7,
     "target": 90, "distribution": {"kind": "full", "t": [0.2, 0.5], "p": [1, 2, 3]}})";
   estimate = waybar::powerMenuEta(eta, 1001);  // Mismatched arrays: no density, the lines still.
@@ -111,12 +116,18 @@ int main() {
     "full": {"n": 1, "runs": [{"end": 80, "pts": [[0, 34.2], [80, 90]]}]}})";
   auto ahead = waybar::powerMenuFutures(futures, 1030);
   assert(ahead.valid && ahead.now == 990 && ahead.pct == 34.2 && ahead.cutoff == 2.0 && ahead.target == 90.0);
+  assert(ahead.onBattery);  // No status: as before, on battery.
   assert(ahead.empty && ahead.empty->runs.size() == 2 && ahead.empty->runs[0].end == 40);  // By landing; bad runs out.
   assert(ahead.empty->median.end == 54 && ahead.empty->low == 0.75 && ahead.empty->runs[1].points.size() == 2);
   assert(!ahead.full);  // No median: nothing to draw.
   assert(!waybar::powerMenuFutures(futures, 1090).valid);  // Stale.
   std::ofstream(futures) << R"({"updated": 1000, "now": 1000, "pct": 80, "status": "Not charging"})";
-  assert(!waybar::powerMenuFutures(futures, 1001).valid);  // Plugged in: no futures.
+  assert(!waybar::powerMenuFutures(futures, 1001).valid);  // No estimate: no futures.
+  std::ofstream(futures) << R"({"updated": 1000, "now": 1000, "pct": 90, "status": "Not charging",
+    "empty": {"n": 1, "hours": 3, "low": 2.5, "high": 3.5, "runs": [{"end": 180, "pts": [[0, 90], [180, 2]]}],
+      "median": {"end": 180, "pts": [[0, 90], [180, 2]]}}})";
+  ahead = waybar::powerMenuFutures(futures, 1001);  // Plugged in: what unplugging now would do.
+  assert(ahead.valid && ahead.empty && !ahead.full && !ahead.onBattery);
   assert(!waybar::powerMenuFutures(root / "missing", 1001).valid);
   assert(waybar::powerMenuWatts(" 8.8 W  63%") == 8.8 && waybar::powerMenuWatts("n/a") == 0.0);
   assert(waybar::powerMenuUseColor("Idle chip") == "#5f6d68" && waybar::powerMenuUseColor("USB devices") == "#8d9c94");

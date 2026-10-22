@@ -9,7 +9,7 @@
  #include <fmt/format.h>
  #include <spdlog/spdlog.h>
  
-@@ -12,9 +14,526 @@
+@@ -12,9 +14,529 @@
  
  namespace waybar {
  
@@ -146,7 +146,8 @@
 +// The battery panel's hero, ahead only: drainhound eta's sampled futures from now, each a
 +// thin line ending in a dot where it lands, the dots stacked into the distribution (one
 +// per future), the middle eight in ten bracketed. Charging, the charging futures (moss)
-+// and what unplugging now would do (rust); on battery, one fan down to the cutoff.
++// and what unplugging now would do (rust), that alone when plugged in; on battery, one fan
++// down to the cutoff.
 +static void paintPowerMenuFutures(cairo_t* cr, double width, double height) {
 +  const auto& futures = currentPowerMenuFutures();
 +  const double now = g_get_real_time() / 1e6, x0 = 34, top = 22, plot = height - 60;
@@ -155,6 +156,7 @@
 +    return;
 +  }
 +  const bool charging = futures.full.has_value();
++  const bool unplugged = charging || !futures.onBattery;  // The empty fan: what unplugging now would do.
 +  const double age = (now - futures.now) / 60;  // Minutes: the runs start where eta sampled them.
 +  double last = 0;
 +  for (const auto* scenario : {futures.empty ? &*futures.empty : nullptr, futures.full ? &*futures.full : nullptr})
@@ -206,14 +208,14 @@
 +  if (futures.empty) {
 +    for (const auto& run : futures.empty->runs) {
 +      line(run);
-+      powerMenuSource(cr, "#e57a55", charging ? .2 : .28);
++      powerMenuSource(cr, "#e57a55", unplugged ? .2 : .28);
 +      cairo_stroke(cr);
 +    }
 +    const double median_dash[] = {4, 3};
-+    if (charging) cairo_set_dash(cr, median_dash, 2, 0);
++    if (unplugged) cairo_set_dash(cr, median_dash, 2, 0);
 +    line(futures.empty->median);
 +    powerMenuSource(cr, "#e57a55");
-+    cairo_set_line_width(cr, charging ? 1.5 : 2.2);
++    cairo_set_line_width(cr, unplugged ? 1.5 : 2.2);
 +    cairo_stroke(cr);
 +    cairo_set_dash(cr, nullptr, 0, 0);
 +    cairo_set_line_width(cr, 1);
@@ -284,8 +286,9 @@
 +      const double x = std::max(X(empty.runs.back().end), right) + 9;
 +      powerMenuText(cr, "unplugged: cuts out " + when, x, Y(futures.cutoff) + 2, 10, "#e57a55", true, false, true);
 +      powerMenuText(cr, count, x, Y(futures.cutoff) + 15, 9, "#a3b2a9", false, false, true);
-+    } else {
-+      powerMenuText(cr, "cuts out " + when, width - 10, Y(30) - 6, 10.5, "#e57a55", true, true, true);
++    } else {  // The only fan: labelled where it has room.
++      powerMenuText(cr, (unplugged ? "unplugged: cuts out " : "cuts out ") + when, width - 10, Y(30) - 6, 10.5,
++                    "#e57a55", true, true, true);
 +      powerMenuText(cr, count, width - 10, Y(30) + 8, 9, "#a3b2a9", false, true, true);
 +    }
 +  }
