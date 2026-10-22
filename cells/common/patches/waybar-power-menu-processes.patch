@@ -1,9 +1,82 @@
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
-@@ -12,9 +12,243 @@
+@@ -2,6 +2,8 @@
+ #include "util/hover_monitor.hpp"
+ #include "util/power_menu_stats.hpp"
+ 
++#include <pango/pangocairo.h>
++
+ #include <fmt/format.h>
+ #include <spdlog/spdlog.h>
+ 
+@@ -12,9 +14,526 @@
  
  namespace waybar {
  
++// The battery panel's colours (drainhound's Trail), for the menu's charts.
++static void powerMenuSource(cairo_t* cr, const std::string& hex, double alpha = 1.0) {
++  const auto channel = [&](size_t i) { return std::stoi(hex.substr(i, 2), nullptr, 16) / 255.0; };
++  cairo_set_source_rgba(cr, channel(1), channel(3), channel(5), alpha);
++}
++
++static void powerMenuRounded(cairo_t* cr, double x, double y, double w, double h, double r) {
++  r = std::min({r, w / 2, h / 2});
++  cairo_new_sub_path(cr);
++  cairo_arc(cr, x + w - r, y + r, r, -G_PI / 2, 0);
++  cairo_arc(cr, x + w - r, y + h - r, r, 0, G_PI / 2);
++  cairo_arc(cr, x + r, y + h - r, r, G_PI / 2, G_PI);
++  cairo_arc(cr, x + r, y + r, r, G_PI, 3 * G_PI / 2);
++  cairo_close_path(cr);
++}
++
++// Text on a menu chart with its top at y and its left (or, `right`, its right) end
++// at x; `halo` rings it in the menu's background so it reads over the runs.
++static void powerMenuText(cairo_t* cr, const std::string& text, double x, double y, double size,
++                          const std::string& color, bool bold = false, bool right = false, bool halo = false) {
++  PangoLayout* layout = pango_cairo_create_layout(cr);
++  PangoFontDescription* font = pango_font_description_from_string("DejaVu Sans");
++  pango_font_description_set_absolute_size(font, size * PANGO_SCALE);
++  if (bold) pango_font_description_set_weight(font, PANGO_WEIGHT_BOLD);
++  pango_layout_set_font_description(layout, font);
++  pango_layout_set_text(layout, text.c_str(), -1);
++  int w = 0, h = 0;
++  pango_layout_get_pixel_size(layout, &w, &h);
++  if (right) x -= w;
++  if (halo) {
++    cairo_move_to(cr, x, y);
++    pango_cairo_layout_path(cr, layout);
++    powerMenuSource(cr, "#303236");
++    cairo_set_line_width(cr, 3);
++    cairo_set_line_join(cr, CAIRO_LINE_JOIN_ROUND);
++    cairo_stroke(cr);
++  }
++  powerMenuSource(cr, color);
++  cairo_move_to(cr, x, y);
++  pango_cairo_show_layout(cr, layout);
++  pango_font_description_free(font);
++  g_object_unref(layout);
++}
++
++// The battery-use rows' watts as one bar, each in the colour the panel's stack gives it.
++static gboolean drawPowerMenuShares(GtkWidget* widget, cairo_t* cr, gpointer) {
++  using Shares = std::vector<std::pair<double, std::string>>;
++  const auto* shares = static_cast<Shares*>(g_object_get_data(G_OBJECT(widget), "power-menu-shares"));
++  if (shares == nullptr) return FALSE;
++  double total = 0;
++  for (const auto& [watts, _] : *shares) total += watts;
++  if (total <= 0) return FALSE;
++  const double width = gtk_widget_get_allocated_width(widget), height = gtk_widget_get_allocated_height(widget);
++  double x = 0;
++  for (const auto& [watts, color] : *shares) {
++    const double w = watts / total * width;
++    powerMenuRounded(cr, x, 0, std::max(0.0, w - 1), height, 1.5);
++    powerMenuSource(cr, color);
++    cairo_fill(cr);
++    x += w;
++  }
++  return FALSE;
++}
++
 +static void fillPowerMenuProcesses(GtkWidget* box) {
 +  GList* old = gtk_container_get_children(GTK_CONTAINER(box));
 +  for (GList* child = old; child; child = child->next) gtk_widget_destroy(GTK_WIDGET(child->data));
@@ -16,6 +89,18 @@
 +  gtk_label_set_xalign(GTK_LABEL(title), 0);
 +  gtk_style_context_add_class(gtk_widget_get_style_context(title), "battery-processes-title");
 +  gtk_box_pack_start(GTK_BOX(box), title, FALSE, FALSE, 0);
++  if (!battery.rows.empty()) {
++    auto* bar = gtk_drawing_area_new();
++    gtk_widget_set_size_request(bar, 348, 10);
++    gtk_widget_set_margin_bottom(bar, 3);
++    auto* shares = new std::vector<std::pair<double, std::string>>();
++    for (const auto& row : battery.rows) shares->emplace_back(powerMenuWatts(row.value), powerMenuUseColor(row.name));
++    g_object_set_data_full(G_OBJECT(bar), "power-menu-shares", shares, +[](gpointer data) {
++      delete static_cast<std::vector<std::pair<double, std::string>>*>(data);
++    });
++    g_signal_connect(bar, "draw", G_CALLBACK(drawPowerMenuShares), nullptr);
++    gtk_box_pack_start(GTK_BOX(box), bar, FALSE, FALSE, 0);
++  }
 +  auto add = [box](const std::string& name, const std::string& value, bool part) {
 +    auto* line = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
 +    auto* label = gtk_label_new(name.c_str());
@@ -44,6 +129,195 @@
 +
 +static std::filesystem::path powerMenuEtaPath() {
 +  return std::filesystem::path(g_get_user_runtime_dir()) / "drainhound" / "eta.json";
++}
++
++// futures.json, read again at most every 2 s (the menu's tick redraws every second).
++static const PowerMenuFutures& currentPowerMenuFutures() {
++  static PowerMenuFutures cached;
++  static double read = -1;
++  const double now = g_get_real_time() / 1e6;
++  if (std::abs(now - read) >= 2) {
++    cached = powerMenuFutures(std::filesystem::path(g_get_user_runtime_dir()) / "drainhound" / "futures.json", now);
++    read = now;
++  }
++  return cached;
++}
++
++// The battery panel's hero, ahead only: drainhound eta's sampled futures from now, each a
++// thin line ending in a dot where it lands, the dots stacked into the distribution (one
++// per future), the middle eight in ten bracketed. Charging, the charging futures (moss)
++// and what unplugging now would do (rust); on battery, one fan down to the cutoff.
++static void paintPowerMenuFutures(cairo_t* cr, double width, double height) {
++  const auto& futures = currentPowerMenuFutures();
++  const double now = g_get_real_time() / 1e6, x0 = 34, top = 22, plot = height - 60;
++  if (!futures.valid) {
++    powerMenuText(cr, "Futures: waiting for drainhound eta…", x0, plot / 2, 10, "#8d929a");
++    return;
++  }
++  const bool charging = futures.full.has_value();
++  const double age = (now - futures.now) / 60;  // Minutes: the runs start where eta sampled them.
++  double last = 0;
++  for (const auto* scenario : {futures.empty ? &*futures.empty : nullptr, futures.full ? &*futures.full : nullptr})
++    if (scenario != nullptr) last = std::max(last, scenario->runs.back().end);
++  const double span = std::max(charging ? 160.0 : 90.0, last - age + 6);
++  const double ymax = charging ? 100.0 : std::max(40.0, futures.pct + 10);
++  const auto X = [&](double minute) { return x0 + (minute - age) / span * (width - x0 - 8); };
++  const auto Y = [&](double pct) { return top + (ymax - pct) / ymax * plot; };
++  cairo_set_line_width(cr, 1);
++  // Half hours from now; the hours labelled.
++  for (double t = std::ceil(now / 1800) * 1800; t <= now + span * 60; t += 1800) {
++    const double x = std::round(x0 + (t - now) / 60 / span * (width - x0 - 8)) + .5;
++    const auto label = powerMenuHourMinute(t);
++    const bool hour = label.substr(3) == "00";
++    cairo_move_to(cr, x, Y(ymax));
++    cairo_line_to(cr, x, Y(0));
++    powerMenuSource(cr, "#4b5057", hour ? .9 : .45);
++    cairo_stroke(cr);
++    if (hour) powerMenuText(cr, label, x - 13, height - 14, 9, "#8d929a");
++  }
++  cairo_move_to(cr, x0, std::round(Y(0)) + .5);
++  cairo_line_to(cr, width - 8, std::round(Y(0)) + .5);
++  powerMenuSource(cr, "#4b5057");
++  cairo_stroke(cr);
++  // The charge target (charging) and the cutoff, dashed.
++  const double dash[] = {2, 3};
++  const auto limit = [&](double pct, const char* color, const std::string& label) {
++    cairo_set_dash(cr, dash, 2, 0);
++    cairo_move_to(cr, x0, std::round(Y(pct)) + .5);
++    cairo_line_to(cr, width - 8, std::round(Y(pct)) + .5);
++    powerMenuSource(cr, color, .75);
++    cairo_stroke(cr);
++    cairo_set_dash(cr, nullptr, 0, 0);
++    powerMenuText(cr, label, x0 - 6, Y(pct) - 6, 9, color, false, true);
++  };
++  if (charging) limit(futures.target, "#8cc084", std::to_string(std::lround(futures.target)) + "%");
++  limit(futures.cutoff, "#e57a55", "~" + std::to_string(std::lround(futures.cutoff)) + "%");
++  const auto line = [&](const PowerMenuRun& run) {
++    bool first = true;
++    for (const auto& [minute, pct] : run.points) {
++      (first ? cairo_move_to : cairo_line_to)(cr, X(minute), Y(pct));
++      first = false;
++    }
++  };
++  cairo_save(cr);
++  cairo_rectangle(cr, x0, 0, width - x0, height);
++  cairo_clip(cr);
++  cairo_set_line_cap(cr, CAIRO_LINE_CAP_ROUND);
++  if (futures.empty) {
++    for (const auto& run : futures.empty->runs) {
++      line(run);
++      powerMenuSource(cr, "#e57a55", charging ? .2 : .28);
++      cairo_stroke(cr);
++    }
++    const double median_dash[] = {4, 3};
++    if (charging) cairo_set_dash(cr, median_dash, 2, 0);
++    line(futures.empty->median);
++    powerMenuSource(cr, "#e57a55");
++    cairo_set_line_width(cr, charging ? 1.5 : 2.2);
++    cairo_stroke(cr);
++    cairo_set_dash(cr, nullptr, 0, 0);
++    cairo_set_line_width(cr, 1);
++  }
++  if (futures.full) {
++    for (const auto& run : futures.full->runs) {
++      line(run);
++      powerMenuSource(cr, "#8cc084", .26);
++      cairo_stroke(cr);
++    }
++    line(futures.full->median);
++    powerMenuSource(cr, "#8cc084");
++    cairo_set_line_width(cr, 2.2);
++    cairo_stroke(cr);
++    cairo_set_line_width(cr, 1);
++  }
++  cairo_restore(cr);
++  // Where they land: one dot per future, stacked in columns away from the line it reached, within
++  // `room` (clear of the labels): smaller dots for a tall stack, and what still does not fit in the
++  // nearest column with space. Returns the dots' left and right edges.
++  const auto dots = [&](const PowerMenuScenario& scenario, double base, double direction, double room,
++                        const char* color) {
++    double r = charging ? 2 : 2.4;
++    for (int pass = 0; pass < 2; pass++) {
++      std::map<long, int> columns;
++      for (const auto& run : scenario.runs) columns[std::lround(X(run.end) / (2 * r + .8))]++;
++      int tallest = 0;
++      for (const auto& [_, count] : columns) tallest = std::max(tallest, count);
++      if (tallest * (2 * r + .6) + 2 <= room || r <= 1.2) break;
++      r = std::max(1.2, ((room - 2) / tallest - .6) / 2);
++    }
++    const double step = 2 * r + .8, pitch = 2 * r + .6;
++    const int rows = std::max(1, static_cast<int>((room - 2 - 2 * r) / pitch) + 1);
++    std::map<long, int> columns;
++    double left = width, right = 0;
++    for (const auto& run : scenario.runs) {
++      const double at = X(run.end) / step;
++      long column = std::lround(at);
++      for (long d = 1; columns[column] >= rows; d++) {
++        const long nearer = at >= column ? column + d : column - d, farther = at >= column ? column - d : column + d;
++        if (columns[nearer] < rows) column = nearer;
++        else if (columns[farther] < rows) column = farther;
++      }
++      const int j = columns[column]++;
++      cairo_arc(cr, column * step, base + direction * (r + 2 + j * pitch), r, 0, 2 * G_PI);
++      powerMenuSource(cr, color);
++      cairo_fill(cr);
++      left = std::min(left, column * step - r);
++      right = std::max(right, column * step + r);
++    }
++    return std::pair(left, right);
++  };
++  const auto bracket = [&](const PowerMenuScenario& scenario, double y, double direction, const char* color) {
++    cairo_move_to(cr, X(scenario.low * 60), y);
++    cairo_rel_line_to(cr, 0, direction * 3);
++    cairo_line_to(cr, X(scenario.high * 60), y + direction * 3);
++    cairo_rel_line_to(cr, 0, -direction * 3);
++    powerMenuSource(cr, color);
++    cairo_stroke(cr);
++  };
++  if (futures.empty) {
++    const auto& empty = *futures.empty;
++    const auto [_, right] = dots(empty, Y(futures.cutoff), 1, height - 16 - Y(futures.cutoff), "#e57a55");
++    bracket(empty, Y(futures.cutoff) - 3, -1, "#e57a55");
++    const auto when = powerMenuHourMinute(futures.now + empty.hours * 3600);
++    const auto count = "one dot per future of " + std::to_string(empty.runs.size());
++    if (charging) {
++      const double x = std::max(X(empty.runs.back().end), right) + 9;
++      powerMenuText(cr, "unplugged: cuts out " + when, x, Y(futures.cutoff) + 2, 10, "#e57a55", true, false, true);
++      powerMenuText(cr, count, x, Y(futures.cutoff) + 15, 9, "#a3b2a9", false, false, true);
++    } else {
++      powerMenuText(cr, "cuts out " + when, width - 10, Y(30) - 6, 10.5, "#e57a55", true, true, true);
++      powerMenuText(cr, count, width - 10, Y(30) + 8, 9, "#a3b2a9", false, true, true);
++    }
++  }
++  if (futures.full) {
++    const auto& full = *futures.full;
++    const auto [left, _] = dots(full, Y(futures.target), -1, Y(futures.target) - 4, "#8cc084");
++    bracket(full, Y(futures.target) + 3, 1, "#8cc084");
++    powerMenuText(cr, "full " + powerMenuHourMinute(futures.now + full.hours * 3600),
++                  std::min(X(full.runs.front().end), left) - 7, Y(futures.target) - 16, 10, "#ece4d4", true, true,
++                  true);
++  }
++  // You are here: the charge now, where the futures start.
++  cairo_arc(cr, x0, Y(futures.pct), 7, 0, 2 * G_PI);
++  powerMenuSource(cr, "#d63a3a", .16);
++  cairo_fill(cr);
++  cairo_arc(cr, x0, Y(futures.pct), 3.5, 0, 2 * G_PI);
++  powerMenuSource(cr, "#d63a3a");
++  cairo_fill_preserve(cr);
++  powerMenuSource(cr, "#ece4d4");
++  cairo_set_line_width(cr, 1.3);
++  cairo_stroke(cr);
++  powerMenuText(cr, std::to_string(std::lround(futures.pct)) + "%", x0 - 8, Y(futures.pct) - 7, 9.5, "#ece4d4", true,
++                true);
++}
++
++static gboolean drawPowerMenuFutures(GtkWidget* widget, cairo_t* cr, gpointer) {
++  try {
++    paintPowerMenuFutures(cr, gtk_widget_get_allocated_width(widget), gtk_widget_get_allocated_height(widget));
++  } catch (const std::exception& error) {  // jsoncpp type errors must not end Waybar.
++    spdlog::warn("battery menu: {}", error.what());
++  }
++  return FALSE;
 +}
 +
 +static PowerMenuModes currentPowerMenuModes() {
@@ -127,6 +401,18 @@
 +  };
 +  if (auto* title = findPowerMenuWidget(menu, "battery-eta-title"); GTK_IS_LABEL(title))
 +    set(title, eta.title.empty() ? "Time left: waiting for drainhound…" : eta.title);
++  const auto show = [&](const char* name, const std::string& text) {
++    if (auto* label = findPowerMenuWidget(menu, name); GTK_IS_LABEL(label)) {
++      set(label, text);
++      gtk_widget_set_no_show_all(label, TRUE);
++      gtk_widget_set_visible(label, !text.empty());
++    }
++  };
++  show("battery-eta-detail", eta.detail);
++  std::string lines;
++  for (const auto& line : eta.lines) lines += (lines.empty() ? "" : "\n") + line;
++  show("battery-eta-lines", lines);
++  if (auto* futures = findPowerMenuWidget(menu, "battery-futures"); futures != nullptr) gtk_widget_queue_draw(futures);
 +  if (auto* asleep = findPowerMenuWidget(menu, "battery-eta-sleep"); GTK_IS_LABEL(asleep)) {
 +    set(asleep, eta.sleep);
 +    gtk_widget_set_no_show_all(asleep, TRUE);
@@ -228,6 +514,12 @@
      gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
 +  } else if (GTK_IS_BOX(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-processes") == 0) {
 +    fillPowerMenuProcesses(widget);
++  } else if (GTK_IS_DRAWING_AREA(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-futures") == 0) {
++    if (g_object_get_data(G_OBJECT(widget), "power-menu-futures") == nullptr) {
++      g_signal_connect(widget, "draw", G_CALLBACK(drawPowerMenuFutures), nullptr);
++      g_object_set_data(G_OBJECT(widget), "power-menu-futures", GINT_TO_POINTER(1));
++    }
++    gtk_widget_queue_draw(widget);
 +  } else if (GTK_IS_MENU_ITEM(widget) && (g_strcmp0(gtk_widget_get_name(widget), "battery-experiments") == 0 ||
 +                                          g_strcmp0(gtk_widget_get_name(widget), "battery-comfort") == 0)) {
 +    if (g_object_get_data(G_OBJECT(widget), "power-menu-row") == nullptr) {

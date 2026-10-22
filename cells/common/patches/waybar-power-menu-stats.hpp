@@ -1,11 +1,14 @@
 #pragma once
 #include <json/json.h>
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <cstdlib>
 #include <ctime>
 #include <filesystem>
 #include <fstream>
 #include <map>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -142,16 +145,22 @@ inline std::string powerMenuWorth(const Json::Value& worth) {
          (net(row) > 0 ? " > " : " ≤ ") + "costs " + wh(row["costs"].asDouble());
 }
 
-// drainhound eta's estimate: title line plus the time-left (or time-to-limit)
-// density on a grid of hours. `valid` is false when stale or not estimating.
+// drainhound eta's estimate: title line, a faded line under it, more lines
+// (while charging: unplugged now, and what a minute plugged in buys), and the
+// time-left (or time-to-limit) density on a grid of hours. `valid` is false
+// when stale or not estimating.
 struct PowerMenuEta {
   bool valid = false;
-  std::string title;
+  std::string title, detail;
+  std::vector<std::string> lines;
   std::string kind;  // "empty" or "full"
   std::vector<double> hours, density;
   double median = 0, low = 0, high = 0;
   std::string sleep;  // How long a suspend from now would last; empty until fitted.
 };
+
+// An epoch second as local "HH:MM".
+inline std::string powerMenuHourMinute(double epoch) { return powerMenuTimeOfDay(epoch).substr(0, 5); }
 
 // Hours as "14 h" from ten hours up, h:mm below.
 inline std::string powerMenuLongHours(double hours) {
@@ -173,31 +182,47 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
                 powerMenuLongHours(asleep["low"].asDouble()) + "–" +
                 powerMenuLongHours(asleep["high"].asDouble()) + " at " +
                 powerMenuTenths(asleep["watts"].asDouble()) + " W";
-  const auto& distribution = state["distribution"];
-  if (!state["hours"].isNumeric() || !distribution.isObject() || !distribution["t"].isArray() ||
-      distribution["t"].size() != distribution["p"].size() || distribution["t"].size() < 2) {
-    eta.title = state["status"].asString() == "Discharging" || state["status"].asString() == "Charging"
-                    ? "Estimating time left…"
-                    : "Plugged in";
+  const auto status = state["status"].asString();
+  if (!state["hours"].isNumeric() || !state["low"].isNumeric() || !state["high"].isNumeric()) {
+    eta.title = status == "Discharging" || status == "Charging" ? "Estimating time left…" : "Plugged in";
     return eta;
   }
-  for (Json::ArrayIndex i = 0; i < distribution["t"].size(); i++) {
-    eta.hours.push_back(distribution["t"][i].asDouble());
-    eta.density.push_back(distribution["p"][i].asDouble());
-  }
-  eta.kind = distribution["kind"].asString();
+  // The density, when eta.json has one; the lines need only the median and the 80% ends.
+  const auto& distribution = state["distribution"];
+  if (distribution.isObject() && distribution["t"].isArray() && distribution["p"].isArray() &&
+      distribution["t"].size() == distribution["p"].size() && distribution["t"].size() >= 2)
+    for (Json::ArrayIndex i = 0; i < distribution["t"].size(); i++) {
+      eta.hours.push_back(distribution["t"][i].asDouble());
+      eta.density.push_back(distribution["p"][i].asDouble());
+    }
+  eta.kind = distribution.isObject() && distribution["kind"].isString() ? distribution["kind"].asString()
+             : status == "Charging"                                     ? "full"
+                                                                        : "empty";
   eta.median = state["hours"].asDouble();
   eta.low = state["low"].asDouble();
   eta.high = state["high"].asDouble();
-  eta.title = (eta.kind == "full" ? "Time to " + std::to_string(state["target"].asInt()) + "%: "
-                                  : std::string("Time left: ")) +
-              powerMenuClock(eta.median) + "   80%: " + powerMenuClock(eta.low) + "–" +
-              powerMenuClock(eta.high);
+  // As the panel's answers: when it is full (or how long it lasts and when it
+  // cuts out), and the 80% interval as clock times, the eight futures in ten
+  // between them that futures.json draws.
+  const auto at = [&](double hours) { return powerMenuHourMinute(now + hours * 3600); };
+  if (eta.kind == "full") {
+    const auto target = state["target"].isNumeric() ? std::lround(state["target"].asDouble()) : 100;
+    eta.title = "Full (" + std::to_string(target) + "%)";
+    if (eta.median > 0) {
+      eta.title += " at " + at(eta.median);
+      eta.detail = "in " + powerMenuClock(eta.median) + " · 8 in 10 futures between " + at(eta.low) + " and " +
+                   at(eta.high);
+    }
+  } else {
+    eta.title = powerMenuClock(eta.median) + " left · cuts out at " + at(eta.median);
+    eta.detail = "8 in 10 futures cut out between " + at(eta.low) + " and " + at(eta.high);
+  }
   // The last minutes: the second the embedded controller cuts the power, or
   // the clean power-off drainhound eta does before it.
   if (eta.kind == "empty" && state["cutout"].isNumeric()) {
     const auto pm = " ±" + std::to_string(std::lround(state["cutout_pm"].asDouble())) + " s";
     const auto cutout = state["cutout"].asDouble();
+    eta.detail.clear();
     if (state["poweroff"].isNumeric())
       eta.title = "Powers off at " + powerMenuTimeOfDay(state["poweroff"].asDouble()) + "   in " +
                   powerMenuCountdown(state["poweroff"].asDouble() - now) + pm + "\n(the battery cuts out at " +
@@ -205,19 +230,113 @@ inline PowerMenuEta powerMenuEta(const std::filesystem::path& path, double now) 
     else
       eta.title = "Cuts out at " + powerMenuTimeOfDay(cutout) + "   in " + powerMenuCountdown(cutout - now) + pm;
   }
-  // While charging, lead with the time on battery banked so far (as the
-  // outline does) and how much each minute plugged in adds.
-  if (eta.kind == "full" && state["banked"].isNumeric()) {
-    std::string line = "On battery now: ~" + powerMenuClock(state["banked"].asDouble()) + "   80%: " +
-                       powerMenuClock(state["banked_low"].asDouble()) + "–" +
-                       powerMenuClock(state["banked_high"].asDouble());
-    if (state["ratio"].isNumeric())
-      line += "   +" + powerMenuTenths(state["ratio"].asDouble()) + " min per minute";
-    eta.title = line + "\n" + eta.title;
-  }
+  // While charging: what unplugging now would leave (the time on battery
+  // banked so far, as the outline shows it), and what a minute plugged in buys.
+  if (eta.kind == "full" && state["banked"].isNumeric())
+    eta.lines.push_back("If unplugged now: " + powerMenuClock(state["banked"].asDouble()) + " · cuts out " +
+                        at(state["banked"].asDouble()) + " (" + at(state["banked_low"].asDouble()) + "–" +
+                        at(state["banked_high"].asDouble()) + ")");
+  if (eta.kind == "full" && state["ratio"].isNumeric())
+    eta.lines.push_back("Plugged in: +" + powerMenuTenths(state["ratio"].asDouble()) + " min of use per minute");
   eta.valid = true;
   return eta;
 }
+
+// drainhound eta's sampled futures (futures.json): runs of its own models from
+// `now` to where each lands (the cutoff, or while charging the charge target),
+// run k landing at the forecast's (k + ½)/n quantile, so the dots where they
+// land are the distribution. `valid` is false when missing or stale.
+struct PowerMenuRun {
+  double end = 0;                                  // Minutes from `now` to where it lands.
+  std::vector<std::pair<double, double>> points;  // (minutes, charge %).
+};
+
+struct PowerMenuScenario {
+  std::vector<PowerMenuRun> runs;  // By when they land.
+  PowerMenuRun median;
+  double hours = 0, low = 0, high = 0;  // The forecast's median and 80% ends.
+};
+
+struct PowerMenuFutures {
+  bool valid = false;
+  double now = 0, pct = 0, cutoff = 0, target = 100;
+  std::optional<PowerMenuScenario> empty, full;  // To the cutoff; to the target (charging).
+};
+
+inline bool powerMenuRun(const Json::Value& value, PowerMenuRun& run) {
+  if (!value.isObject() || !value["end"].isNumeric() || !value["pts"].isArray()) return false;
+  run.end = value["end"].asDouble();
+  for (const auto& point : value["pts"])
+    if (point.isArray() && point.size() == 2 && point[0].isNumeric() && point[1].isNumeric())
+      run.points.emplace_back(point[0].asDouble(), point[1].asDouble());
+  return std::isfinite(run.end) && run.points.size() >= 2;
+}
+
+inline std::optional<PowerMenuScenario> powerMenuScenario(const Json::Value& value) {
+  if (!value.isObject() || !value["runs"].isArray()) return std::nullopt;
+  PowerMenuScenario scenario;
+  for (const auto& entry : value["runs"])
+    if (PowerMenuRun run; powerMenuRun(entry, run)) scenario.runs.push_back(std::move(run));
+  if (scenario.runs.empty() || !powerMenuRun(value["median"], scenario.median)) return std::nullopt;
+  std::sort(scenario.runs.begin(), scenario.runs.end(), [](const auto& a, const auto& b) { return a.end < b.end; });
+  scenario.hours = value["hours"].asDouble();
+  scenario.low = value["low"].asDouble();
+  scenario.high = value["high"].asDouble();
+  return scenario;
+}
+
+inline PowerMenuFutures powerMenuFutures(const std::filesystem::path& path, double now) {
+  Json::Value state;
+  std::ifstream input(path);
+  Json::CharReaderBuilder builder;
+  std::string errors;
+  PowerMenuFutures futures;
+  // Rewritten at least every 30 s while there are futures.
+  if (!Json::parseFromStream(builder, input, &state, &errors) || !state.isObject() ||
+      std::abs(now - state["updated"].asDouble()) >= 90 || !state["now"].isNumeric() || !state["pct"].isNumeric())
+    return futures;
+  futures.now = state["now"].asDouble();
+  futures.pct = state["pct"].asDouble();
+  futures.cutoff = state["cutoff_pct"].isNumeric() ? state["cutoff_pct"].asDouble() : 0.0;
+  futures.target = state["target"].isNumeric() ? state["target"].asDouble() : 100.0;
+  futures.empty = powerMenuScenario(state["empty"]);
+  futures.full = powerMenuScenario(state["full"]);
+  futures.valid = futures.empty.has_value() || futures.full.has_value();
+  return futures;
+}
+
+// A battery-use row's watts: the number its value starts with (" 8.8 W  63%").
+inline double powerMenuWatts(const std::string& value) {
+  char* end = nullptr;
+  const double watts = std::strtod(value.c_str(), &end);
+  return end != value.c_str() && std::isfinite(watts) && watts > 0 ? watts : 0.0;
+}
+
+// A battery-use row's colour in the menu's bar, as the battery panel's stack
+// colours its layers: the idle chip, the display and the other devices, then an
+// app by its group (drainhound's default groups, by name prefix), else "other".
+inline std::string powerMenuUseColor(const std::string& name) {
+  if (name == "Idle chip") return "#5f6d68";
+  if (name == "Display") return "#d6a84a";
+  for (const char* device : {"Rest of system", "Wi-Fi", "Storage", "USB devices", "Audio", "Keyboard backlight"})
+    if (name == device) return "#8d9c94";
+  std::string lower = name;
+  std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+  const std::pair<const char*, std::vector<const char*>> groups[] = {
+      {"#5fa8d3", {"firefox", "floorp", "librewolf", "zen", "waterfox", "chromium", "chrome", "brave", "vivaldi"}},
+      {"#d9663f", {"code", "vscodium", "cursor", "zed", "t3 code", "emacs", "nvim", "neovim", "vim", "helix", "foot",
+                   "kitty", "alacritty", "wezterm", "ghostty", "rustc", "cargo", "gcc", "clang", "node", "npm",
+                   "bun", "nix", "claude", "codex", "opencode", "python"}},
+      {"#6cbf8b", {"vesktop", "discord", "signal", "slack", "telegram", "element", "spotify", "mpv", "vlc",
+                   "pipewire", "wireplumber"}},
+      {"#c784b0", {"kernel", "niri", "sway", "hyprland", "waybar", "xwayland", "systemd", "dbus", "drainhound",
+                   "swaync", "fcitx"}}};
+  for (const auto& [color, prefixes] : groups)
+    for (const char* prefix : prefixes)
+      if (lower.rfind(prefix, 0) == 0) return color;
+  return "#9d8fd6";  // "Everything else", and apps no group claims.
+}
+
 inline Json::Value powerMenuJson(const std::filesystem::path& path) {
   Json::Value value;
   std::ifstream input(path);

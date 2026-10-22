@@ -820,7 +820,11 @@ window.gauges-arc #wireplumber.muted {
   color: #c6cbd2;
   border-top: 1px solid #45484d;
 }
-#power-profiles-menu #battery-eta-title { font-size: 10px; font-weight: bold; }
+#power-profiles-menu #battery-eta-title { font-size: 13px; font-weight: bold; color: #eeeeee; }
+#power-profiles-menu #battery-eta-detail { font-size: 10px; color: #8d929a; }
+/* drainhound eta's futures, drawn by AModule.cpp in the battery panel's colours. */
+#power-profiles-menu #battery-futures { margin: 6px 0 4px; }
+#power-profiles-menu #battery-eta-lines { font-size: 10px; }
 #power-profiles-menu #battery-eta-sleep { font-size: 10px; margin-top: 2px; }
 /* Automatic experiments and Comfort mode: whole rows are switches. */
 #power-profiles-menu #battery-experiments,
@@ -880,6 +884,7 @@ window.gauges-arc #wireplumber.muted {
 #power-profiles-menu .battery-process-part { margin-left: 12px; }
 #power-profiles-menu .battery-process-part label { color: #8d929a; }
 #power-profiles-menu .battery-processes-footer { margin-top: 3px; color: #8d929a; }
+#power-profiles-menu #battery-details { border-top: 1px solid #45484d; border-radius: 0; }
 #power-profiles-menu #battery-panel-item { padding: 6px 8px; border-top: 1px solid #45484d; }
 #power-profiles-menu #battery-panel-item label { font-size: 11px; }
 

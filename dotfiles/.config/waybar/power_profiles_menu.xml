@@ -101,8 +101,8 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">1</property>
-        <property name="bottom-attach">2</property>
+        <property name="top-attach">5</property>
+        <property name="bottom-attach">6</property>
       </packing>
     </child>
     <child>
@@ -110,13 +110,33 @@
         <property name="name">battery-eta</property>
         <property name="sensitive">False</property>
         <child>
-          <!-- battery-eta's time left and asleep-from-now, with their intervals; refreshed on open. -->
+          <!-- drainhound eta's forecast, as the battery panel's answers, and its sampled futures
+               (futures.json) drawn as the panel's hero draws them ahead; refreshed every second. -->
           <object class="GtkBox">
             <property name="orientation">vertical</property>
             <property name="spacing">2</property>
             <child>
               <object class="GtkLabel">
                 <property name="name">battery-eta-title</property>
+                <property name="xalign">0</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="name">battery-eta-detail</property>
+                <property name="xalign">0</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkDrawingArea">
+                <property name="name">battery-futures</property>
+                <property name="width-request">348</property>
+                <property name="height-request">152</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkLabel">
+                <property name="name">battery-eta-lines</property>
                 <property name="xalign">0</property>
               </object>
             </child>
@@ -132,8 +152,8 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">2</property>
-        <property name="bottom-attach">3</property>
+        <property name="top-attach">1</property>
+        <property name="bottom-attach">2</property>
       </packing>
     </child>
     <child>
@@ -178,8 +198,8 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">3</property>
-        <property name="bottom-attach">4</property>
+        <property name="top-attach">2</property>
+        <property name="bottom-attach">3</property>
       </packing>
     </child>
     <child>
@@ -310,8 +330,8 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">4</property>
-        <property name="bottom-attach">5</property>
+        <property name="top-attach">3</property>
+        <property name="bottom-attach">4</property>
       </packing>
     </child>
     <child>
@@ -330,8 +350,8 @@
       <packing>
         <property name="left-attach">0</property>
         <property name="right-attach">3</property>
-        <property name="top-attach">5</property>
-        <property name="bottom-attach">6</property>
+        <property name="top-attach">4</property>
+        <property name="bottom-attach">5</property>
       </packing>
     </child>
     <child>
