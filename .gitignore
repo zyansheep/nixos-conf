@@ -11,5 +11,9 @@ result
 
 .claude
 
+# Root password hash — synced between machines by syncthing, never committed.
+# See secrets/README.md.
+secrets/root-password-hash
+
 # Python bytecode from running tests in place
 __pycache__/

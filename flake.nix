@@ -162,8 +162,22 @@
         }: {
           users.users.root = {
             uid = 0;
-            # Use mkDefault so installation CD profiles can override with empty password
-            initialHashedPassword = lib.mkDefault "\$6\$dnWr7aCjnJFOrj1f\$2Hb5yZCiDTvwgh.qPXSofOH/z30EHO98uwUWxBtkbrbhyXmemsl804l3LC9NX.25aaX/hl0aAIB2hcma822SX/";
+            # Hash lives in ./secrets/root-password-hash (gitignored, synced
+            # between machines by syncthing — see secrets/README.md). Use
+            # mkDefault so installation CD profiles can override with empty
+            # password. Falls back to a locked account ("!") when the file is
+            # absent (e.g. a fresh GitHub checkout).
+            # NOTE: initialHashedPassword only takes effect at account
+            # creation — rotating on an existing machine is imperative
+            # (see secrets/README.md).
+            initialHashedPassword = let
+              hashFile = ./secrets/root-password-hash;
+            in
+              lib.mkDefault (
+                if builtins.pathExists hashFile
+                then builtins.replaceStrings ["\n"] [""] (builtins.readFile hashFile)
+                else "!"
+              );
           };
         };
       };
