@@ -99,7 +99,11 @@ let
       "trgvocab.enja.spm" = "sha256-vn/sI0tfyUYWJ27mzKafOoy/pnYv3yeN/GsR6vZpzEg=";
     });
 
-  translator = "${translatelocally}/bin/translateLocally";
+  # GCC 16 makes a false-positive array-bounds warning in its vendored marian
+  # fatal (-Werror); demote it back to a warning.
+  translator = "${translatelocally.overrideAttrs (old: {
+    env = (old.env or {}) // {NIX_CFLAGS_COMPILE = "-Wno-error=array-bounds";};
+  })}/bin/translateLocally";
   extension = "share/vicinae/extensions/jisho";
 
   # Mod+Shift+' in niri: the selected text (or else the clipboard) in the dictionary.

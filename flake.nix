@@ -19,6 +19,9 @@
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05"; # Required by flake-parts
     latest.url = "github:numtide/nixpkgs-unfree/nixos-unstable";
     stable.follows = "nixpkgs";
+    # Zotero 10.0.4 fails to build on unstable (its build script can't patch
+    # Firefox's ActorManagerParent); keep 10.0.0 from here until it's fixed.
+    nixpkgs-zotero.url = "github:nixos/nixpkgs/34ab99075ac4f7e40cf037eef32cb1c360bb85e9";
 
     # Home Manager
     home.url = "github:nix-community/home-manager/release-26.05";
@@ -85,6 +88,7 @@
             nix
             nix-index
             ;
+          inherit (import inputs.nixpkgs-zotero {inherit system;}) zotero;
         };
       };
 
@@ -219,6 +223,9 @@
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
+          # SideQuest still ships on EOL Electron 29; only used for Quest
+          # sideloading. Drop once nixpkgs bumps it.
+          config.permittedInsecurePackages = ["sidequest-0.10.42"];
           overlays = [overlays.common-packages overlays.latest-overrides];
         };
       in
