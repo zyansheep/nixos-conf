@@ -121,6 +121,7 @@
       "/var/lib/immich" # immich media + state
       "/var/lib/postgresql" # immich database
       "/var/lib/redis-immich" # immich redis
+      { directory = "/var/lib/vnstat"; user = "vnstatd"; group = "vnstatd"; } # Wi-Fi usage history (nm-sidebar Traffic graph)
     ];
     files = [ "/etc/machine-id" ];
   };
@@ -181,6 +182,7 @@
   # Services
   services.blueman.enable = true;
   services.fwupd.enable = true; # firmware update
+  services.vnstat.enable = true; # per-day Wi-Fi usage for nm-sidebar's Traffic section
   services.fprintd.enable = true; # fingerprint
   programs.firefox.enable = false; # core.common's default; Floorp (home packages) instead
   services.flatpak.enable = true; # enable flatpak

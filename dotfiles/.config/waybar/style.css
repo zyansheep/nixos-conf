@@ -168,6 +168,14 @@ label:focus {
   padding: 0;
   margin: 0 1px 0 0;
 }
+/* Two stacked lines (↑ over ↓) fit the bar height; tabular digits keep the width steady. */
+#custom-netrate {
+  font-size: 9px;
+  font-feature-settings: "tnum";
+  min-width: 34px;
+  padding: 0 4px 0 1px;
+}
+#custom-netrate.idle { opacity: 0.55; }
 #pulseaudio {}
 
 #pulseaudio.muted {}
