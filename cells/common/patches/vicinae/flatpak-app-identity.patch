@@ -1,6 +1,33 @@
+--- a/src/server/src/root-search/apps/app-root-provider.cpp
++++ b/src/server/src/root-search/apps/app-root-provider.cpp
+@@ -22,7 +22,7 @@ std::vector<QString> AppRootItem::keywords() const { return m_app->keywords(); }
+ 
+ std::optional<QString> AppRootItem::unlocalizedTitle() const { return m_app->unlocalizedName(); }
+ 
+-QString AppRootItem::subtitle() const { return QString(); }
++QString AppRootItem::subtitle() const { return m_app->sourceLabel(); }
+ 
+ QString AppRootItem::title() const { return m_app->displayName(); }
+ 
+--- a/src/server/src/services/app-runtime/linux/linux-app-runtime.cpp
++++ b/src/server/src/services/app-runtime/linux/linux-app-runtime.cpp
+@@ -17,7 +17,12 @@ bool LinuxAppRuntime::isRunning(const AbstractApplication &app) const {
+ std::shared_ptr<AbstractApplication> LinuxAppRuntime::frontmostApp() const {
+   auto focused = m_wm.getFocusedWindow();
+   if (!focused) return nullptr;
+-  return m_appService.findByClass(focused->wmClass());
++  for (const auto &app : m_appService.list()) {
++    for (const auto &win : m_wm.findAppWindows(*app)) {
++      if (win->id() == focused->id()) return app;
++    }
++  }
++  return nullptr;
+ }
+ 
+ bool LinuxAppRuntime::activate(const AbstractApplication &app) const {
 --- a/src/server/src/services/app-service/abstract-app-db.hpp
 +++ b/src/server/src/services/app-service/abstract-app-db.hpp
-@@ -19,6 +19,8 @@
+@@ -21,6 +21,8 @@ public:
    virtual QString id() const = 0;
  
    virtual QString displayName() const = 0;
@@ -11,7 +38,7 @@
  
 --- a/src/server/src/services/app-service/xdg/xdg-app.hpp
 +++ b/src/server/src/services/app-service/xdg/xdg-app.hpp
-@@ -2,15 +2,20 @@
+@@ -2,9 +2,11 @@
  #include <xdgpp/xdgpp.hpp>
  #include "services/app-service/abstract-app-db.hpp"
  #include "utils.hpp"
@@ -23,16 +50,17 @@
  
    QString simplifiedId() const { return id().remove(".desktop"); }
  
- public:
+@@ -12,6 +14,9 @@ public:
    QString id() const override { return QString::fromStdString(std::string(m_entry.id())); }
    QString displayName() const override { return QString::fromStdString(m_entry.name()); }
-+
+ 
 +  QString flatpakId() const override { return m_flatpakId; }
 +  QString sourceLabel() const override { return m_flatpakId.isEmpty() ? "Native" : "Flatpak"; }
- 
++
    const xdgpp::DesktopFile &data() const { return m_entry; }
  
-@@ -70,5 +75,8 @@
+   bool displayable() const override { return m_entry.shouldBeShownInCurrentContext(); }
+@@ -71,7 +76,10 @@ public:
      return Utils::toQStringVec(parsed);
    }
  
@@ -41,29 +69,20 @@
 +    QSettings settings(QString::fromStdString(file.path().string()), QSettings::IniFormat);
 +    m_flatpakId = settings.value("Desktop Entry/X-Flatpak").toString();
 +  }
- };
---- a/src/server/src/root-search/apps/app-root-provider.cpp
-+++ b/src/server/src/root-search/apps/app-root-provider.cpp
-@@ -26,7 +26,7 @@
-   return keywords;
- }
  
--QString AppRootItem::subtitle() const { return QString(); }
-+QString AppRootItem::subtitle() const { return m_app->sourceLabel(); }
- 
- QString AppRootItem::title() const { return m_app->displayName(); }
- 
+ protected:
+   static ImageURL urlForDesktopIcon(const QString &icon) {
 --- a/src/server/src/services/window-manager/window-manager.cpp
 +++ b/src/server/src/services/window-manager/window-manager.cpp
-@@ -6,6 +6,7 @@
- #include "services/window-manager/abstract-window-manager.hpp"
+@@ -9,6 +9,7 @@
+ #include "vicinae.hpp"
  #ifdef Q_OS_LINUX
  #include "hyprland/hyprland.hpp"
 +#include "flatpak-identity.hpp"
  #include "gnome/gnome-window-manager.hpp"
  #include "services/window-manager/kde/kde-window-manager.hpp"
  #include "niri/niri.hpp"
-@@ -97,8 +98,15 @@
+@@ -135,8 +136,15 @@ bool WindowManager::isOnActiveWorkspace(const AbstractWindowManager::AbstractWin
  
  AbstractWindowManager::WindowList WindowManager::findAppWindows(const AbstractApplication &app) const {
    return m_windows | std::views::filter([&](auto &&win) {
@@ -81,19 +100,3 @@
           }) |
           std::ranges::to<std::vector>();
  }
---- a/src/server/src/services/app-runtime/linux/linux-app-runtime.cpp
-+++ b/src/server/src/services/app-runtime/linux/linux-app-runtime.cpp
-@@ -17,7 +17,12 @@
- std::shared_ptr<AbstractApplication> LinuxAppRuntime::frontmostApp() const {
-   auto focused = m_wm.getFocusedWindow();
-   if (!focused) return nullptr;
--  return m_appService.findByClass(focused->wmClass());
-+  for (const auto &app : m_appService.list()) {
-+    for (const auto &win : m_wm.findAppWindows(*app)) {
-+      if (win->id() == focused->id()) return app;
-+    }
-+  }
-+  return nullptr;
- }
- 
- bool LinuxAppRuntime::activate(const AbstractApplication &app) const {
