@@ -21,6 +21,10 @@ human() {
     if ((tenths >= 100)); then printf -v REPLY '%d%s' $((tenths / 10)) "$unit"
     else printf -v REPLY '%d.%d%s' $((tenths / 10)) $((tenths % 10)) "$unit"; fi
   fi
+  # Pad to four columns with figure spaces (digit-wide) so the module never
+  # changes width: " 47K", "1.5K", "512B".
+  local pad=$((4 - ${#REPLY}))
+  while ((pad-- > 0)); do REPLY=$'\u2007'$REPLY; done
 }
 
 # A pipe nobody writes to: `read -t` on it is a fork-free sleep.
