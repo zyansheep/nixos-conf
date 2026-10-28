@@ -19,16 +19,21 @@
 ## 😊 happy · smile, glad, cheerful, pleased
 (*^ᗜ^*)  beaming, grin
 (⌒ᴗ⌒)  closed eyes
+≽^⌒ᴗ⌒^≼  closed eyes, cat ears, neko
+૮⌒ᴗ⌒ა  closed eyes, puppy ears, dog
 ( ´ ▽ ` )  open smile
 (˶^ᴗ^˶)  soft, warm
 (◕‿◕✿)  flower
 (｡•ᴗ•｡)  bright
+/ᐠ｡•ᴗ•｡ᐟ\  bright, cat ears, neko
 (◍•ᴗ•◍)  round cheeks
 ( ˙꒳˙ )  small, content
 
 ## 😄 joy · delighted, overjoyed, yay, so happy
 ＼(≧▽≦)／  arms up
 (≧▽≦)
+ฅ^≧▽≦^ฅ  cat ears, neko
+ʕ≧▽≦ʔ  bear
 ٩(ˊᗜˋ*)و  cheer
 ✧◝(^ᗜ^)◜✧  radiant, sparkle
 (๑>ᴗ<)و  fist pump
@@ -36,6 +41,7 @@
 
 ## 😆 excited · hyped, eager, can't wait, pumped
 (☆▽☆)  star eyes
+≽^☆▽☆^≼  star eyes, cat ears, neko
 ヽ(◕ヮ◕)ﾉ✧
 ☆*:.｡.o(≧▽≦)o.｡.:*☆  thrilled
 ✧*｡٩(ˊᗜˋ*)و✧*｡  sparkles
@@ -56,6 +62,8 @@
 
 ## ☺️ content · calm, peaceful, serene, relaxed, at ease
 (˘ᴗ˘)
+/ᐠ˘ᴗ˘ᐟ\  cat ears, neko
+૮˘ᴗ˘ა  puppy ears, dog
 (◡ ‿ ◡ ✿)  peaceful
 (っ˘ω˘ς )  cuddly
 (*´ω｀*)  warm
@@ -77,8 +85,11 @@
 
 ## 😍 lovestruck · heart eyes, smitten, crush, swoon
 ( ˶♡ᗜ♡˶ )
+≽^˶♡ᗜ♡˶^≼  cat ears, neko
+૮˶♡ᗜ♡˶ა  puppy ears, dog
 (♡ᴗ♡)
 (♡ω♡ )
+≽^♡ω♡^≼  cat ears, neko
 (๑♡⌓♡๑)
 
 ## 😘 kiss · smooch, mwah, xoxo
@@ -90,8 +101,10 @@
 
 ## 😳 blushing · shy, bashful, embarrassed, flustered
 (〃▽〃)
+/ᐠ〃▽〃ᐟ\  cat ears, neko
 (>///<)
 (⸝⸝>ᴗ<⸝⸝)
+૮⸝⸝>ᴗ<⸝⸝ა  puppy ears, dog
 (*/ω＼*)  covering face
 (〃ω〃)
 (〃´ᴗ`〃)
@@ -101,6 +114,8 @@
 
 ## 🥹 squee · overwhelmed, too cute, can't handle it, fangirl
 (˶>ᗜ<˶)
+≽^˶>ᗜ<˶^≼  cat ears, neko
+∩(˶>ᗜ<˶)∩  bunny ears
 (ﾉ>ᗜ<)ﾉ♡  fangirling
 (*/▽＼*)  too cute
 
@@ -114,7 +129,10 @@
 
 ## 🥰 cute · aww, adorable, kawaii, uwu, owo
 (｡◕‿◕｡)
+≽^｡◕‿◕｡^≼  cat ears, neko
 (>ω<)  >w<
+≽^>ω<^≼  >w<, cat ears, neko
+૮>ω<ა  >w<, puppy ears, dog
 (ᴜ ω ᴜ)  uwu
 (っ'ᴗ'c)  squishing cheeks
 (˶>ᴗ<˶)
@@ -129,7 +147,9 @@
 
 ## 😏 smug · smirk, heh, superior
 ( ¬‿¬)
+/ᐠ¬‿¬ᐟ\  cat ears, neko
 (≖‿≖)
+≽^≖‿≖^≼  cat ears, neko
 (￢‿￢ )
 (￣ω￣)
 ( ͡° ͜ʖ ͡°)  lenny
@@ -144,6 +164,7 @@
 
 ## 😉 wink · ;), flirty, playful
 (•ᴗ<)☆
+૮•ᴗ<ა☆  puppy ears, dog
 (◕‿-)♡
 (｡•̀ᴗ-)✧
 (^_~)
@@ -153,6 +174,7 @@
 ## 😜 tehe · oops, whoops, teehee, tongue out, bleh, :p
 (๑>ڡ<)☆
 (・ω<)☆
+≽^・ω<^≼☆  cat ears, neko
 (๑•ᴗ<)ﾉ☆
 (≧ڡ≦*)
 (^ڡ^)  tongue
@@ -213,6 +235,7 @@ o(≧▽≦)o  go go
 (˶^ᴗ^˶)ﾉ ʰⁱ
 ( ´ ▽ ` )ﾉ
 (｡･ω･)ﾉﾞ
+≽^･ω･^≼ﾉﾞ  cat ears, neko
 (*・ω・)ﾉ
 ( ˙▿˙ )/
 ヾ(•ω•`)o
@@ -236,6 +259,8 @@ o(≧▽≦)o  go go
 
 ## 😴 sleeping · asleep, zzz, nap, snooze
 (－ω－) zzZ
+/ᐠ－ω－ᐟ\ zzZ  cat ears, neko
+૮－ω－ა zzZ  puppy ears, dog
 (∪｡∪)｡｡｡zzZ
 (￣ρ￣)..zzZZ  drooling
 ( ᴗ_ᴗ)。o○  dreaming
@@ -243,6 +268,8 @@ o(≧▽≦)o  go go
 ## 😫 tired · exhausted, drained, worn out, burnt out, done
 _(:3 」∠)_  collapsed
 (´-ω-`)
+/ᐠ´-ω-`ᐟ\  cat ears, neko
+ʕ´-ω-`ʔ  bear
 ( ꒪⌓꒪)  drained
 (◞‸◟；)
 (￣﹏￣；)
@@ -257,6 +284,8 @@ _(┐「ε:)_  flopped
 ## 🙁 sad · unhappy, down, upset, sorrow, :(
 (｡•́︿•̀｡)
 ( ´•︵•` )
+૮´•︵•`ა  puppy ears, dog
+/ᐠ´•︵•`ᐟ\  cat ears, neko
 (︶︹︺)
 (´• ω •`)
 (｡ŏ﹏ŏ)
@@ -265,6 +294,9 @@ _(┐「ε:)_  flopped
 
 ## 😢 crying · cry, tears, weep, teary
 (╥﹏╥)
+૮╥﹏╥ა  puppy ears, dog
+/ᐠ╥﹏╥ᐟ\  cat ears, neko
+ʕ╥﹏╥ʔ  bear
 (ಥ﹏ಥ)
 (╥_╥)
 ( ╥ω╥ )
@@ -279,6 +311,7 @@ o(╥﹏╥)o
 (;´༎ຶД༎ຶ`)
 .｡･ﾟﾟ･(＞_＜)･ﾟﾟ･｡.
 (ㄒoㄒ)
+/ᐠㄒoㄒᐟ\  cat ears, neko
 (〒﹏〒)
 (つд⊂)  face in hands
 
@@ -296,6 +329,7 @@ o(╥﹏╥)o
 
 ## 🥺 needy · need, want, attention, clingy, notice me, i need you, pls
 (っ◕︿◕)っ  reaching out
+ʕっ◕︿◕ʔっ  reaching out, bear
 (｡•́︿•̀｡)っ ⁿᵉᵉᵈ ʰᵘᵍ  need a hug
 (｡ŏ﹏ŏ)っ♡  need love
 ( ˘ᴗ˘ )ﾉ ⁿᵒᵗⁱᶜᵉ ᵐᵉ  notice me
@@ -319,6 +353,8 @@ orz
 
 ## 🙇 sorry · apology, apologize, my bad, bow
 (ᴗ_ᴗ) ˢᵒʳʳʸ
+/ᐠᴗ_ᴗᐟ\ ˢᵒʳʳʸ  cat ears, neko
+૮ᴗ_ᴗა ˢᵒʳʳʸ  puppy ears, dog
 m(_ _)m  bow
 (シ_ _)シ
 (｡-人-｡)
@@ -327,6 +363,8 @@ m(｡≧ｴ≦｡)m
 ## 🥺 please · begging, pleading, puppy eyes, pretty please, pls
 (人 ◕︿◕ ) ᵖˡᵉᵃˢᵉ
 (｡◕︿◕｡)  puppy eyes
+૮｡◕︿◕｡ა  puppy eyes, puppy ears, dog
+∩(｡◕︿◕｡)∩  puppy eyes, bunny ears
 。ﾟ･ (>人<) ･ﾟ｡  begging
 (っ✧ω✧)っ  gimme
 
@@ -357,6 +395,7 @@ d(^ᴗ^)b
 
 ## 🤷 shrug · whatever, idk, dunno, oh well, eh
 ¯\_(ツ)_/¯
+¯\_ʕツʔ_/¯  bear
 ┐(￣ヘ￣)┌
 ╮(︶▽︶)╭
 ┐( ˘_˘ )┌
@@ -371,6 +410,8 @@ d(^ᴗ^)b
 
 ## 😑 deadpan · unimpressed, blank stare, really, -_-
 (－_－)
+/ᐠ－_－ᐟ\  cat ears, neko
+ʕ－_－ʔ  bear
 (￣_￣)
 ( ˙_˙ )
 ._.
@@ -409,6 +450,8 @@ d(^ᴗ^)b
 
 ## 🤔 thinking · hmm, pondering, considering, wondering, let me think, thonk
 ( ˘ ‸ ˘ ).｡oO(?)  thought bubble
+≽^•⩊•^≼.｡oO(?)  thought bubble, cat
+ʕ•ᴥ•ʔ.｡oO(?)  thought bubble, bear
 (╭ರ_•́)  monocle, curious, gentleman
 ( ˘ ‸ ˘ ) ʰᵐᵐ…
 (｡-`ω´-)ﾝｰ  nnn, concentrating, thinking hard
@@ -439,6 +482,8 @@ d(^ᴗ^)b
 
 ## 🧐 curious · interested, ooh, intrigued, what's this, owo
 (⊙ω⊙)
+≽^⊙ω⊙^≼  cat ears, neko
+ʕ⊙ω⊙ʔ  bear
 ( •ᴗ•)?
 (・o・)  ooh
 (ㅇㅅㅇ)
@@ -476,12 +521,15 @@ w(°ｏ°)w  wow
 ## 😨 scared · afraid, fear, terrified, eek, spooked
 ((( ;°Д°)))  shaking
 (｡>﹏<｡)  eek
+/ᐠ｡>﹏<｡ᐟ\  eek, cat ears, neko
+∩(｡>﹏<｡)∩  eek, bunny ears
 (꒪ꇴ꒪ ;)
 ﾟ(ﾟ´Д｀ﾟ)ﾟ
 
 ## 😰 nervous · anxious, worried, uneasy, sweating, gulp
 (・_・;)
 (๑•﹏•)  worried
+૮๑•﹏•ა  worried, puppy ears, dog
 (´°ω°`;)
 (゜ー゜;)
 
@@ -500,6 +548,8 @@ w(°ｏ°)w  wow
 ## 😠 angry · mad, grr, upset, cross, irritated
 (#｀皿´)  gritted teeth
 (｀Д´)
+/ᐠ｀Д´ᐟ\  cat ears, neko
+ʕ｀Д´ʔ  bear
 (╬ Ò﹏Ó)
 ( ◣_◢ )  glare
 (ノ｀Д´)ノ
@@ -523,6 +573,8 @@ w(°ｏ°)w  wow
 
 ## 🙎 pouting · pout, sulking, hmph, huff, grumpy
 ( ｀ε´ )
+≽^｀ε´^≼  cat ears, neko
+૮｀ε´ა  puppy ears, dog
 (￣^￣)  hmph
 (๑•́ ₃ •̀๑)
 (＞へ＜)  sulking
@@ -630,6 +682,7 @@ d(￣▽￣)b
 
 ## 😋 hungry · food, eat, yummy, delicious, drool, nom, starving
 (*´﹃｀*)  drool
+≽^*´﹃｀*^≼  drool, cat ears, neko
 (っ˘ڡ˘ς)  yummy
 (๑´ڡ`๑)  licking lips
 
@@ -652,11 +705,13 @@ d(￣▽￣)b
 
 ## 💀 dead · ded, ko, rip, game over
 (×_×)
+/ᐠ×_×ᐟ\  cat ears, neko
 (x_x)
 (✕╭╮✕)
 
 ## 😵‍💫 dizzy · dazed, woozy, spinning, drunk
 (@_@)
+/ᐠ@_@ᐟ\  cat ears, neko
 (+_+)  dazed
 ~(@▽@)~ﾋｯｸ  drunk, hic
 
@@ -673,6 +728,7 @@ d(￣▽￣)b
 
 ## 🤩 starstruck · amazed, star eyes, sparkly, in awe, fan
 (✪ω✪)
+≽^✪ω✪^≼  cat ears, neko
 (☆ω☆)
 ＼(☆o☆)／
 (๑✧◡✧๑)
