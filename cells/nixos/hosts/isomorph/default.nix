@@ -41,6 +41,7 @@
     services."hampshire-vpn"
     services.protonvpn
     services.zfs-snapshots
+    services.functor-cache # functor as binary cache + remote builder
     # services.ssh
   ];
 

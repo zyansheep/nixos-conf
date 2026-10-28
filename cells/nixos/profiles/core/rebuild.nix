@@ -16,8 +16,10 @@
 _: {
   pkgs,
   config,
+  lib,
   ...
 }: let
+  cfg = config.rebuild;
   flakeDir = "/home/zyansheep/nixos-conf";
   rebuild = pkgs.writeShellScriptBin "rebuild" ''
     set -euo pipefail
@@ -30,14 +32,33 @@ _: {
     # features) under root too, so rebuilds use nrdxp/nix-community caches
     # instead of building from source.
     export NIX_CONFIG="accept-flake-config = true"
+    # Caches that are only worth asking when they answer right away (another
+    # machine over the tailnet): add the ones that reply within 2 s.
+    for url in ${lib.escapeShellArgs cfg.optionalSubstituters}; do
+      if ${pkgs.curl}/bin/curl --silent --fail --max-time 2 --output /dev/null "''${url%%\?*}/nix-cache-info"; then
+        NIX_CONFIG+=$'\nextra-substituters = '"$url"
+      else
+        echo "rebuild: $url did not answer, not using it" >&2
+      fi
+    done
     exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch \
       --flake ${flakeDir}#${config.networking.hostName} "$@"
   '';
 in {
-  environment.systemPackages = [rebuild];
+  options.rebuild.optionalSubstituters = lib.mkOption {
+    type = lib.types.listOf lib.types.str;
+    default = [];
+    description = ''
+      Substituters `rebuild` adds only if they answer within 2 seconds, for
+      caches that are often unreachable. In nix.conf, an unreachable cache
+      delays every download while Nix retries it.
+    '';
+  };
+
+  config.environment.systemPackages = [rebuild];
 
   # Scoped to ONLY the wrapper above — every other sudo still needs a password.
-  security.sudo-rs.extraRules = [
+  config.security.sudo-rs.extraRules = [
     {
       users = ["zyansheep"];
       commands = [

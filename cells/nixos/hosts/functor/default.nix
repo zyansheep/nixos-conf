@@ -17,6 +17,7 @@
     core.common
     core.tools
     core.communications
+    core.rebuild # passwordless `sudo rebuild` / `nrb`
 
     gaming.common
     gaming.steam
@@ -33,6 +34,8 @@
     services.syncthing
     services.containers
     services.zfs-snapshots
+    services.binary-cache # harmonia on :5000 (tailnet), remote builds for isomorph
+    services.nixos-ci # builds origin/main for the cache; `nixos-ci status`
   ];
 
   # Bootloader
