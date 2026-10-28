@@ -21,8 +21,45 @@ _: {
 }: let
   cfg = config.rebuild;
   flakeDir = "/home/zyansheep/nixos-conf";
+  toplevel = "${flakeDir}#nixosConfigurations.${config.networking.hostName}.config.system.build.toplevel";
+  # Prints the derivations that building the flake output $1 would compile on
+  # this machine: not built yet and not substitutable from a cache that answers,
+  # not preferLocalBuild, and built with a stdenv that has a C compiler.
+  # Trivial builders (writeText, runCommand, buildEnv, unit files) are
+  # preferLocalBuild or use stdenvNoCC, so they don't count.
+  localCompiles = pkgs.writeShellScript "rebuild-local-compiles" ''
+    set -euo pipefail
+    PATH=${lib.makeBinPath [config.nix.package pkgs.jq pkgs.gawk pkgs.gnused pkgs.coreutils]}
+    if ! out=$(nix build --dry-run "$1" 2>&1); then
+      echo "$out" >&2
+      exit 1
+    fi
+    drvs=$(awk '/will be built:$/ { b = 1; next } b && /^ / { print $1; next } { b = 0 }' <<<"$out")
+    [ -n "$drvs" ] || exit 0
+    # `nix derivation show` keys and inputs are store basenames in newer Nix
+    # and full paths in older Nix; the jq below accepts both.
+    show=$(nix derivation show $drvs)
+    inputs='(.inputs.drvs // .inputDrvs // {}) | keys | map(sub(".*/"; ""))'
+    stdenvs=$(jq -r "(.derivations // .)[] | $inputs | .[] | select(endswith(\"-stdenv-linux.drv\"))" <<<"$show" | sort -u)
+    [ -n "$stdenvs" ] || exit 0
+    cc=$(nix derivation show $(sed 's|^|/nix/store/|' <<<"$stdenvs") |
+      jq -c "[(.derivations // .) | to_entries[] | select(.value | $inputs | any(test(\"-(gcc|clang)-wrapper-\"))) | .key | sub(\".*/\"; \"\")]")
+    jq -r --argjson cc "$cc" "(.derivations // .) | to_entries[]
+      | select(.value.env.preferLocalBuild != \"1\")
+      | select((.value.structuredAttrs // (.value.env.__json // \"{}\" | fromjson)).preferLocalBuild != true)
+      | select(.value | $inputs | any(.[]; IN(\$cc[])))
+      | .key | sub(\".*/[a-z0-9]{32}-|^[a-z0-9]{32}-\"; \"\") | sub(\"[.]drv$\"; \"\")" <<<"$show" | sort -u
+  '';
   rebuild = pkgs.writeShellScriptBin "rebuild" ''
     set -euo pipefail
+    allow_local=
+    args=()
+    for arg in "$@"; do
+      case $arg in
+        --allow-local-builds) allow_local=1 ;;
+        *) args+=("$arg") ;;
+      esac
+    done
     # Pre-authorize the user-owned repo for root's git so a dirty-tree eval
     # can't trip "detected dubious ownership" (harmless otherwise).
     export GIT_CONFIG_COUNT=1
@@ -34,15 +71,29 @@ _: {
     export NIX_CONFIG="accept-flake-config = true"
     # Caches that are only worth asking when they answer right away (another
     # machine over the tailnet): add the ones that reply within 2 s.
+    unreachable=()
     for url in ${lib.escapeShellArgs cfg.optionalSubstituters}; do
       if ${pkgs.curl}/bin/curl --silent --fail --max-time 2 --output /dev/null "''${url%%\?*}/nix-cache-info"; then
         NIX_CONFIG+=$'\nextra-substituters = '"$url"
       else
         echo "rebuild: $url did not answer, not using it" >&2
+        unreachable+=("''${url%%\?*}")
       fi
     done
+    ${lib.optionalString cfg.refuseLocalCompiles ''
+      if [ ''${#unreachable[@]} -gt 0 ] && [ -z "$allow_local" ]; then
+        echo "rebuild: checking what would compile here..." >&2
+        compiles=$(${localCompiles} ${toplevel})
+        if [ -n "$compiles" ]; then
+          echo "rebuild: these would compile on this machine:" >&2
+          echo "$compiles" | ${pkgs.gnused}/bin/sed 's/^/  /' >&2
+          echo "rebuild: retry when ''${unreachable[*]} answers, or pass --allow-local-builds" >&2
+          exit 1
+        fi
+      fi
+    ''}
     exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch \
-      --flake ${flakeDir}#${config.networking.hostName} "$@"
+      --flake ${flakeDir}#${config.networking.hostName} "''${args[@]}"
   '';
 in {
   options.rebuild.optionalSubstituters = lib.mkOption {
@@ -52,6 +103,19 @@ in {
       Substituters `rebuild` adds only if they answer within 2 seconds, for
       caches that are often unreachable. In nix.conf, an unreachable cache
       delays every download while Nix retries it.
+    '';
+  };
+
+  options.rebuild.refuseLocalCompiles = lib.mkOption {
+    type = lib.types.bool;
+    default = false;
+    description = ''
+      When an optional substituter doesn't answer, refuse to switch if the
+      system would compile a package here: a derivation built with a C
+      compiler that isn't preferLocalBuild. For a laptop whose build machine
+      is sometimes out of reach.
+      `rebuild --allow-local-builds` (or `nrb --allow-local-builds`) skips the
+      check.
     '';
   };
 

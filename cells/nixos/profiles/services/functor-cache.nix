@@ -8,7 +8,9 @@
 #   unreachable (Nix retries a dead cache 5 times before skipping it).
 #   cache.nixos.org (priority 40) is still asked first; functor is 50.
 # - Builder: when functor is unreachable, a build loses one ssh
-#   ConnectTimeout and then builds here as before.
+#   ConnectTimeout and then builds here as before. `rebuild` refuses to
+#   switch then if a package would compile here (refuseLocalCompiles);
+#   `nrb --allow-local-builds` builds it anyway.
 #
 # One-time setup: root's key for nixremote@functor, outside the repo and the
 # store, at /persist/etc/nix/functor-builder_ed25519 (root, 0600). Its public
@@ -26,6 +28,7 @@ in {
     narinfo-cache-negative-ttl = 60;
   };
   rebuild.optionalSubstituters = ["http://${functor}:5000?priority=50"];
+  rebuild.refuseLocalCompiles = true;
 
   nix.distributedBuilds = true;
   nix.buildMachines = [
