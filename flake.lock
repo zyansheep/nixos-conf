@@ -477,11 +477,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793304621,
-        "narHash": "sha256-4LlK2qmby4pRkxp9lAkjzAh9EE4RfklIpqnVA+Dv/bY=",
+        "lastModified": 1793305049,
+        "narHash": "sha256-jAEpmCo6GPTepW3+k3j8vjlsru6vokj08ybkBjpaltY=",
         "ref": "refs/heads/main",
-        "rev": "eef56246228a7f9bfa132cd4604144ec3845f930",
-        "revCount": 6,
+        "rev": "82247b03b1461fc8264cbce0bd06be539af60386",
+        "revCount": 11,
         "type": "git",
         "url": "file:///home/zyansheep/Projects/UpdateManager"
       },
