@@ -445,7 +445,8 @@
         "nixpkgs-zotero": "nixpkgs-zotero",
         "stable": [
           "nixpkgs"
-        ]
+        ],
+        "update-manager": "update-manager"
       }
     },
     "rust-overlay": {
@@ -467,6 +468,26 @@
         "owner": "oxalica",
         "repo": "rust-overlay",
         "type": "github"
+      }
+    },
+    "update-manager": {
+      "inputs": {
+        "nixpkgs": [
+          "latest"
+        ]
+      },
+      "locked": {
+        "lastModified": 1793304621,
+        "narHash": "sha256-4LlK2qmby4pRkxp9lAkjzAh9EE4RfklIpqnVA+Dv/bY=",
+        "ref": "refs/heads/main",
+        "rev": "eef56246228a7f9bfa132cd4604144ec3845f930",
+        "revCount": 6,
+        "type": "git",
+        "url": "file:///home/zyansheep/Projects/UpdateManager"
+      },
+      "original": {
+        "type": "git",
+        "url": "file:///home/zyansheep/Projects/UpdateManager"
       }
     }
   },

@@ -43,6 +43,14 @@
     # experiments that used to live in cells/common/patches/system-monitor).
     drainhound.url = "github:zyansheep/drainhound";
 
+    # Update status, CI builds and upstream merges across the machines, in a
+    # Waybar widget (profiles/services/update-manager.nix).
+    # TODO before this reaches main: a git+file input only resolves on machines
+    # that have this checkout, and nixos-ci (ProtectHome) can't read it. Push the
+    # repo (e.g. github:zyansheep/update-manager) and point this there first.
+    update-manager.url = "git+file:///home/zyansheep/Projects/UpdateManager";
+    update-manager.inputs.nixpkgs.follows = "latest";
+
     nixos-generators.url = "github:nix-community/nixos-generators";
     nixos-generators.inputs.nixpkgs.follows = "stable";
   };
@@ -242,6 +250,9 @@
               {
                 nixpkgs.pkgs = pkgs;
                 networking.hostName = name;
+                # `nixos-version --configuration-revision`: update-manager reads it to
+                # tell which commit a machine runs, also for builds nixos-ci didn't make.
+                system.configurationRevision = self.rev or self.dirtyRev or null;
                 home-manager.useGlobalPkgs = true;
                 home-manager.useUserPackages = true;
               }

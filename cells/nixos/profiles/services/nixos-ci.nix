@@ -13,6 +13,11 @@
 #   nixos-ci log [-f]  journal of all nixos-ci units
 #   nixos-ci stop      cancel a running build
 #
+# Builds log in Nix's internal-json format through `update-manager nixlog`,
+# which prints the usual lines to the journal and keeps progress.json (builds
+# done/expected, what is building, an ETA) and build-times.json (how long each
+# derivation took, for the next ETA) here, for the update-manager widget.
+#
 # From isomorph: `ssh functor nixos-ci run`. A timer polls origin/main every
 # 15 minutes and builds new commits.
 {
@@ -28,9 +33,10 @@
   hosts = ["isomorph" "functor"];
   units = ["nixos-ci.service" "nixos-ci-poll.service" "nixos-ci-update.service"];
 
+  updateManager = inputs.update-manager.packages.${pkgs.stdenv.hostPlatform.system}.default;
   build = pkgs.writeShellApplication {
     name = "nixos-ci-build";
-    runtimeInputs = [config.nix.package pkgs.git pkgs.coreutils pkgs.util-linux];
+    runtimeInputs = [config.nix.package pkgs.git pkgs.coreutils pkgs.util-linux updateManager];
     text = ''
       # nixos-ci-build [--if-changed] [--update]
       state=${state}
@@ -85,7 +91,9 @@
       # Failed builds show up below as missing outputs; --keep-going builds
       # everything that doesn't depend on a failure.
       if [ ''${#targets[@]} -gt 0 ]; then
-        nix build --no-link --keep-going --max-jobs 2 --cores 8 "''${targets[@]}" || true
+        rm -f "$state/progress.json"
+        nix build --no-link --keep-going --max-jobs 2 --cores 8 --log-format internal-json "''${targets[@]}" 2>&1 >/dev/null |
+          update-manager nixlog --progress "$state/progress.json" --history "$state/build-times.json" --jobs 2 || true
       fi
 
       stamp=$(date +%Y%m%d-%H%M%S)

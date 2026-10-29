@@ -36,6 +36,7 @@
     services.zfs-snapshots
     services.binary-cache # harmonia on :5000 (tailnet), remote builds for isomorph
     services.nixos-ci # builds origin/main for the cache; `nixos-ci status`
+    services.update-manager # the updates widget's agent (isomorph reports in here)
   ];
 
   # Bootloader
