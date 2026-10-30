@@ -10,6 +10,8 @@
   libadwaita,
   networkmanager,
   gtk4-layer-shell,
+  polkit,
+  json-glib,
   networkmanagerapplet,
   adwaita-icon-theme,
   kdePackages,
@@ -30,7 +32,8 @@ stdenv.mkDerivation {
   ];
 
   nativeBuildInputs = [ meson ninja pkg-config wrapGAppsHook4 ];
-  buildInputs = [ glib gtk4 libadwaita networkmanager gtk4-layer-shell ];
+  # polkit and json-glib: required by Meson since upstream's AmneziaWG support.
+  buildInputs = [ glib gtk4 libadwaita networkmanager gtk4-layer-shell polkit json-glib ];
   doCheck = true;
 
   # The GTK executable lives in libexec; the CLI only sends IPC commands.
