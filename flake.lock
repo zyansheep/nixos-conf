@@ -477,17 +477,17 @@
         ]
       },
       "locked": {
-        "lastModified": 1793305526,
-        "narHash": "sha256-u0Z+PGTMuCBaENPuY9J3iWsd+q1/NruVXzRYMg/2rQ0=",
-        "ref": "refs/heads/main",
-        "rev": "234cf33b33b63dec99c3cd575bbdd6901482e019",
-        "revCount": 13,
-        "type": "git",
-        "url": "file:///home/zyansheep/Projects/UpdateManager"
+        "lastModified": 1793307016,
+        "narHash": "sha256-WmcqT60yE/AoW57VqpBpkNf1812D+B4HNB/Kl3SIud8=",
+        "owner": "zyansheep",
+        "repo": "UpdateManager",
+        "rev": "641a2dadff3293b226053976d386e1cf00225659",
+        "type": "github"
       },
       "original": {
-        "type": "git",
-        "url": "file:///home/zyansheep/Projects/UpdateManager"
+        "owner": "zyansheep",
+        "repo": "UpdateManager",
+        "type": "github"
       }
     }
   },

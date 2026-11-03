@@ -45,10 +45,7 @@
 
     # Update status, CI builds and upstream merges across the machines, in a
     # Waybar widget (profiles/services/update-manager.nix).
-    # TODO before this reaches main: a git+file input only resolves on machines
-    # that have this checkout, and nixos-ci (ProtectHome) can't read it. Push the
-    # repo (e.g. github:zyansheep/update-manager) and point this there first.
-    update-manager.url = "git+file:///home/zyansheep/Projects/UpdateManager";
+    update-manager.url = "github:zyansheep/UpdateManager";
     update-manager.inputs.nixpkgs.follows = "latest";
 
     nixos-generators.url = "github:nix-community/nixos-generators";

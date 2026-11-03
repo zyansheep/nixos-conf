@@ -206,6 +206,19 @@ label:focus {
   color: #8fdf8f;
 }
 
+/* update-manager */
+#custom-updates {
+  font-family: "Font Awesome 7 Free";
+  font-weight: 900;
+  font-size: 12px;
+  padding: 0 4px;
+  color: #888;
+}
+#custom-updates.updates { color: #e0c060; }
+#custom-updates.building, #custom-updates.switching { color: #8cb8f0; }
+#custom-updates.failed { color: #ef8585; }
+#custom-updates.stale { opacity: 0.55; }
+
 
 #temperature {}
 

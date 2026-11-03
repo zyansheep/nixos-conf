@@ -38,6 +38,7 @@
     services.containers
     services.immich
     services.tailscale
+    services.update-manager # the updates widget (Waybar custom/updates) and its agent
     services."hampshire-vpn"
     services.protonvpn
     services.zfs-snapshots

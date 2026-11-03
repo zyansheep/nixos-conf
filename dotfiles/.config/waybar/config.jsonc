@@ -25,6 +25,7 @@
     "temperature",
     // "backlight",
     "custom/services",
+    "custom/updates",
     "group/power",
     "custom/qol-up",
     "custom/qol-down",
@@ -99,6 +100,16 @@
     "interval": 5,
     "tooltip": false,
     "on-click": "eww open --toggle services-popup"
+  },
+  // update-manager (~/Projects/UpdateManager): update status of isomorph and
+  // functor, nixos-ci builds, upstream merges. Reads the agent's state, so it
+  // starts at once; the panel is resident (update-manager-panel.service).
+  "custom/updates": {
+    "exec": "/run/current-system/sw/bin/update-manager waybar",
+    "return-type": "json",
+    "restart-interval": 10,
+    "on-click": "/run/current-system/sw/bin/update-manager panel",
+    "on-click-right": "/run/current-system/sw/bin/update-manager panel upstream"
   },
   "custom/notification": {
     "tooltip": false,
