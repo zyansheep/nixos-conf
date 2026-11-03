@@ -23,10 +23,16 @@ spawn-at-startup "floorp"
 spawn-at-startup "obsidian"
 // spawn-at-startup "anki"
 spawn-at-startup "codium"
-spawn-at-startup "vesktop"
-spawn-at-startup "flatpak" "run" "dev.vencord.Vesktop"
-spawn-at-startup "signal-desktop"
-spawn-at-startup "t3code"
+// spawn-at-startup "vesktop"
+// spawn-at-startup "flatpak" "run" "dev.vencord.Vesktop"
+// spawn-at-startup "signal-desktop"
+// dither-chat hub (functor): the PWA installed from https://chat.tn.zyancraft.net/
+// in its own Chromium profile (same command as its .desktop entry).
+spawn-at-startup "chromium" "--user-data-dir=/home/zyansheep/.local/share/dither-chat/chromium" "--profile-directory=Default" "--app-id=hhandjplcepadhaenpnbollhecoplnen"
+// Unlock the login keyring before T3 asks for it: T3's saved environments
+// (functor) are encrypted with it, and if the prompt takes over 75 s the app runs
+// without them until relaunched. A window reload doesn't bring them back.
+spawn-at-startup "bash" "-c" "secret-tool lookup application t3code >/dev/null 2>&1; exec t3code"
 
 // Window rules to assign applications to workspaces
 window-rule {
@@ -45,17 +51,14 @@ window-rule {
     match app-id="obsidian"
     open-on-workspace "notes"
 }
-window-rule {
-  match app-id="t3code"
-  open-on-workspace "notes"
-}
 // ...and only maximize it when it's part of the startup batch.
 window-rule {
     match app-id="obsidian" at-startup=true
     open-maximized true
 }
+// T3 Code (desktop AppImage) reports app-id com.t3tools.T3Code.
 window-rule {
-    match app-id="t3code" at-startup=true
+    match app-id=r#"^com\.t3tools\.T3Code$"#
     open-on-workspace "notes"
 }
 
@@ -75,6 +78,14 @@ window-rule {
 window-rule {
     match app-id="signal"
     open-on-workspace "chat"
+}
+
+// dither-chat: the installed PWA is chrome-<app id>-<profile dir>; a plain
+// --app=URL window is chrome-<host>__-<profile dir>.
+window-rule {
+    match app-id=r#"^chrome-(hhandjplcepadhaenpnbollhecoplnen|chat\.tn\.zyancraft\.net__)-Default$"#
+    open-on-workspace "chat"
+    open-focused false
 }
 
 // Advanced network settings open from the sidebar's edit/add controls.

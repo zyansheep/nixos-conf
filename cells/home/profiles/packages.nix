@@ -111,6 +111,7 @@
     parted
     pbzip2
     qbittorrent
+    libsecret # secret-tool: niri unlocks the keyring with it before starting T3
     seahorse
     swappy
     sysbench
