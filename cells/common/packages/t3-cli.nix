@@ -1,0 +1,42 @@
+# The `t3` CLI from the Z3 Code fork's releases (a self-contained Bun executable). Bump with z3code.nix.
+# The fork ships only linux-x64.
+{ lib, stdenv, stdenvNoCC, fetchurl, makeWrapper, autoPatchelfHook, codex }:
+let
+  version = "0.1.6-z3.1";
+  platform = "linux-x64";
+in
+stdenvNoCC.mkDerivation {
+  pname = "t3-cli";
+  inherit version;
+
+  src = fetchurl {
+    url = "https://github.com/zyansheep/t3code/releases/download/v${version}/t3-${version}-${platform}.tar.gz";
+    hash = "sha256-10IhV9F50ebA/Ajn8laVOk5SYx8kvHKAS6aPdkgFwjg=";
+  };
+  sourceRoot = "t3-${version}-${platform}";
+
+  nativeBuildInputs = [ makeWrapper autoPatchelfHook ];
+  buildInputs = [ stdenv.cc.cc.lib ];
+
+  dontConfigure = true;
+  dontBuild = true;
+  dontStrip = true; # Bun appends the bundled app to the executable
+
+  installPhase = ''
+    runHook preInstall
+    mkdir -p $out/lib/t3 $out/bin
+    cp -r . $out/lib/t3
+    chmod +x $out/lib/t3/t3
+    makeWrapper $out/lib/t3/t3 $out/bin/t3 --prefix PATH : ${lib.makeBinPath [ codex ]}
+    runHook postInstall
+  '';
+
+  meta = {
+    description = "Z3 Code CLI (zyansheep/t3code fork of T3 Code)";
+    homepage = "https://github.com/zyansheep/t3code";
+    license = lib.licenses.mit;
+    mainProgram = "t3";
+    sourceProvenance = [ lib.sourceTypes.binaryNativeCode ];
+    platforms = [ "x86_64-linux" ];
+  };
+}

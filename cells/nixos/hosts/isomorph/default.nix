@@ -1,4 +1,4 @@
-{ inputs, suites, profiles, ... }: {
+{ inputs, suites, profiles, pkgs, ... }: {
   imports = with profiles; [
     suites.base
 
@@ -192,6 +192,8 @@
   virtualisation.waydroid.enable = true;
 
   home-manager.users.zyansheep.programs.command-not-found.enable = true;
+  # Z3 Code (desktop app + `t3` CLI), from cells/common/packages so they build on the system's nixpkgs.
+  home-manager.users.zyansheep.home.packages = [ pkgs.z3code pkgs.t3-cli ];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
