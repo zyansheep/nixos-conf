@@ -2,7 +2,7 @@
 # The fork ships only linux-x64.
 { lib, stdenv, stdenvNoCC, fetchurl, makeWrapper, autoPatchelfHook, codex }:
 let
-  version = "0.1.6-z3.1";
+  version = "0.1.6-z3.2";
   platform = "linux-x64";
 in
 stdenvNoCC.mkDerivation {
@@ -11,7 +11,7 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/t3-${version}-${platform}.tar.gz";
-    hash = "sha256-10IhV9F50ebA/Ajn8laVOk5SYx8kvHKAS6aPdkgFwjg=";
+    hash = "sha256-nMPrtUtWLDPCt3QONi3MHns6AdzzhmMnIh52E0k2n5k=";
   };
   sourceRoot = "t3-${version}-${platform}";
 
