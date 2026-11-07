@@ -32,6 +32,9 @@ _: {lib, ...}: let
     # The tailnet address, not loopback: the hub trusts loopback with /adapter.
     chat = "100.64.0.4:8460";
     calendar = "100.64.0.4:8470"; # ~/Projects/dither-calendar (dither-calendar user unit)
+    accounts = "100.64.0.4:8486"; # ~/Projects/dither-accounts (dither-accounts user unit)
+    # Loopback: woolgather has no login, so only Caddy may reach it.
+    woolgather = "127.0.0.1:8480"; # ~/Projects/woolgather (woolgather user unit)
   };
 in {
   security.acme = {
