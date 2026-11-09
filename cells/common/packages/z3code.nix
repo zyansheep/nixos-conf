@@ -1,4 +1,4 @@
-# Z3 Code: the desktop app from the T3 Code fork's releases (zyansheep/t3code, branch `z3`: an upstream stable
+# Z3 Code: the desktop app from the T3 Code fork's releases (zyansheep/t3code, branch `z3`: an upstream nightly
 # release plus local patches). Bump `version` and `hash` together with t3-cli.nix.
 #
 # Built from the same nixpkgs as the system (the common-packages overlay), so the AppImage's FHS env has the
@@ -8,10 +8,10 @@
 { lib, appimageTools, fetchurl, makeWrapper, codex }:
 let
   pname = "t3code"; # binary, desktop file, keyring entry and profile dir all keep the upstream name
-  version = "0.1.6-z3.2";
+  version = "0.1.8-nightly.20261108.4380-z3.1";
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/Z3-Code-${version}-x86_64.AppImage";
-    hash = "sha256-/P6ACJydCvrRM0jifEjK8a+zn5FFOjFs3ESJ/y2tGXk=";
+    hash = "sha256-9qL1MXQmVREHnMX2kNtQPsRUYY/a6H6hSelbOphFMS8=";
   };
   contents = appimageTools.extract { inherit pname version src; };
 in

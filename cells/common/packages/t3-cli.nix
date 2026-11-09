@@ -1,8 +1,8 @@
 # The `t3` CLI from the Z3 Code fork's releases (a self-contained Bun executable). Bump with z3code.nix.
 # The fork ships only linux-x64.
-{ lib, stdenv, stdenvNoCC, fetchurl, makeWrapper, autoPatchelfHook, codex }:
+{ lib, stdenv, stdenvNoCC, fetchurl, makeWrapper, autoPatchelfHook, vulkan-loader, codex }:
 let
-  version = "0.1.6-z3.2";
+  version = "0.1.8-nightly.20261108.4380-z3.1";
   platform = "linux-x64";
 in
 stdenvNoCC.mkDerivation {
@@ -11,12 +11,15 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/t3-${version}-${platform}.tar.gz";
-    hash = "sha256-nMPrtUtWLDPCt3QONi3MHns6AdzzhmMnIh52E0k2n5k=";
+    hash = "sha256-1IUcZmXyX+w+9WmC4I9Bus5jr3rHyvArE0dP6QgtQvw=";
   };
   sourceRoot = "t3-${version}-${platform}";
 
   nativeBuildInputs = [ makeWrapper autoPatchelfHook ];
-  buildInputs = [ stdenv.cc.cc.lib ];
+  # 0.1.7 also ships musl prebuilds of native modules (ffi-rs); node loads the glibc ones, so musl stays unlinked.
+  autoPatchelfIgnoreMissingDeps = [ "libc.musl-x86_64.so.1" ];
+  # The nightly CLI bundles a Vulkan build of its voice transcription backend (transcribe-cpp).
+  buildInputs = [ stdenv.cc.cc.lib vulkan-loader ];
 
   dontConfigure = true;
   dontBuild = true;
