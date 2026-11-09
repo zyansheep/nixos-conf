@@ -39,6 +39,7 @@
     services.immich
     services.tailscale
     services.update-manager # the updates widget (Waybar custom/updates) and its agent
+    services.z3-autoupdate # applies each new Z3 Code release when idle (on AC, away, no runs or builds)
     services."hampshire-vpn"
     services.protonvpn
     services.zfs-snapshots
@@ -194,6 +195,8 @@
   home-manager.users.zyansheep.programs.command-not-found.enable = true;
   # Z3 Code (desktop app + `t3` CLI), from cells/common/packages so they build on the system's nixpkgs.
   home-manager.users.zyansheep.home.packages = [ pkgs.z3code pkgs.t3-cli ];
+  # z3-autoupdate relaunches the desktop app after a switch, if it was running.
+  z3-autoupdate.desktopApp = true;
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

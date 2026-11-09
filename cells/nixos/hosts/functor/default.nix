@@ -7,6 +7,7 @@
   imports = with profiles; [
     suites.base
     ./hardware-configuration.nix
+    ./z3code.nix # Z3 Code's server (t3code.service), kept current by z3-autoupdate
 
     # graphics.plasma
     graphics.drivers.amd
@@ -39,6 +40,7 @@
     services.update-manager # the updates widget's agent (isomorph reports in here)
     services.tailnet-https # HTTPS for tailnet services: *.tn.zyancraft.net
     services.haveno # Haveno (Reto) Monero exchange daemon, moved from sguru
+    services.z3-autoupdate # pins each new Z3 Code release on main and applies it when idle
   ];
 
   # Bootloader
