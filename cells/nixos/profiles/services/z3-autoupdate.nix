@@ -340,11 +340,14 @@
         record "apply of $want failed: $problem"
         local rolled="Nothing was switched."
         if [ "$(readlink -f /run/current-system)" != "$prev" ]; then
-          if systemctl start "update-manager-switch@$(basename "$prev").service" >>"$log" 2>&1; then
+          # The instance is the escaped store name: a bare "-" would decode to "/".
+          local unit
+          unit="update-manager-switch@$(systemd-escape "$(basename "$prev")").service"
+          if systemctl start "$unit" >>"$log" 2>&1; then
             restart_z3
             rolled="It was rolled back to the previous system ($prev), and Z3 Code restarted on it."
           else
-            rolled="Rolling back to $prev FAILED (update-manager-switch@$(basename "$prev")); the new system is still active."
+            rolled="Rolling back to $prev FAILED ($unit); the new system is still active."
           fi
         fi
         record "$rolled"
