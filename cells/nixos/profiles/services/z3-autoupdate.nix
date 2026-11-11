@@ -315,6 +315,8 @@
           fi
           return 0
         fi
+        # The flake reads submodules (?submodules=1): check out the commits main records.
+        git -C "$conf" submodule --quiet update --init --recursive >>"$log" 2>&1 || true
 
         prev=$(readlink -f /run/current-system)
 
@@ -377,6 +379,8 @@
         git -C "$clone" fetch --quiet origin main
         git -C "$clone" checkout --quiet --force -B main origin/main
         git -C "$clone" clean --quiet -ffdx
+        git -C "$clone" submodule --quiet sync --recursive
+        git -C "$clone" submodule --quiet update --init --recursive --force
         current=$(pinned "$clone/cells/common/packages/t3-cli.nix")
         if [ "$current" = "$version" ]; then say "main already pins $version"; return 0; fi
 
