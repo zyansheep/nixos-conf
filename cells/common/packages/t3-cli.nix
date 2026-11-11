@@ -2,7 +2,7 @@
 # The fork ships only linux-x64.
 { lib, stdenv, stdenvNoCC, fetchurl, makeWrapper, autoPatchelfHook, vulkan-loader, codex }:
 let
-  version = "0.1.8-nightly.20261108.4380-z3.1";
+  version = "0.1.9-nightly.20261110.4491-z3.1";
   platform = "linux-x64";
 in
 stdenvNoCC.mkDerivation {
@@ -11,7 +11,7 @@ stdenvNoCC.mkDerivation {
 
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/t3-${version}-${platform}.tar.gz";
-    hash = "sha256-1IUcZmXyX+w+9WmC4I9Bus5jr3rHyvArE0dP6QgtQvw=";
+    hash = "sha256-lv8u2YWbkuhwfVgWByRrldy5YsgRXkpXxwjrP2eI6kU=";
   };
   sourceRoot = "t3-${version}-${platform}";
 
