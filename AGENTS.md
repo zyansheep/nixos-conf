@@ -26,6 +26,11 @@ real input in the background compositor and look at what it did.
   only with `--no-remote` and a throwaway profile.
 - sway takes keyboard focus straight back from an on-demand layer surface, where niri leaves it, so a panel that
   closes on focus loss closes at once there: use the panel's keep-open flag for the rest of the checks.
+- For niri's own focus rules (what a click on the bar does to an open panel), run a nested niri in the same
+  private Xvfb: `niri -c <minimal config>` with `DISPLAY=:97`, the private `XDG_RUNTIME_DIR` and bus, then size
+  its window to the screen with `xdotool windowsize`. It starts a `waybar` with your own config on its display
+  even so: kill that by PID before testing. `niri msg layers` (with its `NIRI_SOCKET`) says which layer
+  surfaces are mapped, to tell open from closed.
 - Sizes measured there are not the real ones (fonts differ); positions relative to the screen's middle are.
 - Stop what you started by the PIDs you recorded, not by matching command lines: a pattern on a store path once
   killed the real session's copy of the same program.

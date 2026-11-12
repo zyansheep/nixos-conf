@@ -108,8 +108,9 @@
     "exec": "/run/current-system/sw/bin/update-manager waybar",
     "return-type": "json",
     "restart-interval": 10,
-    "on-click": "/run/current-system/sw/bin/update-manager panel",
-    "on-click-right": "/run/current-system/sw/bin/update-manager panel upstream"
+    // update-manager-panel: the D-Bus toggle (~30 ms); the Python one until the system has it.
+    "on-click": "p=/run/current-system/sw/bin/update-manager; [ -x $p-panel ] && exec $p-panel; exec $p panel",
+    "on-click-right": "p=/run/current-system/sw/bin/update-manager; [ -x $p-panel ] && exec $p-panel upstream; exec $p panel upstream"
   },
   "custom/notification": {
     "tooltip": false,
