@@ -179,6 +179,10 @@
     "tooltip": false,
     "format": "{:%A %B %d, 1%Y %H:%M:%S}",
     "interval": 1,
+    // A click opens dither-calendar's panel (pkgs.dither-calendar-panel): the month, now and next, the days ahead,
+    // plans from chats. The system profile's launcher once a rebuild has installed it; until then the package
+    // built to an out-link (nix build … --out-link ~/.local/state/dither-calendar-panel/result).
+    "on-click": "p=/run/current-system/sw/bin/dither-calendar-panel; [ -x $p ] || p=$HOME/.local/state/dither-calendar-panel/result/bin/dither-calendar-panel; exec $p --offset -68",
     // "format-alt": "{:%A, %B %d, %Y (%R)}  ",
     "tooltip-format": "<tt><small>{calendar}</small></tt>",
     "calendar": {

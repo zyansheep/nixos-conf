@@ -34,6 +34,7 @@ in {
     notificationCenter # GTK4 notification panel; background input passes through
     audio-sidebar # Audio devices, levels and per-app routing popup
     display-panel # Brightness, night light and grayscale popup
+    dither-calendar-panel # Calendar popup under the bar's clock (dither-calendar)
     networkSidebar # Wi-Fi popup; uses NetworkManager for connections and storage
     eww # interactive popup widgets (services dropdown)
     zathura # vim pdf viewer
@@ -223,6 +224,24 @@ in {
       Type = "dbus";
       BusName = "org.zyansheep.DisplayPanel";
       ExecStart = "${pkgs.display-panel}/libexec/display-panel";
+      Restart = "on-failure";
+    };
+  };
+
+  # Resident calendar popup under the bar's clock (a click on the clock runs
+  # `dither-calendar-panel`, which toggles it over D-Bus). Hidden it has no
+  # timers and no connection, so it is started with the session to open at once.
+  systemd.user.services.dither-calendar-panel = {
+    description = "Resident calendar popup";
+    wantedBy = [ "graphical-session.target" ];
+    partOf = [ "graphical-session.target" ];
+    after = [ "graphical-session.target" ];
+    requisite = [ "graphical-session.target" ];
+    serviceConfig = {
+      Type = "dbus";
+      BusName = "org.zyansheep.CalendarPanel";
+      # --offset: the clock sits left of the screen's middle (the right-hand modules are wider), so the panel opens under it.
+      ExecStart = "${pkgs.dither-calendar-panel}/libexec/dither-calendar-panel --offset -68";
       Restart = "on-failure";
     };
   };
