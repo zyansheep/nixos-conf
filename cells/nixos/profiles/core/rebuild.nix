@@ -13,6 +13,19 @@
 #
 # Flakes ignore untracked files, so `git add` new files before rebuilding
 # (the `nrb` alias does `git add .` first).
+#
+# `rebuild --build-only` builds without switching (`nixos-rebuild build`, so
+# ./result), with the same cache and local-compile checks; it needs no root.
+#
+# rebuild.approval.enable adds `nrb-request REASON [rebuild args...]` for
+# coding agents. They run with NoNewPrivileges (T3 Code starts them that way),
+# so their sudo fails. nrb-request starts the user unit nrb-approve.service,
+# which builds without root, shows a notification with the reason, the
+# closure diff and Approve / Deny, and on Approve runs `git add . && sudo
+# rebuild ARGS` (./nrb-approve.sh, ./nrb-request.sh). The notification is a
+# courtesy, not a security boundary: the NOPASSWD rule below lets any process
+# running as zyansheep under the user manager (`systemd-run --user`) switch
+# without asking.
 _: {
   pkgs,
   config,
@@ -53,10 +66,12 @@ _: {
   rebuild = pkgs.writeShellScriptBin "rebuild" ''
     set -euo pipefail
     allow_local=
+    action=switch
     args=()
     for arg in "$@"; do
       case $arg in
         --allow-local-builds) allow_local=1 ;;
+        --build-only) action=build ;;
         *) args+=("$arg") ;;
       esac
     done
@@ -92,9 +107,19 @@ _: {
         fi
       fi
     ''}
-    exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch \
+    exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild "$action" \
       --flake ${flakeDir}#${config.networking.hostName} "''${args[@]}"
   '';
+  nrbRequest = pkgs.writeShellApplication {
+    name = "nrb-request";
+    runtimeInputs = [pkgs.coreutils pkgs.util-linux pkgs.systemd pkgs.git];
+    text = builtins.readFile ./nrb-request.sh;
+  };
+  nrbApprove = pkgs.writeShellApplication {
+    name = "nrb-approve";
+    runtimeInputs = [pkgs.coreutils pkgs.gnused pkgs.gnugrep pkgs.git config.nix.package pkgs.libnotify pkgs.glib];
+    text = builtins.readFile ./nrb-approve.sh;
+  };
 in {
   options.rebuild.optionalSubstituters = lib.mkOption {
     type = lib.types.listOf lib.types.str;
@@ -119,7 +144,40 @@ in {
     '';
   };
 
-  config.environment.systemPackages = [rebuild];
+  options.rebuild.approval.enable = lib.mkEnableOption ''
+    `nrb-request`, which asks the user in a notification (Approve / Deny) to
+    rebuild and switch, for agents that can't run sudo. Needs a notification
+    daemon that shows actions (swaync)
+  '';
+
+  config.environment.systemPackages = [rebuild] ++ lib.optional cfg.approval.enable nrbRequest;
+
+  config.systemd.user.services.nrb-approve = lib.mkIf cfg.approval.enable {
+    description = "Ask the user to approve the rebuild an agent requested (nrb-request)";
+    unitConfig.ConditionUser = "zyansheep";
+    path = [config.nix.package pkgs.git]; # for nixos-rebuild in the preview build
+    environment = {
+      NRB_DIR = "%t/nrb-approve";
+      NRB_FLAKE_DIR = flakeDir;
+      NRB_PREVIEW = "${rebuild}/bin/rebuild --build-only";
+      # The path the sudo rule names: the running system's wrapper.
+      NRB_SWITCH = "/run/wrappers/bin/sudo -n /run/current-system/sw/bin/rebuild";
+      NRB_TIMEOUT = "900";
+    };
+    serviceConfig = {
+      Type = "exec";
+      ExecStart = "${nrbApprove}/bin/nrb-approve";
+    };
+  };
+
+  # Behaviour tests (stubbed notify-send, build, switch and systemctl) at build
+  # time: an nrb-approve or nrb-request that fails them fails the rebuild.
+  config.system.checks = lib.mkIf cfg.approval.enable [
+    (pkgs.runCommand "nrb-approve-check" {nativeBuildInputs = [pkgs.git];} ''
+      HOME=$TMPDIR ${pkgs.bash}/bin/bash ${./nrb-approve-test.sh} ${nrbApprove}/bin/nrb-approve ${nrbRequest}/bin/nrb-request
+      touch $out
+    '')
+  ];
 
   # Scoped to ONLY the wrapper above — every other sudo still needs a password.
   config.security.sudo-rs.extraRules = [

@@ -60,6 +60,7 @@
     # sensor.iio.enable = false;
   };
   zramSwap.enable = true;
+  rebuild.approval.enable = true; # nrb-request: agents ask to rebuild via a swaync notification
 
   # One owner for physical connections, DHCP and VPN routing. Retain iwd as
   # the Wi-Fi authenticator: NM mirrors its existing KnownNetwork profiles.
