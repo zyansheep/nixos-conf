@@ -14,15 +14,25 @@
 #   switch to it, or make it the boot default. zyansheep may start them through
 #   polkit, which is what "Switch" in the panel does, locally or remotely.
 #   That is root-equivalent, as `sudo rebuild` (core.rebuild) already is.
+# - `nrb-request REASON [rebuild args]` (= `update-manager ask-rebuild`): how coding
+#   agents ask to switch. A full-screen window shows their reason and what changes
+#   (built without root by `rebuild --build-only`); Approve runs `sudo rebuild`.
 {
   inputs,
   common,
 }: {
   config,
   lib,
+  pkgs,
   ...
 }: {
   imports = [inputs.update-manager.nixosModules.default];
+
+  environment.systemPackages = [
+    (pkgs.writeShellScriptBin "nrb-request" ''
+      exec ${config.services.update-manager.package}/bin/update-manager ask-rebuild "$@"
+    '')
+  ];
 
   services.update-manager = {
     enable = true;

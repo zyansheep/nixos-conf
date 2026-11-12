@@ -24,13 +24,12 @@ sudo nixos-rebuild switch --flake .#isomorph
 
 Add new files to Git before rebuilding so the flake includes them.
 
-Coding agents can't use `sudo` (T3 Code starts them with NoNewPrivileges). On
-isomorph they run `nrb-request "REASON" [rebuild args...]` instead: it builds the
-system without root and shows a notification with the reason, what changes and
-Approve / Deny. Approve runs `nrb` with those args; the agent gets the output and
-exit status (77 denied, 75 no answer within 15 minutes). The output of the
-last request is in `journalctl --user -u nrb-approve`. See [AGENTS.md](AGENTS.md)
-and [rebuild.nix](cells/nixos/profiles/core/rebuild.nix).
+Coding agents don't run `nrb`; they run `nrb-request "REASON" [rebuild args...]`
+(`update-manager ask-rebuild`). It builds the system without root and opens a
+full-screen window with the reason, what changes, a message box, Deny and
+Approve. Approve runs `nrb` with those args; the agent gets the output, your
+message and the exit status (77 denied, 75 no answer within 15 minutes). See
+[AGENTS.md](AGENTS.md) and update-manager's README.
 
 ## Where to look
 

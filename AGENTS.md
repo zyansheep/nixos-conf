@@ -35,23 +35,26 @@ real input in the background compositor and look at what it did.
 
 ## Applying changes: ask with `nrb-request`, never sudo
 
-Agents can't run `nrb` (`git add . && sudo rebuild`): T3 Code starts them with NoNewPrivileges, so sudo fails.
-On isomorph, ask the user instead:
+Agents don't switch the system themselves (and can't: T3 Code starts them with NoNewPrivileges, so
+sudo fails). Ask the user instead:
 
 ```sh
-nrb-request "REASON" [rebuild args...]   # e.g. nrb-request "Waybar: fix the clock popup" --override-input foo path:/x
+nrb-request "REASON" [rebuild args...]   # = update-manager ask-rebuild; e.g. --override-input foo path:/x
 ```
 
 - It stages `~/nixos-conf` (`git add .`, like `nrb`), builds the system without root and shows the user a
-  notification with REASON, what changes (`nix store diff-closures`) and Approve / Deny. On Approve it runs
-  `sudo rebuild ARGS`. It rebuilds `~/nixos-conf`, not a worktree: get the change there first.
-- Write REASON for the user: one line on what the switch applies and why.
-- It blocks until the user answers (up to 15 minutes, plus the build): run it in the background (Claude:
-  `run_in_background: true`; outside the Bash sandbox, since it talks to the user's systemd manager).
-- Exit status: 0 switched, or nothing to switch; 77 denied; 75 no answer; 69 no notification daemon; anything
-  else is the failed build's or rebuild's own status. The output streams to stdout; it is also in
-  `journalctl --user -u nrb-approve`, which is where to look if the command was interrupted (the request
-  stays open).
-- One request at a time: a second one waits for the first.
-- Don't work around a denial or a missing answer (`systemd-run --user sudo rebuild` and the like): the
-  approval is the user's, even where the system can't enforce it.
+  full-screen window: REASON, the closure diff, the commits since the running system, the uncommitted
+  files, a message box, Deny and Approve. On Approve it runs `sudo rebuild ARGS`. It rebuilds
+  `~/nixos-conf`, not a worktree: get the change there first.
+- Write REASON for the user: what the switch applies and why, in a sentence or two.
+- It blocks until the user answers (up to 15 minutes, plus the build and the switch): run it in the
+  background (Claude: `run_in_background: true`, outside the Bash sandbox, since it starts a job under
+  the user's systemd manager).
+- Exit status: 0 switched, or nothing to switch; 77 denied; 75 no answer; 69 no window could be shown;
+  1 the build or the switch failed. The job's output streams to stdout, and the user's message comes
+  last ("The user's message: ..."): read it and do what it says. If the command was interrupted, the
+  request goes on: `update-manager job list`, `update-manager job log ID`.
+- One switch or request at a time: a second one waits for the first.
+- Don't route around a denial or a missing answer (`update-manager do rebuild`, the switch units,
+  `systemd-run --user sudo rebuild`, ...): the decision is the user's, even where the system can't
+  enforce it.
