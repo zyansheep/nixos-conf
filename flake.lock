@@ -477,11 +477,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1793307016,
-        "narHash": "sha256-WmcqT60yE/AoW57VqpBpkNf1812D+B4HNB/Kl3SIud8=",
+        "lastModified": 1794515977,
+        "narHash": "sha256-zrhb9kto2kTkf1V6GhkW1oNfuVxaTDWCVKEEjaqQUio=",
         "owner": "zyansheep",
         "repo": "UpdateManager",
-        "rev": "641a2dadff3293b226053976d386e1cf00225659",
+        "rev": "ac2b63def175b7e46a91d86890470ba0f6ce771e",
         "type": "github"
       },
       "original": {
