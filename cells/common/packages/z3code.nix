@@ -8,10 +8,10 @@
 { lib, appimageTools, fetchurl, makeWrapper, codex }:
 let
   pname = "t3code"; # binary, desktop file, keyring entry and profile dir all keep the upstream name
-  version = "0.1.10-nightly.20261113.4630-z3.2";
+  version = "0.1.10-nightly.20261113.4643-z3.1";
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/Z3-Code-${version}-x86_64.AppImage";
-    hash = "sha256-0292k8L4yltZiw11nLNDd1+T6ACs+yRX+hNAWjDGmik=";
+    hash = "sha256-1E09VZuHp9pH9RcLFeMfjDTg+KOcx6PI23VF26bKQPc=";
   };
   contents = appimageTools.extract { inherit pname version src; };
 in
