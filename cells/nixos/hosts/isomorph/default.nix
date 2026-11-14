@@ -1,4 +1,10 @@
-{ inputs, suites, profiles, pkgs, ... }: {
+{
+  inputs,
+  suites,
+  profiles,
+  pkgs,
+  ...
+}: {
   imports = with profiles; [
     suites.base
 
@@ -32,14 +38,14 @@
     graphics.drivers.amd # enable graphics drivers for AMD cpu
     fs.zfs
 
-
     services.printing
     services.syncthing
     services.containers
     services.immich
     services.tailscale
     services.update-manager # the updates widget (Waybar custom/updates) and its agent
-    services.z3-autoupdate # applies each new Z3 Code release when idle (on AC, away, no runs or builds)
+    services.nixos-deploy # switches to main's newest commit nixos-ci built, when idle (on AC, away, no runs or builds)
+    services.z3-autoupdate # restarts Z3 Code after nixos-deploy switches
     services."hampshire-vpn"
     services.protonvpn
     services.zfs-snapshots
@@ -70,7 +76,7 @@
     dns = "systemd-resolved";
     # These two tunnels have their own services. Proton's tunnel and dummy
     # kill-switch devices must remain managed by NetworkManager.
-    unmanaged = [ "interface-name:tailscale0" "interface-name:ppp*" ];
+    unmanaged = ["interface-name:tailscale0" "interface-name:ppp*"];
   };
   networking.useDHCP = false;
   networking.dhcpcd.enable = false;
@@ -86,7 +92,7 @@
   # Bootloader
   boot = {
     zfs = {
-      extraPools = [ "zpool" ];
+      extraPools = ["zpool"];
       # Don't force `-f` on root-pool import (ZFS best practice). Safe here:
       # networking.hostId is stable + enforced, so clean and crash reboots still
       # import via hostid match; only a genuine mismatch blocks boot. Recovery
@@ -123,12 +129,16 @@
       "/var/lib/immich" # immich media + state
       "/var/lib/postgresql" # immich database
       "/var/lib/redis-immich" # immich redis
-      { directory = "/var/lib/vnstat"; user = "vnstatd"; group = "vnstatd"; } # Wi-Fi usage history (nm-sidebar Traffic graph)
+      {
+        directory = "/var/lib/vnstat";
+        user = "vnstatd";
+        group = "vnstatd";
+      } # Wi-Fi usage history (nm-sidebar Traffic graph)
     ];
-    files = [ "/etc/machine-id" ];
+    files = ["/etc/machine-id"];
   };
   zfsConfig.enableSystemdRollback = true;
-  environment.etc = { "shadow".source = "/persist/etc/shadow"; };
+  environment.etc = {"shadow".source = "/persist/etc/shadow";};
   boot.kernelParams = [
     "zfs.zfs_arc_max=4294967296" # Set Adaptive Replacement Cache size to max 4gb. (machine-specific)
     # Disable ASPM (https://github.com/NixOS/nixos-hardware/issues/1348 — the
@@ -177,7 +187,7 @@
   networking.firewall.enable = false;
 
   # groups
-  users.users.zyansheep.extraGroups = [ "uucp" "waydroid" "networkmanager" ];
+  users.users.zyansheep.extraGroups = ["uucp" "waydroid" "networkmanager"];
 
   documentation.info.enable = false;
 
@@ -194,9 +204,11 @@
 
   home-manager.users.zyansheep.programs.command-not-found.enable = true;
   # Z3 Code (desktop app + `t3` CLI), from cells/common/packages so they build on the system's nixpkgs.
-  home-manager.users.zyansheep.home.packages = [ pkgs.z3code pkgs.t3-cli ];
+  home-manager.users.zyansheep.home.packages = [pkgs.z3code pkgs.t3-cli];
   # z3-autoupdate relaunches the desktop app after a switch, if it was running.
   z3-autoupdate.desktopApp = true;
+  # A deploy fails (and is switched back) if one of these was running before it and isn't after.
+  nixos-deploy.checkUnits = ["wayland-wm@niri.service" "waybar.service" "vicinae.service" "swaync.service" "pipewire.service"];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions
