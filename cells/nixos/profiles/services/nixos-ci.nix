@@ -49,7 +49,7 @@
   updateManager = inputs.update-manager.packages.${pkgs.stdenv.hostPlatform.system}.default;
   build = pkgs.writeShellApplication {
     name = "nixos-ci-build";
-    runtimeInputs = [config.nix.package pkgs.git pkgs.coreutils pkgs.util-linux pkgs.curl pkgs.jq pkgs.findutils updateManager];
+    runtimeInputs = [config.nix.package pkgs.git pkgs.coreutils pkgs.util-linux pkgs.curl pkgs.jq pkgs.findutils pkgs.gawk pkgs.gnugrep pkgs.gnused updateManager];
     text = ''
       # nixos-ci-build [--poll] [--update]
       state=${state}
