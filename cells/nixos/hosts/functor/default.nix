@@ -36,12 +36,16 @@
     services.containers
     services.zfs-snapshots
     services.binary-cache # harmonia on :5000 (tailnet), remote builds for isomorph
-    services.nixos-ci # builds origin/main for the cache; `nixos-ci status`
+    services.nixos-ci # builds each branch head for the cache, the gate deploys go by; `nixos-ci status`
+    services.nixos-deploy # switches to main's newest commit nixos-ci built, when idle; `nixos-deploy status`
     services.update-manager # the updates widget's agent (isomorph reports in here)
     services.tailnet-https # HTTPS for tailnet services: *.tn.zyancraft.net
     services.haveno # Haveno (Reto) Monero exchange daemon, moved from sguru
-    services.z3-autoupdate # pins each new Z3 Code release on main and applies it when idle
+    services.z3-autoupdate # pins each new Z3 Code release on main; restarts Z3 Code after nixos-deploy switches
   ];
+
+  # A deploy fails (and is switched back) if one of these was running before it and isn't after.
+  nixos-deploy.checkUnits = ["t3code.service" "dither-chat.service" "dither-accounts.service"];
 
   # Bootloader
   boot = {

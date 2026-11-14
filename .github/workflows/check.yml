@@ -1,0 +1,79 @@
+# The fast half of nixos-conf's CI, on GitHub's runners: every host evaluates (no builds: those are nixos-ci's, on
+# functor, which reports them here as the commit statuses nixos-ci/<host>), and the files a push changes are
+# formatted (alejandra for Nix, shfmt for shell; the rest of the tree isn't yet). One job, `check`, sums them up, so
+# a branch rule needs only that name. The same locally:
+#   nix eval --raw .#nixosConfigurations.<host>.config.system.build.toplevel.drvPath
+#   nix shell nixpkgs#alejandra nixpkgs#shfmt -c sh -c 'alejandra --check FILE.nix; shfmt -d -i 2 -s FILE.sh'
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its older run; runs on main never cancel each other.
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  eval:
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [isomorph, functor]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      # Import-from-derivation would build during evaluation; nothing here may.
+      - run: >-
+          nix eval --raw --option allow-import-from-derivation false
+          .#nixosConfigurations.${{ matrix.host }}.config.system.build.toplevel.drvPath
+
+  format:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@3dc140bfc76c49fbd4dd958429132e3746bcb086 # v31.11.5
+      - name: Changed files are formatted
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          # A new branch or a manual run has no "before": compare with main.
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then BASE=$(git merge-base origin/main HEAD); fi
+          mapfile -t nix_files < <(git diff --name-only --diff-filter=d "$BASE" HEAD -- '*.nix')
+          mapfile -t sh_files < <(git diff --name-only --diff-filter=d "$BASE" HEAD -- '*.sh')
+          echo "Nix: ${nix_files[*]:-none}"
+          echo "shell: ${sh_files[*]:-none}"
+          tools=$(nix build --no-link --print-out-paths --inputs-from . nixpkgs#alejandra nixpkgs#shfmt | sed 's|$|/bin|' | paste -sd:)
+          PATH=$tools:$PATH
+          ok=1
+          if [ ${#nix_files[@]} -gt 0 ]; then alejandra --check "${nix_files[@]}" || ok=0; fi
+          if [ ${#sh_files[@]} -gt 0 ]; then shfmt -d -i 2 -s "${sh_files[@]}" || ok=0; fi
+          [ "$ok" = 1 ] || { echo "::error::format with: alejandra FILE.nix; shfmt -w -i 2 -s FILE.sh"; exit 1; }
+
+  check:
+    needs: [eval, format]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          jq -r 'to_entries[] | "\(.key): \(.value.result)"' <<<"$NEEDS"
+          # Skipped or cancelled counts as failed.
+          bad=$(jq -r 'to_entries[] | select(.value.result != "success") | .key' <<<"$NEEDS")
+          if [ -n "$bad" ]; then echo "not passed: $(echo $bad)"; exit 1; fi
+          echo "all passed"

@@ -18,6 +18,11 @@
 # ./result), with the same cache and local-compile checks; it needs no root.
 # update-manager's ask-rebuild (`nrb-request`, services/update-manager.nix)
 # uses it to show the user what an agent's requested switch would change.
+#
+# A switch is refused when the tree doesn't contain the commit this machine
+# runs (`nixos-version --configuration-revision`): a stale ~/nixos-conf would
+# otherwise undo what nixos-deploy (services.nixos-deploy) deployed from main.
+# `rebuild --allow-downgrade` switches anyway.
 _: {
   pkgs,
   config,
@@ -58,11 +63,13 @@ _: {
   rebuild = pkgs.writeShellScriptBin "rebuild" ''
     set -euo pipefail
     allow_local=
+    allow_downgrade=
     action=switch
     args=()
     for arg in "$@"; do
       case $arg in
         --allow-local-builds) allow_local=1 ;;
+        --allow-downgrade) allow_downgrade=1 ;;
         --build-only) action=build ;;
         *) args+=("$arg") ;;
       esac
@@ -72,6 +79,22 @@ _: {
     export GIT_CONFIG_COUNT=1
     export GIT_CONFIG_KEY_0=safe.directory
     export GIT_CONFIG_VALUE_0=${flakeDir}
+    if [ "$action" = switch ] && [ -z "$allow_downgrade" ]; then
+      git=${pkgs.git}/bin/git
+      running=$(/run/current-system/sw/bin/nixos-version --configuration-revision 2>/dev/null || true)
+      running=''${running%-dirty}
+      head=$($git -C ${flakeDir} rev-parse HEAD)
+      if [[ $running =~ ^[0-9a-f]{40}$ ]] && [ "$running" != "$head" ] &&
+        ! $git -C ${flakeDir} merge-base --is-ancestor "$running" HEAD 2>/dev/null; then
+        if $git -C ${flakeDir} cat-file -e "$running^{commit}" 2>/dev/null; then
+          echo "rebuild: ${flakeDir} (at ''${head:0:12}) doesn't contain ''${running:0:12}, the commit this machine runs: switching would undo it" >&2
+        else
+          echo "rebuild: this machine runs commit ''${running:0:12}, which ${flakeDir} doesn't have: fetch it first" >&2
+        fi
+        echo "rebuild: pull or rebase onto it, or pass --allow-downgrade" >&2
+        exit 1
+      fi
+    fi
     # Trust the flake's own nixConfig (extra binary caches, experimental
     # features) under root too, so rebuilds use nrdxp/nix-community caches
     # instead of building from source.

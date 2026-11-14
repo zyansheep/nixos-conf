@@ -4,22 +4,24 @@
 # - bump (functor, hourly; z3-autoupdate.bump): in its own clone of origin/main (never ~/nixos-conf), points the
 #   two packages at the newest release, builds both hosts' systems, and commits "z3code: <version>" and pushes it
 #   to main. nixos-ci then caches the systems for isomorph.
-# - apply (every host, every 15 minutes): when origin/main pins a version this host doesn't run, waits until it is
-#   idle (no T3 agent run in progress, nobody at the machine for 15 minutes or the screen locked, on AC power, no
-#   builds), fast-forwards ~/nixos-conf to origin/main (uncommitted changes stay, as with `nrb`), runs
-#   `sudo rebuild`, restarts what runs Z3 Code (z3-autoupdate.restartUnits, the desktop app) and checks it.
-# - On a failed check it switches back to the previous system (update-manager-switch@, through polkit), restarts
-#   the old version, pauses itself and starts a T3 thread in the nixos-conf project on this host to find out why.
-#   That thread fixes what is plainly fixable and runs `z3-autoupdate resume`; otherwise it leaves the update
-#   paused for review. A failed build in bump pauses the same way (nothing is pushed).
+# - Switching the system is nixos-deploy's (services.nixos-deploy): it deploys the bump like any other commit once
+#   nixos-ci has built it, then runs `z3-autoupdate after-switch` (its postSwitch hook), which restarts what runs
+#   Z3 Code (z3-autoupdate.restartUnits, the desktop app) if it runs another version than the profile, and checks
+#   it. A failed check fails the deploy: nixos-deploy switches back, runs the hook again (restarting the old
+#   version), pauses and starts a T3 thread.
+# - apply (every host, every 15 minutes): when the profile is current but Z3 Code still runs an older version (a
+#   hand `nrb` doesn't restart it), restarts it once the host is idle (`nixos-deploy busy`). On a failed check it
+#   pauses itself and starts a T3 thread in the nixos-conf project on this host to find out why. That thread fixes
+#   what is plainly fixable and runs `z3-autoupdate resume`; otherwise it leaves the update paused for review. A
+#   failed build in bump pauses the same way (nothing is pushed).
 #
 #   z3-autoupdate status           versions, gates, pause, last result
-#   z3-autoupdate apply [--force]  apply now (--force skips the idle gates)
+#   z3-autoupdate apply [--force]  restart onto the profile's version now (--force skips the idle gates)
+#   z3-autoupdate after-switch     nixos-deploy's hook: restart if needed, print what's wrong
 #   z3-autoupdate bump             (functor) check for a new release now
 #   z3-autoupdate pause [reason] / resume
 #   z3-autoupdate log [-f]         the units' journal
 #
-# Like core.rebuild, apply needs passwordless `sudo rebuild`, and the rollback uses update-manager's switch units.
 {
   inputs,
   common,
@@ -59,7 +61,6 @@
       bump_host=${lib.boolToString cfg.bump}
       restart_units=(${lib.escapeShellArgs cfg.restartUnits})
       desktop_app=${lib.boolToString cfg.desktopApp}
-      t3_db=$HOME/.t3/userdata/statev2.sqlite
       runtime_json=$HOME/.t3/userdata/server-runtime.json
       packages=(cells/common/packages/z3code.nix cells/common/packages/t3-cli.nix)
       mkdir -p "$state" "$runtime"
@@ -72,7 +73,7 @@
       }
 
       # The version a nixos-conf tree pins, from t3-cli.nix (z3code.nix pins the same).
-      pinned() { sed -n 's/^  version = "\(.*\)";$/\1/p' "$1"; }
+      pinned() { sed -n 's/^ *version = "\(.*\)";$/\1/p' "$1"; }
       # The version this host's profile runs, from the t3 CLI's store path.
       running() {
         local t3
@@ -81,7 +82,7 @@
       }
       origin_version() {
         git -C "$conf" fetch --quiet origin main
-        git -C "$conf" show origin/main:cells/common/packages/t3-cli.nix | sed -n 's/^  version = "\(.*\)";$/\1/p'
+        git -C "$conf" show origin/main:cells/common/packages/t3-cli.nix | sed -n 's/^ *version = "\(.*\)";$/\1/p'
       }
 
       paused() { [ -e "$state/paused" ]; }
@@ -90,52 +91,9 @@
         record "paused: $1"
       }
 
-      # --- idle gates -------------------------------------------------------------------------------------------
-      # Whether this user has an active Wayland session here (functor usually sits at the greeter).
-      graphical_session() {
-        local s
-        while read -r s _; do
-          [ "$(loginctl show-session "$s" -p Name --value 2>/dev/null)" = "$USER" ] || continue
-          [ "$(loginctl show-session "$s" -p Type --value 2>/dev/null)" = wayland ] || continue
-          [ "$(loginctl show-session "$s" -p State --value 2>/dev/null)" = active ] && return 0
-        done < <(loginctl list-sessions --no-legend 2>/dev/null)
-        return 1
-      }
-
+      # --- idle gates: nixos-deploy's ----------------------------------------------------------------------------
       # Prints why this host is busy, or nothing.
-      busy_reason() {
-        if [ -r "$t3_db" ]; then
-          local runs
-          # Runs left "running" by a crash would block forever, so only recent ones count.
-          runs=$(sqlite3 -readonly "$t3_db" "select count(*) from orchestration_v2_projection_runs
-            where status in ('queued', 'preparing', 'starting', 'running')
-              and julianday(requested_at) > julianday('now', '-12 hours')" 2>/dev/null || echo 0)
-          [ "''${runs:-0}" -gt 0 ] && { echo "$runs T3 agent run(s) in progress"; return; }
-        fi
-        if graphical_session && [ ! -e "$runtime/idle" ] && ! pgrep -x swaylock >/dev/null; then
-          echo "someone is at the machine (input in the last 15 minutes, screen unlocked)"
-          return
-        fi
-        local supply on_ac=0 battery=0
-        for supply in /sys/class/power_supply/*; do
-          [ -r "$supply/type" ] || continue
-          case $(cat "$supply/type") in
-            Battery) battery=1 ;;
-            Mains | USB) [ "$(cat "$supply/online" 2>/dev/null)" = 1 ] && on_ac=1 ;;
-          esac
-        done
-        [ "$battery" = 1 ] && [ "$on_ac" = 0 ] && { echo "on battery"; return; }
-        if systemctl is-active --quiet nixos-ci.service nixos-ci-update.service nixos-ci-poll.service 2>/dev/null; then
-          echo "nixos-ci is building"
-          return
-        fi
-        # Nix builds run as nixbld users; cargo and rustc are local Rust builds.
-        if pgrep -G nixbld >/dev/null || pgrep -x 'cargo|rustc|nixos-rebuild' >/dev/null; then
-          echo "a build is running"
-          return
-        fi
-        return 0
-      }
+      busy_reason() { nixos-deploy busy; }
 
       # --- the T3 debug thread ----------------------------------------------------------------------------------
       start_thread() {
@@ -163,8 +121,9 @@
       The update is paused (\`z3-autoupdate status\` on $host; its state is in $state, the log of this attempt is
       $2, and \`z3-autoupdate log\` shows the units' journal). How it works is in
       ~/nixos-conf/cells/nixos/profiles/services/z3-autoupdate.nix: bump (functor) pins a new release of
-      zyansheep/t3code in cells/common/packages/z3code.nix and t3-cli.nix and pushes to main; apply (each host)
-      fast-forwards ~/nixos-conf, runs \`sudo rebuild\`, restarts Z3 Code and checks it.
+      zyansheep/t3code in cells/common/packages/z3code.nix and t3-cli.nix and pushes to main; nixos-deploy (each
+      host, cells/nixos/profiles/services/nixos-deploy.nix) switches to it once nixos-ci has built it, then
+      z3-autoupdate restarts Z3 Code and checks it.
 
       Last lines of the log:
       $(tail -n 60 "$2" 2>/dev/null)
@@ -256,7 +215,7 @@
 
       # --- apply --------------------------------------------------------------------------------------------------
       apply() {
-        local force=$1 want have reason prev log before problem
+        local force=$1 want have reason log before problem
         exec 9>"$runtime/lock"
         flock -n 9 || { say "another run is in progress"; return 0; }
         if paused; then say "paused ($(sed -n 's/^reason  //p' "$state/paused"))"; return 0; fi
@@ -277,6 +236,11 @@
           say "main pins $want, older than the running $have; nothing to do"
           return 0
         fi
+        if [ "$only_restart" = 0 ]; then
+          # The profile is behind main: switching is nixos-deploy's, which runs after-switch below.
+          say "the profile has $have, main pins $want: nixos-deploy switches once nixos-ci has built it (nixos-deploy status)"
+          return 0
+        fi
         if [ "$force" != 1 ]; then
           reason=$(busy_reason || true)
           if [ -n "$reason" ]; then
@@ -285,77 +249,35 @@
             return 0
           fi
         fi
-        rm -f "$state/waiting"
+        rm -f "''${state:?}/waiting"
 
         log=$state/apply-$want.log
         : >"$log"
         before=$(failed_units)
-        rm -f "$runtime/desktop-was-running"
+        rm -f "''${runtime:?}/desktop-was-running"
         if [ "$desktop_app" = true ] && [ -n "$(desktop_pid || true)" ]; then touch "$runtime/desktop-was-running"; fi
-        if [ "$only_restart" = 1 ]; then
-          record "restarting Z3 Code on $want (it runs $have)"
-          restart_z3
-          problem=$(health "$want" "$before" 2>&1 | tee -a "$log" || true)
-          if [ -z "$problem" ]; then record "restarted on $want"; return 0; fi
-          record "restart on $want failed: $problem"
-          pause "restarting on $want failed: $problem"
-          start_thread "Z3 Code $want failed to start on $host" "$(debug_prompt "restarting Z3 Code on $want (it ran $have): $problem" "$log" "No system was switched; the profile already had $want.")"
-          return 1
-        fi
-        record "applying $want (running $have)"
-        if [ "$(git -C "$conf" symbolic-ref --short HEAD 2>/dev/null)" != main ] ||
-          ! git -C "$conf" merge --ff-only --quiet origin/main >>"$log" 2>&1; then
-          # Local commits or edits in the way: wait (not pause), so it goes through once the tree is pushed or synced.
-          reason="$conf can't fast-forward to origin/main (not on main, local commits, or local edits to the same files)"
-          echo "$(date -Is) waiting for $want: $reason" >"$state/waiting"
-          if [ ! -e "$state/told-$want" ]; then
-            touch "$state/told-$want"
-            record "waiting for $want: $reason"
-            notify "Z3 Code $want waiting" "$reason. It applies once the tree can fast-forward."
-          fi
-          return 0
-        fi
-        # The flake reads submodules (?submodules=1): check out the commits main records.
-        git -C "$conf" submodule --quiet update --init --recursive >>"$log" 2>&1 || true
-
-        prev=$(readlink -f /run/current-system)
-
-        # The log is ours to write; only rebuild runs as root.
-        # shellcheck disable=SC2024
-        if ! /run/wrappers/bin/sudo -n /run/current-system/sw/bin/rebuild >>"$log" 2>&1; then
-          if grep -q 'retry when .* answers, or pass --allow-local-builds' "$log"; then
-            # The laptop would compile locally because functor's cache is out of reach: try again later.
-            record "rebuild deferred: functor's cache did not answer"
-            return 0
-          fi
-          problem="sudo rebuild failed"
-        else
-          restart_z3
-          problem=$(health "$want" "$before" 2>&1 | tee -a "$log" || true)
-        fi
-        if [ -z "$problem" ]; then
-          record "applied $want"
-          notify "Z3 Code updated" "$want"
-          return 0
-        fi
-
-        record "apply of $want failed: $problem"
-        local rolled="Nothing was switched."
-        if [ "$(readlink -f /run/current-system)" != "$prev" ]; then
-          # The instance is the escaped store name: a bare "-" would decode to "/".
-          local unit
-          unit="update-manager-switch@$(systemd-escape "$(basename "$prev")").service"
-          if systemctl start "$unit" >>"$log" 2>&1; then
-            restart_z3
-            rolled="It was rolled back to the previous system ($prev), and Z3 Code restarted on it."
-          else
-            rolled="Rolling back to $prev FAILED ($unit); the new system is still active."
-          fi
-        fi
-        record "$rolled"
-        pause "applying $want failed: $problem"
-        start_thread "Z3 Code $want failed on $host" "$(debug_prompt "applying $want (from $have): $problem" "$log" "$rolled")"
+        record "restarting Z3 Code on $want (it runs $have)"
+        restart_z3
+        problem=$(health "$want" "$before" 2>&1 | tee -a "$log" || true)
+        if [ -z "$problem" ]; then record "restarted on $want"; return 0; fi
+        record "restart on $want failed: $problem"
+        pause "restarting on $want failed: $problem"
+        start_thread "Z3 Code $want failed to start on $host" "$(debug_prompt "restarting Z3 Code on $want (it ran $have): $problem" "$log" "No system was switched; the profile already had $want.")"
         return 1
+      }
+
+      # nixos-deploy's postSwitch hook (and its hook after a switch back): restart Z3 Code if it runs another version
+      # than the profile now has, check it, and print what's wrong. It doesn't pause: a failed check fails the deploy.
+      after_switch() {
+        local want server
+        want=$(running)
+        server=$(server_version)
+        [ -n "$server" ] && [ "$server" != "$want" ] || return 0
+        rm -f "''${runtime:?}/desktop-was-running"
+        if [ "$desktop_app" = true ] && [ -n "$(desktop_pid || true)" ]; then touch "$runtime/desktop-was-running"; fi
+        record "restarting Z3 Code on $want after a switch (it ran $server)"
+        restart_z3
+        health "$want" "$(failed_units)"
       }
 
       # --- bump (functor) -----------------------------------------------------------------------------------------
@@ -399,9 +321,10 @@
         cli=$(nix hash convert --hash-algo sha256 --to sri "$cli")
         (
           cd "$clone"
-          sed -i "s|^  version = \".*\";$|  version = \"$version\";|" "''${packages[@]}"
-          sed -i "s|^    hash = \"sha256-.*\";$|    hash = \"$appimage\";|" cells/common/packages/z3code.nix
-          sed -i "s|^    hash = \"sha256-.*\";$|    hash = \"$cli\";|" cells/common/packages/t3-cli.nix
+          # Each file has one version and one hash line; indentation is whatever the formatter left.
+          sed -i "s|^\( *\)version = \".*\";$|\1version = \"$version\";|" "''${packages[@]}"
+          sed -i "s|^\( *\)hash = \"sha256-.*\";$|\1hash = \"$appimage\";|" cells/common/packages/z3code.nix
+          sed -i "s|^\( *\)hash = \"sha256-.*\";$|\1hash = \"$cli\";|" cells/common/packages/t3-cli.nix
           git diff --stat
         ) >>"$log" 2>&1
 
@@ -450,6 +373,7 @@
           if [ "''${2:-}" = --force ]; then apply 1; else apply 0; fi
           ;;
         bump) bump ;;
+        after-switch) after_switch ;;
         pause)
           pause "''${2:-paused by hand}"
           ;;
@@ -467,7 +391,7 @@
           journalctl --user --no-pager --lines 200 -u z3-autoupdate-apply.service -u z3-autoupdate-bump.service "$@"
           ;;
         *)
-          echo "usage: z3-autoupdate [status|apply [--force]|bump|pause [reason]|resume|log [-f]]" >&2
+          echo "usage: z3-autoupdate [status|apply [--force]|after-switch|bump|pause [reason]|resume|log [-f]]" >&2
           exit 2
           ;;
       esac
@@ -508,32 +432,11 @@ in {
 
   config = {
     environment.systemPackages = [cli];
+    # Restart Z3 Code after nixos-deploy switches, and check it.
+    nixos-deploy.postSwitch = ["z3-autoupdate after-switch"];
 
     systemd.user.services = {
-      z3-autoupdate-apply = oneshot "Apply the Z3 Code version main pins, when idle" "apply";
-      # Marks the session idle after 15 minutes without input, for apply's gate.
-      z3-autoupdate-idle = {
-        description = "Tell z3-autoupdate when this session has been idle for 15 minutes";
-        unitConfig.ConditionUser = user;
-        partOf = ["graphical-session.target"];
-        after = ["graphical-session.target"];
-        wantedBy = ["graphical-session.target"];
-        serviceConfig = {
-          ExecStartPre = [
-            "${pkgs.coreutils}/bin/mkdir -p %t/z3-autoupdate"
-            "${pkgs.coreutils}/bin/rm -f %t/z3-autoupdate/idle"
-          ];
-          ExecStart = lib.escapeShellArgs [
-            "${pkgs.swayidle}/bin/swayidle"
-            "timeout"
-            "900"
-            "${pkgs.coreutils}/bin/touch %t/z3-autoupdate/idle"
-            "resume"
-            "${pkgs.coreutils}/bin/rm -f %t/z3-autoupdate/idle"
-          ];
-          Restart = "on-failure";
-        };
-      };
+      z3-autoupdate-apply = oneshot "Restart Z3 Code onto the profile's version, when idle" "apply";
       z3-autoupdate-bump = lib.mkIf cfg.bump (oneshot "Pin the newest Z3 Code release on main" "bump");
     };
 

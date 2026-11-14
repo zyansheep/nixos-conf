@@ -11,7 +11,10 @@ printf '%s' "$text" | wl-copy --primary --type 'text/plain;charset=utf-8'
 
 # niri, like vicinae, comes from PATH to match the compositor.
 for _ in $(seq 25); do
-  focused=$(niri msg -j focused-window 2>/dev/null) || { sleep 0.2; break; }
+  focused=$(niri msg -j focused-window 2>/dev/null) || {
+    sleep 0.2
+    break
+  }
   [ "$focused" != null ] && break
   sleep 0.02
 done
