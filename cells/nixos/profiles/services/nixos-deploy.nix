@@ -7,12 +7,11 @@
 #      (`nixos-ci results` on functor) and that hasn't failed here before.
 #   2. It waits until the host is idle: no T3 agent run in progress, nobody at the machine for 15 minutes or the
 #      screen locked, on AC power, no builds (`nixos-deploy busy` says why not).
-#   3. It switches:
-#      - running a clean commit: to nixos-ci's store path, through update-manager-switch@ (fetched from functor's
-#        cache with signatures checked). ~/nixos-conf is fast-forwarded too when it can be, but needn't be.
-#      - running a build of uncommitted changes (`nrb` from a dirty tree, "<rev>-dirty"): fast-forwards
-#        ~/nixos-conf to the commit and runs `sudo rebuild`, so the local changes stay, as with `nrb`. If the tree
-#        can't fast-forward, it waits (and says so once).
+#   3. It switches to nixos-ci's store path, through update-manager-switch@ (fetched from functor's cache with
+#      signatures checked). ~/nixos-conf is fast-forwarded too when it can be, but needn't be. A host running a
+#      build of uncommitted changes (`nrb` from a dirty tree, "<rev>-dirty") whose ~/nixos-conf still has
+#      uncommitted edits waits instead, and says so once: uncommitted code is only switched to by `nrb` or an
+#      approved `nrb-request`, never by this.
 #   4. Checks: no unit failed that hadn't before, every unit in nixos-deploy.checkUnits that was active still is,
 #      and each nixos-deploy.postSwitch command (z3-autoupdate's restarts Z3 Code) prints nothing and succeeds.
 #   5. On a failed check it switches back to the previous system, runs the postSwitch commands again, marks the
@@ -285,7 +284,7 @@
 
       # --- apply --------------------------------------------------------------------------------------------------
       apply() {
-        local force=$1 reason prev log failed_before active_before problem="" want running dirty candidate candidate_path why
+        local force=$1 reason prev log failed_before active_before problem="" running dirty candidate candidate_path why
         exec 9>"$runtime/lock"
         flock -n 9 || { say "another run is in progress"; return 0; }
         if paused; then say "paused ($(sed -n 's/^reason  //p' "$state/paused"))"; return 0; fi
@@ -301,17 +300,14 @@
             return 0
           fi
         fi
-        if [ "$dirty" = 1 ]; then
-          git -C "$conf" fetch --quiet origin main || true
-          if [ "$(git -C "$conf" symbolic-ref --short HEAD 2>/dev/null)" != main ] ||
-            ! git -C "$conf" merge --ff-only --quiet "$candidate" >/dev/null 2>&1; then
-            # Local commits or edits in the way: wait, so it goes through once the tree is pushed or synced.
-            reason="$host runs uncommitted changes from $conf, which can't fast-forward to ''${candidate:0:12} (not on main, local commits, or local edits to the same files)"
-            wait_for "$reason"
-            tell_once "$candidate" "$reason"
-            return 0
-          fi
-          git -C "$conf" submodule --quiet update --init --recursive >/dev/null 2>&1 || true
+        # The edits a dirty build ran may still be in the tree, maybe an agent's unfinished work: switching to main's
+        # build would drop them, and building them is for nrb or an approved nrb-request. Once they're committed or
+        # gone, main's build is what the tree would give.
+        if [ "$dirty" = 1 ] && [ -n "$(git -C "$conf" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+          reason="$host runs uncommitted changes and $conf still has some: nrb (or an approved nrb-request) deploys ''${candidate:0:12} with them"
+          wait_for "$reason"
+          tell_once "$candidate" "$reason"
+          return 0
         fi
         rm -f "''${state:?}/waiting"
 
@@ -320,33 +316,17 @@
         prev=$(readlink -f /run/current-system)
         failed_before=$(failed_units)
         active_before=$(active_check_units)
-        if [ "$dirty" = 1 ]; then
-          record "deploying ''${candidate:0:12} by rebuilding $conf (it runs uncommitted changes on ''${running:0:12})"
-          # The log is ours to write; only rebuild runs as root.
-          # shellcheck disable=SC2024
-          if ! /run/wrappers/bin/sudo -n /run/current-system/sw/bin/rebuild >>"$log" 2>&1; then
-            if grep -q 'retry when .* answers, or pass --allow-local-builds' "$log"; then
-              record "rebuild deferred: functor's cache did not answer"
-              return 0
-            fi
-            problem="sudo rebuild failed"
-          fi
-        else
-          record "deploying ''${candidate:0:12} ($candidate_path, running ''${running:0:12})"
-          if ! systemctl start "$(switch_unit "$candidate_path")" >>"$log" 2>&1; then
-            problem="the switch to $candidate_path failed ($(switch_unit "$candidate_path"))"
-          fi
-          # The tree follows when it can; it doesn't have to.
-          if [ "$(git -C "$conf" symbolic-ref --short HEAD 2>/dev/null)" = main ]; then
-            git -C "$conf" fetch --quiet origin main >/dev/null 2>&1 &&
-              git -C "$conf" merge --ff-only --quiet "$candidate" >/dev/null 2>&1 || true
-          fi
+        record "deploying ''${candidate:0:12} ($candidate_path, running ''${running:0:12}$([ "$dirty" = 1 ] && echo ", dirty"))"
+        if ! systemctl start "$(switch_unit "$candidate_path")" >>"$log" 2>&1; then
+          problem="the switch to $candidate_path failed ($(switch_unit "$candidate_path"))"
+        fi
+        # The tree follows when it can; it doesn't have to.
+        if [ "$(git -C "$conf" symbolic-ref --short HEAD 2>/dev/null)" = main ]; then
+          git -C "$conf" fetch --quiet origin main >/dev/null 2>&1 &&
+            git -C "$conf" merge --ff-only --quiet "$candidate" >/dev/null 2>&1 || true
         fi
         if [ -z "$problem" ]; then
-          # A rebuild of uncommitted changes makes a system nobody knew in advance.
-          want=$candidate_path
-          [ "$dirty" = 1 ] && want=$(readlink -f /run/current-system)
-          problem=$(health "$want" "$failed_before" "$active_before" 2>&1 | tee -a "$log" || true)
+          problem=$(health "$candidate_path" "$failed_before" "$active_before" 2>&1 | tee -a "$log" || true)
         fi
         if [ -z "$problem" ]; then
           record "deployed ''${candidate:0:12}"
