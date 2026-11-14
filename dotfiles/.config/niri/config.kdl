@@ -458,6 +458,10 @@ binds {
     // Vicinae's own emoji grid can't paste without its input server and has
     // no kaomoji. See cells/home/profiles/emoji.nix.
     Mod+Semicolon hotkey-overlay-title="😀 Emoji & Kaomoji Picker: Vicinae" { spawn "emoji-picker"; }
+    // Fancy Text: what you type in cursive, bubbles, vaporwave and 80 more
+    // Unicode styles; Enter pastes the pick like emoji-picker. See
+    // cells/common/patches/fancy-text/README.md.
+    Mod+Shift+Semicolon hotkey-overlay-title="✨ Fancy Text: Vicinae" { spawn "vicinae" "deeplink" "vicinae://launch/@zyansheep/fancy-text/generate"; }
     // A Japanese dictionary in Vicinae: English, 日本語 or romaji, kanji and
     // conjugations, and a sentence is translated offline. Shift looks up the
     // selected text (or the clipboard). See cells/common/patches/jisho/README.md.

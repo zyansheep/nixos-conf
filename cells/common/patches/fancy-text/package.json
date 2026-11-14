@@ -1,0 +1,19 @@
+{
+	"name": "fancy-text",
+	"title": "Fancy Text",
+	"description": "Type something and get it in 84 fancy Unicode styles, lingojam.com/CoolTextFonts-style; Enter pastes it",
+	"author": "zyansheep",
+	"license": "MIT",
+	"icon": "icon.svg",
+	"categories": ["Productivity"],
+	"commands": [
+		{
+			"name": "generate",
+			"title": "Fancy Text",
+			"subtitle": "Cool Text Fonts",
+			"description": "Your text in cursive, bold, bubbles, upside down, vaporwave, creepy and more; Enter pastes it where you were typing",
+			"mode": "view",
+			"keywords": ["fancy", "font", "fonts", "cool text", "unicode", "style", "cursive", "bold", "bubble", "vaporwave", "zalgo", "lingojam"]
+		}
+	]
+}

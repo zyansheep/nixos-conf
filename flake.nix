@@ -143,6 +143,7 @@
             kimi
             emoji
             jisho
+            fancy-text
             dotfiles
           ];
         };
