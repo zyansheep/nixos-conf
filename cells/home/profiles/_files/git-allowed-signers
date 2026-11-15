@@ -1,0 +1,6 @@
+# Keys trusted to sign commits on nixos-conf main (and shown as good signatures by git log --show-signature).
+# nixos-deploy only switches a host to a commit when every commit since the running one is signed by one of
+# these, read from the RUNNING system (so a pushed commit cannot add its own key). Format: ssh-keygen(1)
+# ALLOWED SIGNERS. Add a host: its ~/.ssh/id_ed25519.pub, here and at github.com/settings/keys as a signing key.
+zyansheep@protonmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKWgNDUMyzYDzAPill8WLt7UUUBjhKQr7Ne1ZBNn8NNs functor
+zyansheep@protonmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4i3MQ8WPIvSfSviF6kqef0EnKFKLdYETMl/puV5wON isomorph

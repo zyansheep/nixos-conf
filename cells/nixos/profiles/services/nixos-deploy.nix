@@ -5,6 +5,10 @@
 #   1. The commit this host runs (`nixos-version --configuration-revision`) must be on main. The candidates are the
 #      commits on main after it, newest first; it takes the first that nixos-ci built for this host
 #      (`nixos-ci results` on functor) and that hasn't failed here before.
+#      Every commit between the running one and the candidate must carry a good SSH signature from a key in
+#      cells/home/profiles/_files/git-allowed-signers, as that file was in the RUNNING system (baked in at build
+#      time, so a pushed commit can't vouch for itself). A commit that isn't signed blocks it and every candidate
+#      after it, and says so once; `nrb` from a tree you checked is the way past one.
 #   2. It waits until the host is idle: no T3 agent run in progress, nobody at the machine for 15 minutes or the
 #      screen locked, on AC power, no builds (`nixos-deploy busy` says why not).
 #   3. It switches to nixos-ci's store path, through update-manager-switch@ (fetched from functor's cache with
@@ -39,6 +43,8 @@
   cfg = config.nixos-deploy;
   user = "zyansheep";
   onCiHost = config.networking.hostName == cfg.ciHost;
+  # Read from this build, never from the commit being checked.
+  allowedSigners = ../../../home/profiles/_files/git-allowed-signers;
 
   cli = pkgs.writeShellApplication {
     name = "nixos-deploy";
@@ -68,6 +74,7 @@
       post_switch=(${lib.escapeShellArgs cfg.postSwitch})
       t3_db=$HOME/.t3/userdata/statev2.sqlite
       clone=$state/main.git
+      allowed_signers=${allowedSigners}
       mkdir -p "$state/bad" "$runtime"
 
       say() { echo "nixos-deploy: $*" >&2; }
@@ -146,11 +153,21 @@
         fi
       }
 
+      # Prints the first commit in $1..$2 (oldest first) without a good signature from an allowed signer, or nothing.
+      unsigned_commit() {
+        local c
+        while read -r c; do
+          git -C "$clone" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$allowed_signers" \
+            verify-commit "$c" >/dev/null 2>&1 || { echo "$c"; return 0; }
+        done < <(git -C "$clone" rev-list --reverse "$1..$2")
+        return 0
+      }
+
       # Sets running (the commit this host runs), dirty (1 if it was built from uncommitted changes), candidate
       # and candidate_path (the commit to deploy and nixos-ci's system for it); or sets why (there's nothing to
       # deploy) and returns 1. Not in $(...): the caller needs the variables.
       plan() {
-        local rev revs results path tip tip_result
+        local rev revs results path tip tip_result unsigned unsigned_seen=
         why=
         running=$(nixos-version --configuration-revision 2>/dev/null || true)
         dirty=0
@@ -180,11 +197,22 @@
             $1 == "rev" { cur = $2; next }
             cur == rev && $1 == host && $2 == "ok" { print $3 }' <<<"$results")
           if [ -n "$path" ]; then
+            unsigned=$(unsigned_commit "$running" "$rev")
+            if [ -n "$unsigned" ]; then
+              # Older candidates may still be clean of it; but say so, once per commit.
+              tell_once "unsigned-$unsigned" "commit ''${unsigned:0:12} on main isn't signed by a trusted key: not deploying it or anything after it"
+              unsigned_seen=$unsigned
+              continue
+            fi
             candidate=$rev
             candidate_path=$path
             break
           fi
         done
+        if [ -z "$candidate" ] && [ -n "$unsigned_seen" ]; then
+          why="commit ''${unsigned_seen:0:12} on main isn't signed by a key in git-allowed-signers; nothing after it deploys (nrb from a checked tree to move past it)"
+          return 1
+        fi
         if [ -z "$candidate" ]; then
           tip_result=$(awk -v rev="$tip" -v host="$host" '$1 == "rev" { cur = $2; next } cur == rev && $1 == host { print $2 }' <<<"$results")
           case $tip_result in

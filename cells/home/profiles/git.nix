@@ -9,7 +9,14 @@
 
     lfs.enable = true;
 
-    signing.format = null;
+    # Every commit is signed with the host's SSH key (git's ssh format, no gpg). nixos-deploy refuses to switch to
+    # commits on main that aren't signed by a key in _files/git-allowed-signers, and GitHub requires signed commits
+    # on nixos-conf's main, so a stolen GitHub token can't push code that runs as root on these hosts.
+    signing = {
+      format = "ssh";
+      key = "~/.ssh/id_ed25519.pub";
+      signByDefault = true;
+    };
 
     ignores = [
       # Linux
@@ -51,6 +58,9 @@
       push.followTags = true;
 
       user.useConfigOnly = true;
+
+      # `git log --show-signature` / `git verify-commit` know which keys are ours.
+      gpg.ssh.allowedSignersFile = "${./_files/git-allowed-signers}";
 
       core = {
         abbrev = 12;
