@@ -154,12 +154,15 @@
       }
 
       # Prints the first commit in $1..$2 (oldest first) without a good signature from an allowed signer, or nothing.
+      # Fails closed: if the range can't be listed, $2 itself counts as unsigned.
       unsigned_commit() {
-        local c
+        local c list
+        list=$(git -C "$clone" rev-list --reverse "$1..$2") || { echo "$2"; return 0; }
         while read -r c; do
+          [ -n "$c" ] || continue
           git -C "$clone" -c gpg.format=ssh -c gpg.ssh.allowedSignersFile="$allowed_signers" \
             verify-commit "$c" >/dev/null 2>&1 || { echo "$c"; return 0; }
-        done < <(git -C "$clone" rev-list --reverse "$1..$2")
+        done <<<"$list"
         return 0
       }
 
