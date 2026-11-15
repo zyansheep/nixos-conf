@@ -43,6 +43,7 @@
     services.haveno # Haveno (Reto) Monero exchange daemon, moved from sguru
     services.z3-autoupdate # pins each new Z3 Code release on main; restarts Z3 Code after nixos-deploy switches
     services.cliproxyapi # CLIProxyAPI on 127.0.0.1:8317: pooled Claude subscriptions for Claude Code
+    services.sguru-backup # nightly restic backups of sguru's Vaultwarden and headscale, pulled over ssh
   ];
 
   # A deploy fails (and is switched back) if one of these was running before it and isn't after.
