@@ -19,6 +19,8 @@
 # - A timer polls GitHub every 5 minutes and builds each branch head it hasn't
 #   tried yet, main first; other branches only if their head is under two
 #   weeks old. Only this repo's branches: pull requests from forks never run.
+#   A head whose build failed is tried again, up to 3 tries at least 30
+#   minutes apart: a build killed by a switch or a daemon restart is no verdict.
 # - Each build leaves results/<rev>, in the main.status format ("rev",
 #   "built", then "<host> ok <path>" or "<host> FAILED").
 # - With a GitHub token in /var/lib/nixos-ci/github-token (owner nixos-ci,
@@ -171,15 +173,26 @@
           build checkout-main "$rev" main 3 "$state/main.status"
           ;;
         poll)
-          # Each head once: recorded before building, so a commit that fails (or
-          # kills the build) isn't retried every 5 minutes; `nixos-ci run` always
-          # builds main. main goes first.
+          # Each head once, unless it failed: tries are counted in tried/<rev> before
+          # building, so a commit that fails (or kills the build) is tried at most 3
+          # times, 30 minutes apart; `nixos-ci run` always builds main. main goes first.
           failed=0
           heads=$(git ls-remote --heads "$url" | awk '$2 == "refs/heads/main" {print; next} {rest = rest $0 "\n"} END {printf "%s", rest}')
+          # True if head $1 should be built now.
+          due() {
+            local tries
+            [ -e "$state/tried/$1" ] || return 0
+            # Built, and nothing failed: done.
+            if [ -e "$state/results/$1" ] && ! grep -q ' FAILED$' "$state/results/$1"; then return 1; fi
+            tries=$(cat "$state/tried/$1" 2>/dev/null)
+            tries=''${tries:-1}
+            [ "$tries" -lt 3 ] && [ -n "$(find "$state/tried/$1" -mmin +30)" ]
+          }
+          tried() { echo $(($(cat "$state/tried/$1" 2>/dev/null || echo 0) + 1)) >"$state/tried/$1"; }
           while read -r rev ref; do
-            [ -n "$rev" ] && [ ! -e "$state/tried/$rev" ] || continue
+            if [ -z "$rev" ] || ! due "$rev"; then continue; fi
             if [ "$ref" = refs/heads/main ]; then
-              touch "$state/tried/$rev"
+              tried "$rev"
               build checkout-main "$rev" main 3 "$state/main.status" || failed=1
             else
               repo=$state/checkout-branch
@@ -187,7 +200,7 @@
               git -C "$repo" fetch --quiet origin "$rev"
               # Branches nobody has pushed to for two weeks stay unbuilt.
               [ $(($(date +%s) - $(git -C "$repo" log -1 --format=%ct "$rev"))) -lt $((14 * 86400)) ] || continue
-              touch "$state/tried/$rev"
+              tried "$rev"
               echo "branch ''${ref#refs/heads/}"
               build checkout-branch "$rev" branch 2 || failed=1
             fi

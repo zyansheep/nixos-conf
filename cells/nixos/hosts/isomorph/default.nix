@@ -209,6 +209,8 @@
   z3-autoupdate.desktopApp = true;
   # A deploy fails (and is switched back) if one of these was running before it and isn't after.
   nixos-deploy.checkUnits = ["wayland-wm@niri.service" "waybar.service" "vicinae.service" "swaync.service" "pipewire.service"];
+  # The emoji picker edits the kaomoji in ~/nixos-conf and reads them from there (cells/home/profiles/emoji.nix).
+  nixos-deploy.liveFiles = ["cells/home/profiles/_files/kaomoji.txt"];
 
   # This value determines the NixOS release from which the default
   # settings for stateful data, like file locations and database versions

@@ -38,6 +38,16 @@ real input in the background compositor and look at what it did.
   `systemd-cgls --user-unit waybar.service` first; to reload its config without a restart, send SIGUSR2 to its main
   PID only, never `systemctl kill`.
 
+## Where to work: a worktree, then main
+
+Make changes in a worktree of this repo off `origin/main` (`git worktree add ../nixos-conf-<topic> -b <topic> origin/main`),
+never in `~/nixos-conf`: it may hold the user's uncommitted work, and nixos-deploy reads it. Build the hosts you
+touched there (`nix build --no-link .#nixosConfigurations.<host>.config.system.build.toplevel`). Commits must be
+signed (nixos-deploy deploys only signed commits): `git -c gpg.format=ssh -c user.signingkey=$HOME/.ssh/id_ed25519.pub
+commit -S`. A commit on main reaches both hosts by itself (README: nixos-ci, then nixos-deploy, functor first), so
+pushing to main is deploying: only push what built and what the user asked for. To try a change live before it is on
+main, get it into `~/nixos-conf` and ask with `nrb-request`, below.
+
 ## Applying changes: ask with `nrb-request`, never sudo
 
 Agents don't switch the system themselves (and can't: T3 Code starts them with NoNewPrivileges, so

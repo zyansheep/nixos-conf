@@ -1,12 +1,14 @@
 # Z3 Code's server on functor (the `t3` CLI from cells/common/packages/t3-cli.nix), reached over the tailnet by
 # isomorph's desktop app and the phone. z3-autoupdate (bump + apply) keeps it on the newest release and restarts
-# these units after a switch; a switch alone doesn't restart user units.
+# these units once no thread runs; a switch alone doesn't restart user units.
 {pkgs, ...}: {
   home-manager.users.zyansheep.home.packages = [pkgs.t3-cli];
 
   z3-autoupdate = {
     bump = true;
     restartUnits = ["t3code.service" "t3code-tailnet6.service"];
+    # Agents run here around the clock: a restart that has waited a day goes ahead between 4 and 6 in the morning.
+    restartWindow = "4-6";
   };
 
   systemd.user.services = {

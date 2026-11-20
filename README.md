@@ -24,6 +24,15 @@ sudo nixos-rebuild switch --flake .#isomorph
 
 Add new files to Git before rebuilding so the flake includes them.
 
+Usually nothing needs a hand rebuild: a commit on `main` reaches both hosts by
+itself. nixos-ci (on functor) builds it, nixos-deploy switches functor to it,
+then isomorph once functor runs it, rolling back if a check fails
+(`nixos-deploy status`). A host switched with `nrb` from uncommitted changes
+runs a "local build": `rebuild` records the tree it built as a commit, and
+nixos-deploy only replaces it once main holds those changes (or after
+`nixos-deploy drop-local`). Z3 Code restarts onto a new version on its own,
+once no agent is running (`z3-autoupdate status`).
+
 Coding agents don't run `nrb`; they run `nrb-request "REASON" [rebuild args...]`
 (`update-manager ask-rebuild`). It builds the system without root and opens a
 full-screen window with the reason, what changes, a message box, Deny and

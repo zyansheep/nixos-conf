@@ -23,6 +23,15 @@
 # runs (`nixos-version --configuration-revision`): a stale ~/nixos-conf would
 # otherwise undo what nixos-deploy (services.nixos-deploy) deployed from main.
 # `rebuild --allow-downgrade` switches anyway.
+#
+# A switch from a tree with uncommitted changes runs "<rev>-dirty", which says
+# nothing about what was built. So after such a switch `rebuild` records the
+# tree it built as a commit (parent HEAD, made by zyansheep in a scratch index:
+# HEAD, the branch, the index and the files stay as they were), kept under
+# refs/nixos-deploy/local/ and named in
+# /var/lib/nixos-deploy/local-builds/<system's store name>. nixos-deploy reads
+# it to tell whether main already holds those changes before it switches away
+# from them.
 _: {
   pkgs,
   config,
@@ -30,6 +39,8 @@ _: {
   ...
 }: let
   cfg = config.rebuild;
+  # Files programs edit live in the checkout (nixos-deploy.liveFiles): left out of a local build's record.
+  liveFiles = lib.attrByPath ["nixos-deploy" "liveFiles"] [] config;
   flakeDir = "/home/zyansheep/nixos-conf";
   toplevel = "${flakeDir}#nixosConfigurations.${config.networking.hostName}.config.system.build.toplevel";
   # Prints the derivations that building the flake output $1 would compile on
@@ -122,8 +133,39 @@ _: {
         fi
       fi
     ''}
-    exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild "$action" \
+    if [ "$action" != switch ]; then
+      exec ${config.system.build.nixos-rebuild}/bin/nixos-rebuild "$action" \
+        --flake ${flakeDir}#${config.networking.hostName} "''${args[@]}"
+    fi
+    # The tree as the flake sees it (tracked files with their contents on disk), before the build reads it.
+    snapshot=$(${recordTree} 2>/dev/null || true)
+    ${config.system.build.nixos-rebuild}/bin/nixos-rebuild switch \
       --flake ${flakeDir}#${config.networking.hostName} "''${args[@]}"
+    if [ -n "$snapshot" ]; then
+      system=$(basename "$(readlink -f /run/current-system)")
+      mkdir -p /var/lib/nixos-deploy/local-builds
+      echo "$snapshot" >"/var/lib/nixos-deploy/local-builds/$system"
+      echo "rebuild: this system is a local build; its tree is commit ''${snapshot:0:12} (nixos-deploy status)" >&2
+    fi
+  '';
+  # Prints a commit of the tree's tracked files as they are on disk, parented on HEAD, if they differ from HEAD.
+  # Runs as the repo's owner so the objects and the ref belong to them.
+  recordTree = pkgs.writeShellScript "rebuild-record-tree" ''
+    set -euo pipefail
+    exec ${pkgs.util-linux}/bin/runuser -u zyansheep -- ${pkgs.bash}/bin/bash -euo pipefail -c '
+      export PATH=${lib.makeBinPath [pkgs.git pkgs.coreutils]}
+      cd ${flakeDir}
+      index=$(mktemp)
+      trap "rm -f $index" EXIT
+      cp "$(git rev-parse --git-path index)" "$index"
+      GIT_INDEX_FILE=$index git add -u
+      ${lib.optionalString (liveFiles != []) "GIT_INDEX_FILE=$index git reset -q HEAD -- ${lib.concatMapStringsSep " " builtins.toJSON liveFiles}"}
+      tree=$(GIT_INDEX_FILE=$index git write-tree)
+      [ "$tree" != "$(git rev-parse "HEAD^{tree}")" ] || exit 0
+      commit=$(git commit-tree "$tree" -p HEAD -m "local build on ${config.networking.hostName} ($(date -Is))")
+      git update-ref "refs/nixos-deploy/local/$commit" "$commit"
+      echo "$commit"
+    '
   '';
 in {
   options.rebuild.optionalSubstituters = lib.mkOption {
