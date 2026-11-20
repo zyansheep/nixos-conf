@@ -188,6 +188,26 @@
         "type": "github"
       }
     },
+    "japanese-weave": {
+      "inputs": {
+        "nixpkgs": [
+          "latest"
+        ]
+      },
+      "locked": {
+        "lastModified": 1795204770,
+        "narHash": "sha256-aO5JCjBhFrirrsx6qu9WIPjJ63EtFv3IF/kPO1XeLmc=",
+        "owner": "zyansheep",
+        "repo": "japanese-weave",
+        "rev": "7d6a936df5a56a44c1df45d2bddbd80143f16eb6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "zyansheep",
+        "repo": "japanese-weave",
+        "type": "github"
+      }
+    },
     "kaomoji-picker": {
       "inputs": {
         "nixpkgs": [
@@ -457,6 +477,7 @@
         "home": "home",
         "home-unstable": "home-unstable",
         "impermanence": "impermanence",
+        "japanese-weave": "japanese-weave",
         "kaomoji-picker": "kaomoji-picker",
         "lanzaboote": "lanzaboote",
         "latest": "latest",
