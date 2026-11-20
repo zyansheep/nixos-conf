@@ -10,7 +10,7 @@
   vulkan-loader,
   codex,
 }: let
-  version = "0.1.11-nightly.20261117.4814-z3.1";
+  version = "0.1.11-nightly.20261117.4814-z3.2";
   platform = "linux-x64";
 in
   stdenvNoCC.mkDerivation {
@@ -19,7 +19,7 @@ in
 
     src = fetchurl {
       url = "https://github.com/zyansheep/t3code/releases/download/v${version}/t3-${version}-${platform}.tar.gz";
-      hash = "sha256-jrgbjf8iD0GyQBkWnzOlpC5IYmcCxcTptuT9noMS65k=";
+      hash = "sha256-eTwPTCmDdXEi8ARvJYWHMoYLWVBzQP2BROwLIq6h4ys=";
     };
     sourceRoot = "t3-${version}-${platform}";
 
