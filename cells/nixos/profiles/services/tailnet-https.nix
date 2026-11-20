@@ -37,6 +37,10 @@ _: {lib, ...}: let
     woolgather = "127.0.0.1:8480"; # ~/Projects/woolgather (woolgather user unit)
     # Loopback: CLIProxyAPI binds only 127.0.0.1 (its management API still wants its key).
     cliproxy = "127.0.0.1:8317"; # cliproxyapi.nix (cliproxyapi user unit)
+    zyancraft = "100.64.0.4:8077"; # ~/Projects/zyancraft.net dev server (zyancraft-dev user unit)
+    # Loopback: the slop shelf has no login. Demos agents made, linked into ~/.local/share/slop
+    # (slop user unit, ~/Projects/agents/slop/serve.py); the orrery game is its zyancraft-orrery entry.
+    slop = "127.0.0.1:8490";
   };
 in {
   security.acme = {

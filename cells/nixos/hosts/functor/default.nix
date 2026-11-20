@@ -63,6 +63,11 @@
 
   services.flatpak.enable = true;
 
+  # No swap otherwise (the disk is all ZFS, and swap on a zvol can deadlock). zram gives idle browser pages
+  # somewhere to go, and earlyoom only kills once memory AND swap are both under 10%, so ZFS's ARC (counted
+  # as used, not available) no longer sets it off on its own.
+  zramSwap.enable = true;
+
   # Enable virtualization
   virtualisation.libvirtd.enable = true;
 
