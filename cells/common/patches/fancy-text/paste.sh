@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # fancy-text-paste TEXT — lands TEXT in the focused app the way emoji-picker
-# does (cells/home/profiles/_files/emoji-picker.sh has the why): both
+# does (picker/emoji-picker.sh in github:zyansheep/kaomoji-picker has the why): both
 # selections, then Shift+Insert once niri has given focus back to the window
 # Vicinae was opened over. The text stays on the clipboard for a manual paste.
 set -euo pipefail

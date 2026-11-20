@@ -43,6 +43,11 @@
     # experiments that used to live in cells/common/patches/system-monitor).
     drainhound.url = "github:zyansheep/drainhound";
 
+    # The emoji/kaomoji picker (Mod+;) and its kaomoji editor; the kaomoji
+    # themselves stay here (cells/home/profiles/_files/kaomoji.txt).
+    kaomoji-picker.url = "github:zyansheep/kaomoji-picker";
+    kaomoji-picker.inputs.nixpkgs.follows = "latest";
+
     # Update status, CI builds and upstream merges across the machines, in a
     # Waybar widget (profiles/services/update-manager.nix).
     update-manager.url = "github:zyansheep/UpdateManager";

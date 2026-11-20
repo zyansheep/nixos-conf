@@ -456,7 +456,8 @@ binds {
     // emoji-picker lists emoji, kaomoji like (╯°□°）╯︵ ┻━┻ and ¯\_(ツ)_/¯, and
     // math symbols in a Vicinae dmenu, then inserts via the clipboard —
     // Vicinae's own emoji grid can't paste without its input server and has
-    // no kaomoji. See cells/home/profiles/emoji.nix.
+    // no kaomoji. Ctrl+E edits the highlighted kaomoji, Ctrl+Shift+N adds one.
+    // See cells/home/profiles/emoji.nix.
     Mod+Semicolon hotkey-overlay-title="😀 Emoji & Kaomoji Picker: Vicinae" { spawn "emoji-picker"; }
     // Fancy Text: what you type in cursive, bubbles, vaporwave and 80 more
     // Unicode styles; Enter pastes the pick like emoji-picker. See

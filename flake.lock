@@ -188,6 +188,26 @@
         "type": "github"
       }
     },
+    "kaomoji-picker": {
+      "inputs": {
+        "nixpkgs": [
+          "latest"
+        ]
+      },
+      "locked": {
+        "lastModified": 1794686393,
+        "narHash": "sha256-6dFBBfsRxjn6EbF0wXut/CRKV9gXf2dXwxzngz4wokE=",
+        "owner": "zyansheep",
+        "repo": "kaomoji-picker",
+        "rev": "1fe593fa8fa25db3b4b6a92fbdfd7356b93e7370",
+        "type": "github"
+      },
+      "original": {
+        "owner": "zyansheep",
+        "repo": "kaomoji-picker",
+        "type": "github"
+      }
+    },
     "lanzaboote": {
       "inputs": {
         "crane": "crane",
@@ -437,6 +457,7 @@
         "home": "home",
         "home-unstable": "home-unstable",
         "impermanence": "impermanence",
+        "kaomoji-picker": "kaomoji-picker",
         "lanzaboote": "lanzaboote",
         "latest": "latest",
         "nixos-generators": "nixos-generators",

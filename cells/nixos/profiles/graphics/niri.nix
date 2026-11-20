@@ -11,6 +11,12 @@ let
     patches = (old.patches or []) ++ [
       ../../../common/patches/vicinae/flatpak-app-identity.patch
       ../../../common/patches/vicinae/extension-handshake-timeout.patch
+      # `vicinae dmenu --action SHORTCUT:TITLE`: extra keys in the emoji picker (edit/add kaomoji).
+      # Copied under its old name, so Vicinae doesn't rebuild when only the repo changes.
+      (builtins.path {
+        path = inputs.kaomoji-picker.patches.vicinae-dmenu-extra-actions;
+        name = "dmenu-extra-actions.patch";
+      })
     ];
     postPatch = (old.postPatch or "") + ''
       cp ${../../../common/patches/vicinae/flatpak-identity.hpp} src/server/src/services/window-manager/flatpak-identity.hpp

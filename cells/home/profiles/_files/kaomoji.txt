@@ -1,5 +1,9 @@
 # Kaomoji for emoji-picker (see ../emoji.nix), hand-made and hand-picked.
 #
+# The picker edits this file: Ctrl+E on a kaomoji (edit, reorder, delete),
+# Ctrl+Shift+N (add), Ctrl+Shift+K (all of them, groups). It reads it live,
+# no rebuild needed.
+#
 # `## emoji mood · keywords` starts a group. Each line under it is one
 # kaomoji, optionally followed by two or more spaces and its own extra
 # keywords. The picker shows and searches `kaomoji  mood · group keywords,
@@ -82,6 +86,7 @@
 ♡(˶^ᴗ^˶)
 (◍•ᴗ•◍)♡ ✧*。
 (˘ᴗ˘)ʚ♡ɞ  winged heart
+(˶^ᴗ^˶)っ♡  give
 
 ## 😍 lovestruck · heart eyes, smitten, crush, swoon
 ( ˶♡ᗜ♡˶ )
@@ -465,6 +470,8 @@ d(^ᴗ^)b
 (￣～￣ )  hmm
 (・へ・)  puzzled
 ( ˘ ‸ ˘ )  pondering
+( ╹ -╹)?  slit
+(„• ֊ •„)੭  similar, scratch head, headscratch
 
 ## 💡 idea · aha, eureka, lightbulb, got it, i know
 (・o・)ﾋﾟｺｰﾝ!  pikoon
