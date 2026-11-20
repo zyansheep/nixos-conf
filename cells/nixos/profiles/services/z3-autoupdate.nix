@@ -209,17 +209,26 @@
         fi
       }
 
-      # Waits for this host's T3 server to report version $1 in server-runtime.json.
+      # Waits for this host's T3 server to report version $1 in server-runtime.json: 3 minutes, or up to 20 while
+      # the server's units stay active (a release's database migrations can take minutes before it writes the file;
+      # 0.1.11's took 3 minutes on functor).
       wait_server() {
-        local want=$1 have=
-        for _ in $(seq 90); do
+        local want=$1 have="" i=0 unit up
+        for i in $(seq 600); do
           have=$(jq -r '.serverVersion // empty' "$runtime_json" 2>/dev/null || true)
           if [ "$have" = "$want" ] && kill -0 "$(jq -r '.pid' "$runtime_json")" 2>/dev/null; then
             return 0
           fi
+          if [ "$i" -ge 90 ]; then
+            up=0
+            for unit in "''${restart_units[@]}"; do
+              systemctl --user is-active --quiet "$unit" && up=1
+            done
+            [ "$up" = 1 ] || break
+          fi
           sleep 2
         done
-        echo "the T3 server reports '$have', not $want, after 3 minutes"
+        echo "the T3 server reports '$have', not $want, after $((i * 2 / 60)) minutes"
         return 1
       }
 
