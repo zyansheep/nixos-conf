@@ -46,6 +46,7 @@
     services.update-manager # the updates widget (Waybar custom/updates) and its agent
     services.nixos-deploy # switches to main's newest commit nixos-ci built, when idle (on AC, away, no runs or builds)
     services.z3-autoupdate # restarts Z3 Code after nixos-deploy switches
+    services.dither-approvals # dither-ask and the approval keys; the fingerprint reader as an approver device
     services."hampshire-vpn"
     services.protonvpn
     services.zfs-snapshots
@@ -209,6 +210,9 @@
   z3-autoupdate.desktopApp = true;
   # A deploy fails (and is switched back) if one of these was running before it and isn't after.
   nixos-deploy.checkUnits = ["wayland-wm@niri.service" "waybar.service" "vicinae.service" "swaync.service" "pipewire.service"];
+  # Answers approvals from the page with a finger on the reader (pair once: sudo desk-signer-pair LINK).
+  dither-approvals.deskSigner.enable = true;
+
   # The emoji picker edits the kaomoji in ~/nixos-conf and reads them from there (cells/home/profiles/emoji.nix).
   nixos-deploy.liveFiles = ["cells/home/profiles/_files/kaomoji.txt"];
 

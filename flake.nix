@@ -51,6 +51,13 @@
     japanese-weave.url = "github:zyansheep/japanese-weave";
     japanese-weave.inputs.nixpkgs.follows = "latest";
 
+    # Approvals (profiles/services/dither-approvals.nix): dither-ask from dither-chat, and dither-accounts' desk
+    # signer (a plain source tree: it has no flake).
+    dither-chat.url = "github:libdither/dither-chat";
+    dither-chat.inputs.nixpkgs.follows = "latest";
+    dither-accounts.url = "github:libdither/dither-accounts";
+    dither-accounts.flake = false;
+
     # Update status, CI builds and upstream merges across the machines, in a
     # Waybar widget (profiles/services/update-manager.nix).
     update-manager.url = "github:zyansheep/UpdateManager";

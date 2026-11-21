@@ -43,12 +43,16 @@
     services.haveno # Haveno (Reto) Monero exchange daemon, moved from sguru
     services.z3-autoupdate # pins each new Z3 Code release on main; restarts Z3 Code once no thread runs
     services.input-bump # moves followed flake inputs (japanese-weave) to their newest commit; `input-bump status`
+    services.dither-approvals # dither-ask, the approval keys; the review watcher and merge bot for nixos-conf
     services.cliproxyapi # CLIProxyAPI on 127.0.0.1:8317: pooled Claude subscriptions for Claude Code
     services.sguru-backup # nightly restic backups of sguru's Vaultwarden and headscale, pulled over ssh
   ];
 
   # A deploy fails (and is switched back) if one of these was running before it and isn't after.
   nixos-deploy.checkUnits = ["t3code.service" "dither-chat.service" "dither-accounts.service" "japanese-weave-collector.service"];
+
+  # review/<name> branches of nixos-conf are merged by the bot once the user approves on their phone or laptop.
+  dither-approvals.review.enable = true;
 
   # Japanese Weave: a merge to its main is bumped here once its checks pass, then deployed like any commit.
   input-bump.inputs = [

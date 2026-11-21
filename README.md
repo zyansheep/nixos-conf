@@ -33,6 +33,13 @@ nixos-deploy only replaces it once main holds those changes (or after
 `nixos-deploy drop-local`). Z3 Code restarts onto a new version on its own,
 once no agent is running (`z3-autoupdate status`).
 
+Agents don't push to main: they push `review/<topic>` branches, and once
+nixos-ci built one, the review bot on functor asks you on your phone (or the
+dither-chat page, with the laptop's fingerprint reader) whether to merge it. A
+failed deploy and a local build that holds back main ask there too, and every
+nixos-deploy alert arrives as a dither-chat notice
+(`cells/nixos/profiles/services/dither-approvals.nix`).
+
 Coding agents don't run `nrb`; they run `nrb-request "REASON" [rebuild args...]`
 (`update-manager ask-rebuild`). It builds the system without root and opens a
 full-screen window with the reason, what changes, a message box, Deny and

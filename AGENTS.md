@@ -38,15 +38,28 @@ real input in the background compositor and look at what it did.
   `systemd-cgls --user-unit waybar.service` first; to reload its config without a restart, send SIGUSR2 to its main
   PID only, never `systemctl kill`.
 
-## Where to work: a worktree, then main
+## Where to work: a worktree, then a review branch
 
 Make changes in a worktree of this repo off `origin/main` (`git worktree add ../nixos-conf-<topic> -b <topic> origin/main`),
 never in `~/nixos-conf`: it may hold the user's uncommitted work, and nixos-deploy reads it. Build the hosts you
 touched there (`nix build --no-link .#nixosConfigurations.<host>.config.system.build.toplevel`). Commits must be
 signed (nixos-deploy deploys only signed commits): `git -c gpg.format=ssh -c user.signingkey=$HOME/.ssh/id_ed25519.pub
 commit -S`. A commit on main reaches both hosts by itself (README: nixos-ci, then nixos-deploy, functor first), so
-pushing to main is deploying: only push what built and what the user asked for. To try a change live before it is on
-main, get it into `~/nixos-conf` and ask with `nrb-request`, below.
+merging to main is deploying.
+
+Don't push to main. Push your branch as `review/<topic>` (`git push origin HEAD:refs/heads/review/<topic>`). Once
+nixos-ci has built it, the review bot on functor asks the user to merge it, on their phone or laptop, with your
+commits, the diff stat and the CI result. On Approve the bot merges it into main (a merge commit carrying the user's
+signed approval) and deletes the branch. Follow it with
+
+```sh
+dither-ask review status <topic> --repo nixos-conf   # exit 0 merged, 77 sent back, 75 still waiting (or a conflict)
+```
+
+Sent back: read the user's message in its output, fix, and push the branch again (a new head asks again). A conflict
+with main: rebase on `origin/main` and push again. Pushing a newer head withdraws the question about the older one.
+
+To try a change live before it is on main, get it into `~/nixos-conf` and ask with `nrb-request`, below.
 
 ## Applying changes: ask with `nrb-request`, never sudo
 
@@ -57,15 +70,17 @@ sudo fails). Ask the user instead:
 nrb-request "REASON" [rebuild args...]   # = update-manager ask-rebuild; e.g. --override-input foo path:/x
 ```
 
-- It stages `~/nixos-conf` (`git add .`, like `nrb`), builds the system without root and shows the user a
-  full-screen window: REASON, the closure diff, the commits since the running system, the uncommitted
-  files, a message box, Deny and Approve. On Approve it runs `sudo rebuild ARGS`. It rebuilds
+- It stages `~/nixos-conf` (`git add .`, like `nrb`), builds the system without root and asks the user on
+  their phone (dither-chat approvals) and, where there is a graphical session, in a full-screen window:
+  REASON, the closure diff, the commits since the running system, the uncommitted files, a message box,
+  Deny and Approve. The first answer counts; on Approve it runs `sudo rebuild ARGS`. It works on functor
+  too (the phone alone). It rebuilds
   `~/nixos-conf`, not a worktree: get the change there first.
 - Write REASON for the user: what the switch applies and why, in a sentence or two.
 - It blocks until the user answers (up to 15 minutes, plus the build and the switch): run it in the
   background (Claude: `run_in_background: true`, outside the Bash sandbox, since it starts a job under
   the user's systemd manager).
-- Exit status: 0 switched, or nothing to switch; 77 denied; 75 no answer; 69 no window could be shown;
+- Exit status: 0 switched, or nothing to switch; 77 denied; 75 no answer; 69 nowhere to ask (no window and no hub);
   1 the build or the switch failed. The job's output streams to stdout, and the user's message comes
   last ("The user's message: ..."): read it and do what it says. If the command was interrupted, the
   request goes on: `update-manager job list`, `update-manager job log ID`.

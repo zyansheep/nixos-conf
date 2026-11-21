@@ -15,8 +15,11 @@
 #   polkit, which is what "Switch" in the panel does, locally or remotely.
 #   That is root-equivalent, as `sudo rebuild` (core.rebuild) already is.
 # - `nrb-request REASON [rebuild args]` (= `update-manager ask-rebuild`): how coding
-#   agents ask to switch. A full-screen window shows their reason and what changes
-#   (built without root by `rebuild --build-only`); Approve runs `sudo rebuild`.
+#   agents ask to switch. A full-screen window (where there is a graphical session)
+#   and the user's phone (dither-approvals) show their reason and what changes (built
+#   without root by `rebuild --build-only`); the first answer counts, and only an
+#   approval signed by a device in /etc/dither-approvals/keys (or the window) runs
+#   `sudo rebuild`.
 {
   inputs,
   common,
@@ -42,6 +45,14 @@
     substituters = lib.optional (config.networking.hostName != "functor") "http://100.64.0.4:5000?priority=50";
     settings = {
       ci_host = "functor";
+      # nrb-request also asks on the phone (dither-approvals.nix); an absolute dither-ask, so an agent's PATH can't
+      # stand in a fake one that prints an approval.
+      ask = lib.optionalAttrs (config ? dither-approvals) {
+        dither_command = ["${config.dither-approvals.package}/bin/dither-ask"];
+        dither_url = config.dither-approvals.url;
+        dither_token_file = config.dither-approvals.tokenFile;
+        dither_keys = "/etc/dither-approvals/keys";
+      };
       cache_url = "http://100.64.0.4:5000";
       forks_host = "functor";
       hosts.functor = {

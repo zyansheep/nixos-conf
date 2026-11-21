@@ -34,6 +34,13 @@
 #   nixos-deploy hold / unhold    keep this host where it is until unhold (a pause that starts no thread)
 #   nixos-deploy drop-local       let the next deploy replace this host's local build although main lacks its changes
 #   nixos-deploy busy [--restart] why a switch (or, with --restart, a restart of Z3 Code) should wait, or nothing
+#
+# With dither-approvals (profiles/services/dither-approvals.nix) on the host, the user hears of it on their phone: every
+# alert also goes out as a dither-chat notice, and two moments become questions (kind `deploy`) whose answers count
+# only when a device's signature checks against /etc/dither-approvals/keys:
+#   - a failed deploy: Try it again (clears the bad mark), Resume (skip that commit), Keep paused, or Deny;
+#   - a local build that blocks main: Replace it with main (= drop-local), or Deny.
+# Each run reads the answers (`dither-ask status`); `nixos-deploy resume` by hand withdraws the questions.
 #   nixos-deploy log [-f]         the unit's journal
 #
 # `rebuild` (core.rebuild) refuses to switch to a tree that doesn't contain the running commit, so a stale
@@ -52,6 +59,7 @@
   onCiHost = config.networking.hostName == cfg.ciHost;
   # Read from this build, never from the commit being checked.
   allowedSigners = ../../../home/profiles/_files/git-allowed-signers;
+  dither = config.dither-approvals or null;
 
   cli = pkgs.writeShellApplication {
     name = "nixos-deploy";
@@ -82,21 +90,118 @@
       post_switch=(${lib.escapeShellArgs cfg.postSwitch})
       live_files=(${lib.escapeShellArgs cfg.liveFiles})
       alert_command=${lib.escapeShellArg (toString cfg.alertCommand)}
+      dither_ask=${lib.optionalString (dither != null) "${dither.package}/bin/dither-ask"}
+      keys=/etc/dither-approvals/keys
+      export DITHER_ASK_URL=${lib.escapeShellArg (lib.optionalString (dither != null) dither.url)}
+      export DITHER_ASK_TOKEN_FILE=${lib.escapeShellArg (lib.optionalString (dither != null) dither.tokenFile)}
       thread_args=(--provider ${lib.escapeShellArg cfg.thread.provider} --model ${lib.escapeShellArg cfg.thread.model})
       t3_db=$HOME/.t3/userdata/statev2.sqlite
       clone=$state/main.git
       allowed_signers=${allowedSigners}
-      mkdir -p "$state/bad" "$state/tries" "$state/dropped" "$runtime"
+      mkdir -p "$state/bad" "$state/tries" "$state/dropped" "$state/asks" "$runtime"
 
       say() { echo "nixos-deploy: $*" >&2; }
       record() { printf '%s %s\n' "$(date -Is)" "$*" >>"$state/history"; say "$*"; }
-      # $1 title, $2 body, $3 urgency (low, normal, critical): a notification here, and nixos-deploy.alertCommand,
-      # which reaches the user wherever they are.
+      # $1 title, $2 body, $3 urgency (low, normal, critical): a notification here, and (unless $4 is "here", when a
+      # question about it follows) a dither-chat notice and nixos-deploy.alertCommand, which reach the user wherever
+      # they are.
       alert() {
         notify-send --app-name "nixos-deploy" --urgency "''${3:-normal}" "$1" "''${2:-}" 2>/dev/null || true
+        [ "''${4:-}" = here ] && return 0
+        if [ -n "$dither_ask" ]; then
+          local urgency=normal
+          case ''${3:-normal} in critical) urgency=high ;; low) urgency=low ;; esac
+          printf '%s\n' "''${2:-}" | "$dither_ask" alert --title "$1 ($host)" --body-file - --urgency "$urgency" >>"$state/alert.log" 2>&1 || true
+        fi
         if [ -n "$alert_command" ]; then
           bash -c "$alert_command" alert "$1" "''${2:-}" "''${3:-normal}" >>"$state/alert.log" 2>&1 || true
         fi
+      }
+
+      # --- questions (dither-approvals) ---------------------------------------------------------------------------
+      # $1 key (one question per key, its id kept in $state/asks/KEY), $2 title, $3 body, $4 state and $5 reason for
+      # the dither-deploy-v1 payload, the rest --action specs. Returns 1 when it couldn't ask (no dither, the hub).
+      ask() {
+        local key=$1 title=$2 body=$3 st=$4 reason=$5 out id
+        shift 5
+        [ -n "$dither_ask" ] || return 1
+        [ -e "$state/asks/$key" ] && return 0
+        reason=$(printf '%s' "$reason" | tr '\n' ' ' | LC_ALL=C tr -cd ' -~' | cut -c1-300)
+        out=$(printf '%s\n' "$body" | "$dither_ask" request --kind deploy --title "$title" --body-file - \
+          --payload-file <(printf 'dither-deploy-v1\nhost %s\ncommit %s\nstate %s\nreason %s\n' "$host" "$candidate" "$st" "$reason") \
+          "$@" --urgency high --expires 604800 2>>"$state/alert.log") || true
+        id=$(jq -r '.id // empty' <<<"$out" 2>/dev/null || true)
+        if [ -z "$id" ]; then
+          record "could not ask on dither-chat (see $state/alert.log)"
+          return 1
+        fi
+        echo "$id" >"$state/asks/$key"
+        record "asked on dither-chat: $title ($id)"
+      }
+      # The answer to question $1, if it came: sets ans_action and ans_note (" on <device>: <message>") and forgets
+      # the question. Returns 1 while it waits or the hub can't be reached, and when it ended unanswered or its answer
+      # doesn't verify (both recorded, and the question forgotten).
+      answer() {
+        local id out rc=0 st
+        id=$(cat "$state/asks/$1" 2>/dev/null) || return 1
+        out=$("$dither_ask" status "$id" --keys "$keys" 2>>"$state/alert.log") || rc=$?
+        st=$(jq -r '.state // empty' <<<"$out" 2>/dev/null || true)
+        case $rc in
+          0 | 77)
+            ans_action=$(jq -r '.action' <<<"$out")
+            ans_note=" on $(jq -r '.device.name // "the page"' <<<"$out")$(jq -r 'if .message then ": " + .message else "" end' <<<"$out")"
+            rm -f "$state/asks/$1"
+            record "answered $id: $ans_action$ans_note"
+            return 0
+            ;;
+          75)
+            [ "$st" = waiting ] && return 1
+            record "question $id ended unanswered ($st)"
+            ;;
+          76) record "the answer to $id does not verify against $keys: ignored" ;;
+          64) record "question $id is gone from the hub" ;;
+          *) return 1 ;;
+        esac
+        rm -f "$state/asks/$1"
+        return 1
+      }
+      # $1 why: withdraws every open question.
+      withdraw() {
+        local f
+        for f in "$state"/asks/*; do
+          [ -e "$f" ] || continue
+          "$dither_ask" cancel "$(cat "$f")" --reason "$1" >/dev/null 2>>"$state/alert.log" || true
+          rm -f "$f"
+        done
+      }
+      # Acts on the answers that came since the last run.
+      take_answers() {
+        local f key rev sys
+        [ -n "$dither_ask" ] || return 0
+        for f in "$state"/asks/failed-*; do
+          [ -e "$f" ] || continue
+          key=$(basename "$f")
+          rev=''${key#failed-}
+          answer "$key" || continue
+          case $ans_action in
+            retry | resume)
+              if [ "$ans_action" = retry ]; then rm -f "''${state:?}/bad/$rev" "''${state:?}/tries/$rev"; fi
+              rm -f "''${state:?}/paused"
+              record "resumed ($ans_action$ans_note)"
+              ;;
+            *) record "kept paused$ans_note" ;;
+          esac
+        done
+        for f in "$state"/asks/local-*; do
+          [ -e "$f" ] || continue
+          key=$(basename "$f")
+          sys=''${key#local-}
+          answer "$key" || continue
+          if [ "$ans_action" = drop-local ]; then
+            touch "$state/dropped/$sys"
+            record "the local build may be replaced by main's build$ans_note"
+          fi
+        done
       }
       wait_for() {
         echo "$(date -Is) $1" >"$state/waiting"
@@ -425,6 +530,7 @@
       }
 
       # --- the T3 debug thread ------------------------------------------------------------------------------------
+      # $1 title, $2 brief, $3 "here" when a question follows (the alert stays on this host).
       start_thread() {
         local title=$1 body=$2 out link
         t3 project add "$conf" >/dev/null 2>&1 || true
@@ -432,10 +538,10 @@
           link=$(jq -r '.link // .threadId // empty' <<<"$out" 2>/dev/null || true)
           echo "thread  ''${link:-$out}" >>"$state/paused"
           record "debug thread: ''${link:-$out}"
-          alert "$title" "Paused. A T3 thread on $host is looking into it: ''${link:-see nixos-deploy status}" critical
+          alert "$title" "Paused. A T3 thread on $host is looking into it: ''${link:-see nixos-deploy status}" critical "''${3:-}"
         else
           record "could not start the debug thread (see $state/thread.err)"
-          alert "$title" "Paused. Could not start a T3 thread; see nixos-deploy status on $host." critical
+          alert "$title" "Paused. Could not start a T3 thread; see nixos-deploy status on $host." critical "''${3:-}"
         fi
       }
 
@@ -469,9 +575,10 @@
       # --- apply --------------------------------------------------------------------------------------------------
       apply() {
         local force=$1 reason prev log failed_before active_before problem="" running lbuild base candidate candidate_path
-        local why blocked tries
+        local why blocked tries key
         exec 9>"$runtime/lock"
         flock -n 9 || { say "another run is in progress"; return 0; }
+        take_answers
         if paused; then say "paused ($(sed -n 's/^reason  //p' "$state/paused"))"; return 0; fi
 
         if [ "$force" = 1 ]; then export CANARY=0; fi
@@ -481,7 +588,16 @@
         fi
         if [ -n "$blocked" ]; then
           wait_for "$blocked"
-          tell_once "local-$(basename "$(readlink -f /run/current-system)")" "$blocked"
+          key=local-$(basename "$(readlink -f /run/current-system)")
+          if [ -n "$dither_ask" ] && [ ! -e "$state/told-$key" ]; then
+            touch "$state/told-$key"
+            record "$blocked"
+            ask "$key" "A local build on $host holds back ''${candidate:0:12}" \
+              "$blocked"$'\n\n'"Replace it with main: main's build ''${candidate:0:12} replaces the running local build; its changes stay in ~/nixos-conf, uncommitted." \
+              blocked "$blocked" --action 'drop-local:signed=Replace it with main' ||
+              alert "Update waiting on $host" "$blocked" low
+          fi
+          tell_once "$key" "$blocked"
           return 0
         fi
         if [ "$force" != 1 ]; then
@@ -539,7 +655,14 @@
         fi
         record "$rolled"
         pause "deploying ''${candidate:0:12} failed: $problem"
-        start_thread "nixos-conf ''${candidate:0:12} failed on $host" "$(debug_prompt "$problem" "$log" "$rolled")"
+        start_thread "nixos-conf ''${candidate:0:12} failed on $host" "$(debug_prompt "$problem" "$log" "$rolled")" "''${dither_ask:+here}"
+        if [ -n "$dither_ask" ]; then
+          ask "failed-$candidate" "nixos-conf ''${candidate:0:12} failed on $host" \
+            "$problem"$'\n'"$rolled"$'\n\n'"Deploys on $host are paused. $(sed -n 's/^thread  /Debug thread: /p' "$state/paused")"$'\n\n'"The log's end:"$'\n'"$(tail -n 40 "$log")" \
+            failed "$problem" \
+            --action "retry:signed=Try ''${candidate:0:12} again" --action 'resume:signed=Resume, skipping it' --action 'hold:any=Keep paused' ||
+            alert "nixos-conf ''${candidate:0:12} failed on $host" "Paused: $problem" critical
+        fi
         return 1
       }
 
@@ -590,6 +713,7 @@
           systemctl --user start --no-block nixos-deploy.service
           ;;
         resume | unhold)
+          [ -z "$dither_ask" ] || withdraw "resumed on $host by hand"
           rm -f "''${state:?}/paused"
           record "resumed"
           systemctl --user start --no-block nixos-deploy.service
