@@ -74,8 +74,7 @@ nrb-request "REASON" [rebuild args...]   # = update-manager ask-rebuild; e.g. --
   their phone (dither-chat approvals) and, where there is a graphical session, in a full-screen window:
   REASON, the closure diff, the commits since the running system, the uncommitted files, a message box,
   Deny and Approve. The first answer counts; on Approve it runs `sudo rebuild ARGS`. It works on functor
-  too (the phone alone). It rebuilds
-  `~/nixos-conf`, not a worktree: get the change there first.
+  too (the phone alone). It rebuilds `~/nixos-conf`, not a worktree: get the change there first.
 - Write REASON for the user: what the switch applies and why, in a sentence or two.
 - It blocks until the user answers (up to 15 minutes, plus the build and the switch): run it in the
   background (Claude: `run_in_background: true`, outside the Bash sandbox, since it starts a job under
