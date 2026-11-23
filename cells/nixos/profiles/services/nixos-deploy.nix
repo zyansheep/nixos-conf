@@ -41,6 +41,10 @@
 #   - a failed deploy: Try it again (clears the bad mark), Resume (skip that commit), Keep paused, or Deny;
 #   - a local build that blocks main: Replace it with main (= drop-local), or Deny.
 # Each run reads the answers (`dither-ask status`); `nixos-deploy resume` by hand withdraws the questions.
+# And (nixos-deploy.requireApprovals) a candidate deploys only when every commit on main's first-parent chain since the
+# running one is approved (`dither-ask verify-range`): a merge the review bot made of a review/ branch you approved, or
+# a bot's commit under a standing policy (z3-autoupdate's version bumps). A host key's signature alone no longer
+# deploys anything. Stuck behind other commits, it asks you once whether to deploy main up to there anyway.
 #   nixos-deploy log [-f]         the unit's journal
 #
 # `rebuild` (core.rebuild) refuses to switch to a tree that doesn't contain the running commit, so a stale
@@ -91,6 +95,7 @@
       live_files=(${lib.escapeShellArgs cfg.liveFiles})
       alert_command=${lib.escapeShellArg (toString cfg.alertCommand)}
       dither_ask=${lib.optionalString (dither != null) "${dither.package}/bin/dither-ask"}
+      require_approvals=${lib.boolToString cfg.requireApprovals}
       keys=/etc/dither-approvals/keys
       export DITHER_ASK_URL=${lib.escapeShellArg (lib.optionalString (dither != null) dither.url)}
       export DITHER_ASK_TOKEN_FILE=${lib.escapeShellArg (lib.optionalString (dither != null) dither.tokenFile)}
@@ -98,7 +103,7 @@
       t3_db=$HOME/.t3/userdata/statev2.sqlite
       clone=$state/main.git
       allowed_signers=${allowedSigners}
-      mkdir -p "$state/bad" "$state/tries" "$state/dropped" "$state/asks" "$runtime"
+      mkdir -p "$state/bad" "$state/tries" "$state/dropped" "$state/asks" "$state/approved" "$state/unapproved-base" "$runtime"
 
       say() { echo "nixos-deploy: $*" >&2; }
       record() { printf '%s %s\n' "$(date -Is)" "$*" >>"$state/history"; say "$*"; }
@@ -191,6 +196,16 @@
               ;;
             *) record "kept paused$ans_note" ;;
           esac
+        done
+        for f in "$state"/asks/unapproved-*; do
+          [ -e "$f" ] || continue
+          key=$(basename "$f")
+          rev=''${key#unapproved-}
+          answer "$key" || continue
+          if [ "$ans_action" = deploy-range ] && [ -s "$state/unapproved-base/$rev" ]; then
+            cp "$state/unapproved-base/$rev" "$state/approved/$rev"
+            record "deploying main up to ''${rev:0:12} approved by hand$ans_note"
+          fi
         done
         for f in "$state"/asks/local-*; do
           [ -e "$f" ] || continue
@@ -310,6 +325,17 @@
         return 0
       }
 
+      # Whether every commit on main's first-parent chain from $1 (excluded) to $2 is approved: a merge of a review/
+      # branch carrying an approval signed by a device in $keys, or a bot's commit under a standing policy
+      # (`dither-ask verify-range`, dither-chat docs/approvals.md). Or you approved deploying that range itself, from
+      # the question `apply` asks when it is stuck (an approval of a range ending at $2 that began at or before $1).
+      approved_range() {
+        local from
+        "$dither_ask" verify-range "$1" "$2" --keys "$keys" --repo nixos-conf --git-dir "$clone" >/dev/null 2>>"$state/verify.log" && return 0
+        from=$(cat "$state/approved/$2" 2>/dev/null) || return 1
+        git -C "$clone" merge-base --is-ancestor "$from" "$1" 2>/dev/null
+      }
+
       # Prints a commit of ~/nixos-conf's tracked files as they are on disk, parented on HEAD, for a local build
       # that `rebuild` didn't record (one from before it recorded them); nothing if the tree has no changes.
       snapshot_tree() {
@@ -365,6 +391,8 @@
       plan() {
         local rev revs results path tip tip_result unsigned recorded at missing sigbase head
         local unsigned_seen="" canary_rev="" canary_bad="" canary_skipped=""
+        unapproved=
+        unapproved_base=
         why=
         blocked=
         lbuild=
@@ -458,10 +486,20 @@
             unsigned_seen=$unsigned
             continue
           fi
+          if [ "$require_approvals" = true ] && ! approved_range "$sigbase" "$rev"; then
+            # An older candidate may be covered still (an approved merge before an unapproved push).
+            [ -n "$unapproved" ] || unapproved=$rev
+            continue
+          fi
           candidate=$rev
           candidate_path=$path
           break
         done
+        if [ -z "$candidate" ] && [ -n "$unapproved" ]; then
+          unapproved_base=$sigbase
+          why="main up to ''${unapproved:0:12} holds commits you haven't approved (not a merge of an approved review/ branch, nor a bot's commit under a standing policy); nothing after them deploys until you approve them"
+          return 1
+        fi
         if [ -z "$candidate" ] && [ -n "$unsigned_seen" ]; then
           why="commit ''${unsigned_seen:0:12} on main isn't signed by a key in git-allowed-signers; nothing after it deploys (nrb from a checked tree to move past it)"
           return 1
@@ -584,6 +622,16 @@
         if [ "$force" = 1 ]; then export CANARY=0; fi
         if ! plan; then
           wait_for "$why"
+          if [ -n "$unapproved" ] && [ ! -e "$state/told-unapproved-$unapproved" ]; then
+            touch "$state/told-unapproved-$unapproved"
+            record "$why"
+            echo "$unapproved_base" >"$state/unapproved-base/$unapproved"
+            candidate=$unapproved
+            ask "unapproved-$unapproved" "Deploy unapproved commits on main to $host?" \
+              "$why."$'\n\n'"The commits ($unapproved_base..$unapproved, first parent):"$'\n'"$(git -C "$clone" log --first-parent --format='%h %an: %s' "$unapproved_base..$unapproved" | head -n 40)"$'\n\n'"Deploy them: this host may switch to main up to ''${unapproved:0:12} as they are. Deny: it stays where it is." \
+              unapproved "$unapproved_base..$unapproved" --action 'deploy-range:signed=Deploy them' ||
+              alert "Unapproved commits on main" "$why" normal
+          fi
           return 0
         fi
         if [ -n "$blocked" ]; then
@@ -767,6 +815,15 @@ in {
       description = ''
         A shell command that tells the user something wherever they are, beyond this host's notifications: run as
         `bash -c CMD alert TITLE BODY URGENCY` (urgency low, normal or critical).
+      '';
+    };
+    requireApprovals = lib.mkOption {
+      type = lib.types.bool;
+      default = dither != null;
+      description = ''
+        Deploy a commit only when every commit on main between the running one and it is approved (`dither-ask
+        verify-range` against /etc/dither-approvals/keys): a merge of a review/ branch you approved, or a bot's commit
+        under a standing policy. When main holds others, it asks you whether to deploy them anyway.
       '';
     };
     thread = {

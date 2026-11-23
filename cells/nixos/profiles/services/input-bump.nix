@@ -1,7 +1,9 @@
 # input-bump: move chosen flake inputs of nixos-conf to their branch's newest commit, the way z3-autoupdate bump
 # moves Z3 Code: in its own clone of origin/main (never ~/nixos-conf), the input's own checks first, then both hosts'
-# systems, then a signed commit "flake: <input> <old> -> <new>" pushed to main. nixos-ci and nixos-deploy take it from
-# there (functor first). Git only: an input is followed with `git ls-remote` on its URL, whatever hosts it.
+# systems, then a signed commit "flake: <input> <old> -> <new>" pushed as the branch review/input-<input>. The review
+# bot (dither-approvals.review) asks you on your phone once nixos-ci built it, and merges it to main on Approve; then
+# nixos-deploy takes it (functor first). A newer commit of the input replaces the branch, which withdraws the question
+# about the older one. Git only: an input is followed with `git ls-remote` on its URL, whatever hosts it.
 #
 # Every 30 minutes on functor (input-bump.inputs is set there only). A failure (the input's checks, a host that
 # doesn't build) is tried again on the next two runs, then that commit of the input is skipped until a newer one comes.
@@ -45,6 +47,11 @@
       }
       locked() { jq -r --arg n "$1" '.nodes[$n].locked.rev // empty' "$clone/flake.lock"; }
       newest() { git ls-remote "$1" "refs/heads/$2" | cut -f1; }
+      # The input's rev as locked on the branch review/input-$1, if it exists.
+      review_locked() {
+        git -C "$clone" fetch --quiet origin "+refs/heads/review/input-$1:refs/remotes/origin/review/input-$1" 2>/dev/null || return 0
+        git -C "$clone" show "origin/review/input-$1:flake.lock" 2>/dev/null | jq -r --arg n "$1" '.nodes[$n].locked.rev // empty'
+      }
 
       # $1 input, $2 commit, $3 what failed, $4 log: retried on the next two runs, then skipped.
       failed() {
@@ -62,6 +69,11 @@
         [ -n "$new" ] || { say "$name: could not read $branch of $url"; return 1; }
         [ "$old" != "$new" ] || return 0
         [ "$(cat "$state/failed/$name-$new" 2>/dev/null || echo 0)" -lt 3 ] || return 0
+        # Already waiting for your approval on review/input-<name>: nothing to do until a newer commit comes.
+        if [ "$(review_locked "$name")" = "$new" ]; then
+          say "$name: ''${new:0:12} waits for your approval (review/input-$name)"
+          return 0
+        fi
         log=$state/$name-''${new:0:12}.log
         : >>"$log"
         (cd "$clone" && nix flake update "$name") >>"$log" 2>&1 || { failed "$name" "$new" "nix flake update failed" "$log"; return 1; }
@@ -84,15 +96,15 @@
           return 1
         fi
         git -C "$clone" commit --quiet -m "flake: $name ''${old:0:12} -> ''${new:0:12}" -- flake.lock
-        # main may have moved while the systems built: rebase once and retry.
-        if ! git -C "$clone" -c credential.helper= -c credential.helper='!gh auth git-credential' push --quiet origin main:main >>"$log" 2>&1; then
-          if ! git -C "$clone" pull --quiet --rebase origin main >>"$log" 2>&1 ||
-            ! git -C "$clone" -c credential.helper= -c credential.helper='!gh auth git-credential' push --quiet origin main:main >>"$log" 2>&1; then
-            record "$name: push failed; the next run tries again"
-            return 1
-          fi
+        # The bot's own branch: replaced whole (a newer commit of the input withdraws the older question).
+        if ! git -C "$clone" -c credential.helper= -c credential.helper='!gh auth git-credential' push --quiet --force origin "main:refs/heads/review/input-$name" >>"$log" 2>&1; then
+          record "$name: push failed; the next run tries again"
+          git -C "$clone" reset --quiet --hard origin/main
+          return 1
         fi
-        record "$name: pushed ''${new:0:12}"
+        # The clone's main follows origin's, not this unmerged commit.
+        git -C "$clone" reset --quiet --hard origin/main
+        record "$name: pushed ''${new:0:12} as review/input-$name; it merges once you approve it"
         systemctl start --no-block nixos-ci.service 2>/dev/null || true
       }
 
