@@ -4,4 +4,4 @@
 # ALLOWED SIGNERS. Add a host: its ~/.ssh/id_ed25519.pub, here and at github.com/settings/keys as a signing key.
 zyansheep@protonmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKWgNDUMyzYDzAPill8WLt7UUUBjhKQr7Ne1ZBNn8NNs functor
 zyansheep@protonmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN4i3MQ8WPIvSfSviF6kqef0EnKFKLdYETMl/puV5wON isomorph
-review-bot@functor namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlHO6AuAZsAReyGc7ITUOmaZwPp8BPC9aLGhmpZs6oO dither review bot (functor; dither-approvals.review)
+zyansheep@protonmail.com namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAlHO6AuAZsAReyGc7ITUOmaZwPp8BPC9aLGhmpZs6oO review bot (functor; dither-approvals.review; a GitHub signing key too)

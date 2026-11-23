@@ -61,7 +61,7 @@
     keys = "/etc/dither-approvals/keys";
     botKey = "${home}/.local/share/dither-review/bot_ed25519";
     botName = "dither review bot";
-    botEmail = "review-bot@functor";
+    botEmail = "zyansheep@protonmail.com"; # GitHub verifies a signature only for one of the account's emails
     repos = [
       {
         name = "nixos-conf";
