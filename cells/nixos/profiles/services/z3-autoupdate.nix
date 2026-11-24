@@ -352,7 +352,7 @@
       }
 
       bump() {
-        local tag version clone log sums appimage cli current
+        local tag version clone log sums appimage cli current policy
         [ "$bump_host" = true ] || { say "this host doesn't bump"; return 0; }
         exec 8>"$runtime/bump.lock"
         flock -n 8 || { say "another bump is in progress"; return 0; }
@@ -410,7 +410,15 @@
           return 1
         fi
 
-        git -C "$clone" commit --quiet -m "z3code: $version" -- "''${packages[@]}"
+        # The standing approval (dither-approvals: a `policy` you approved once on the phone) rides in the message, so
+        # nixos-deploy's approval check passes this commit: it may change only the version and hash lines.
+        policy=$HOME/.config/dither-approvals/z3code-bump.approval
+        if [ -r "$policy" ]; then
+          printf 'z3code: %s\n\n%s\n' "$version" "$(cat "$policy")" | git -C "$clone" commit --quiet -F - -- "''${packages[@]}"
+        else
+          record "no standing approval at $policy: this bump deploys only once you approve it on the phone"
+          git -C "$clone" commit --quiet -m "z3code: $version" -- "''${packages[@]}"
+        fi
         # main may have moved while the systems built: rebase once and retry.
         if ! push "$clone" >>"$log" 2>&1; then
           if ! git -C "$clone" pull --quiet --rebase origin main >>"$log" 2>&1 || ! push "$clone" >>"$log" 2>&1; then

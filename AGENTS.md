@@ -47,7 +47,8 @@ signed (nixos-deploy deploys only signed commits): `git -c gpg.format=ssh -c use
 commit -S`. A commit on main reaches both hosts by itself (README: nixos-ci, then nixos-deploy, functor first), so
 merging to main is deploying.
 
-Don't push to main. Push your branch as `review/<topic>` (`git push origin HEAD:refs/heads/review/<topic>`). Once
+Don't push to main: since nixos-deploy.requireApprovals, a commit pushed straight to main blocks every deploy after it
+until the user approves deploying it by hand. Push your branch as `review/<topic>` (`git push origin HEAD:refs/heads/review/<topic>`). Once
 nixos-ci has built it, the review bot on functor asks the user to merge it, on their phone or laptop, with your
 commits, the diff stat and the CI result. On Approve the bot merges it into main (a merge commit carrying the user's
 signed approval) and deletes the branch. Follow it with
