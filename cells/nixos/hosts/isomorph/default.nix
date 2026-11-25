@@ -78,6 +78,10 @@
     # These two tunnels have their own services. Proton's tunnel and dummy
     # kill-switch devices must remain managed by NetworkManager.
     unmanaged = ["interface-name:tailscale0" "interface-name:ppp*"];
+    # INFO records NM's iwd decisions ("new IWD device state", assumed and
+    # deactivated connections). Kept while iwd sometimes sticks in
+    # "disconnecting" after resume; see iwd-dbus-trace below.
+    logLevel = "INFO";
   };
   networking.useDHCP = false;
   networking.dhcpcd.enable = false;
@@ -86,6 +90,20 @@
     # NM's iwd backend delegates MAC changes to iwd. Its per-network
     # randomization and explicit address overrides require this setting.
     AddressRandomization = "network";
+  };
+  # Who asks iwd for what: after some resumes iwd sticks in "disconnecting"
+  # (2026-11-09, 11-16, 11-23) and its own log only says that it started. The
+  # method calls to it (Connect, Disconnect, Scan, Powered), with their
+  # senders, name the caller next time. Low volume: NetworkManager and
+  # nm-sidebar mostly read cached properties.
+  systemd.services.iwd-dbus-trace = {
+    description = "Log D-Bus method calls to iwd";
+    wantedBy = ["multi-user.target"];
+    after = ["dbus.service"];
+    serviceConfig = {
+      ExecStart = "${pkgs.dbus}/bin/dbus-monitor --system \"type='method_call',destination='net.connman.iwd'\"";
+      Restart = "always";
+    };
   };
   services.resolved.enable = true;
   programs.nm-applet.enable = false; # nm-sidebar opens from Waybar / Alt+Shift+W
