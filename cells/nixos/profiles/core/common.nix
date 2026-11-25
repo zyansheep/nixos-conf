@@ -138,4 +138,12 @@ in {
   time.timeZone = "America/Los_Angeles";
   # Using NetworkManager because it is easy
   networking.networkmanager.enable = lib.mkDefault true;
+
+  # /tmp: delete what nobody created or changed in 3 days (the daily systemd-tmpfiles-clean run). Reading a file does
+  # not keep it: systemd's own tmp.conf ages /tmp by every timestamp, access time included, at 10 days, so a grep, a
+  # backup or an agent reading through /tmp kept old files alive for good (41G on functor, 2026-11-25). bcm/BM = birth,
+  # status change and modification time for files, birth and modification time for directories. 00-nixos.conf sorts
+  # before tmp.conf, so this line wins for /tmp. Listening sockets and flock()ed paths are kept. Agents are told in
+  # ~/Projects/agents/AGENTS.md and by its disk-guard hook.
+  systemd.tmpfiles.rules = [ "q /tmp 1777 root root bcmBM:3d" ];
 }
