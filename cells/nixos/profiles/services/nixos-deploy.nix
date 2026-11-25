@@ -283,7 +283,8 @@
       # session) someone is using the machine.
       restart_busy() {
         local runs
-        if systemctl --user is-active --quiet nixos-deploy.service ||
+        # nixos-deploy.service is a oneshot: while it runs, it is "activating", which is-active doesn't count.
+        if [ -n "$(systemctl --user list-units --no-legend --plain --state=activating,active nixos-deploy.service 2>/dev/null)" ] ||
           [ -n "$(systemctl list-units --no-legend --plain --state=activating,active 'update-manager-switch@*' 'update-manager-boot@*' 2>/dev/null)" ]; then
           echo "a switch is under way"
           return
