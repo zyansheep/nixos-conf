@@ -8,6 +8,7 @@
     suites.base
     ./hardware-configuration.nix
     ./z3code.nix # Z3 Code's server (t3code.service), kept current by z3-autoupdate
+    ./scratch.nix # /media/scratch: an unsnapshotted dataset for ~/.cache and other churn
 
     # graphics.plasma
     graphics.drivers.amd
