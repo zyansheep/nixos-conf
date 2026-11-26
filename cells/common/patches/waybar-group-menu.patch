@@ -1,36 +1,68 @@
+diff --git a/include/AModule.hpp b/include/AModule.hpp
+index 771ec8694f3b..cadeb6eabca1 100644
 --- a/include/AModule.hpp
 +++ b/include/AModule.hpp
-@@ -35,6 +35,9 @@
-
+@@ -46,6 +46,9 @@ class AModule : public IModule {
+ 
    SCROLL_DIR getScrollDir(GdkEventScroll* e);
    bool tooltipEnabled() const;
 +  static void mirrorStyleClasses(const Glib::RefPtr<Gtk::StyleContext>& source,
 +                                 const Glib::RefPtr<Gtk::StyleContext>& target,
 +                                 const Glib::ustring& prefix);
-
-   std::vector<int> pid_children_;
-   const std::string name_;
-@@ -48,7 +51,7 @@
-   virtual bool handleMouseLeave(GdkEventCrossing* const& ev);
-   virtual bool handleScroll(GdkEventScroll*);
-   virtual bool handleRelease(GdkEventButton* const& ev);
--  GObject* menu_;
-+  GObject* menu_ = nullptr;
-
-  private:
-   bool handleUserEvent(GdkEventButton* const& ev);
+ 
+   // --- Generic format/tooltip resolution (config-only, usable by any module,
+   // ALabel-derived or not). Prefers `<key>-<state>`, then `<key>`, then default.
+diff --git a/src/ALabel.cpp b/src/ALabel.cpp
+index f40f5452e978..28c29a696b95 100644
+--- a/src/ALabel.cpp
++++ b/src/ALabel.cpp
+@@ -153,6 +153,12 @@ ALabel::ALabel(const Json::Value& config, const std::string& name, const std::st
+       }
+       // Keep the menu alive after dropping the transient GtkBuilder.
+       g_object_ref(menu_);
++      if (tooltipEnabled()) {
++        // Automatically disconnect if the label is destroyed during a bar reload.
++        g_signal_connect_object(menu_, "hide", G_CALLBACK(+[](GtkWidget*, GtkWidget* label) {
++          gtk_widget_set_has_tooltip(label, true);
++        }), label_.gobj(), G_CONNECT_DEFAULT);
++      }
+       submenus_ = std::map<std::string, GtkMenuItem*>();
+       menuActionsMap_ = std::map<std::string, std::string>();
+ 
+@@ -189,7 +195,18 @@ ALabel::ALabel(const Json::Value& config, const std::string& name, const std::st
+   }
+ }
+ 
+-auto ALabel::update() -> void { AModule::update(); }
++auto ALabel::update() -> void {
++  // Opt in per module when a group draws the shared battery/status artwork.
++  if (config_["group-state"].asBool()) {
++    if (auto* group = event_box_.get_parent(); group != nullptr) {
++      mirrorStyleClasses(label_.get_style_context(), group->get_style_context(), name_ + "-");
++    }
++  }
++  if (menu_ != nullptr && gtk_widget_get_visible(GTK_WIDGET(menu_))) {
++    label_.set_has_tooltip(false);
++  }
++  AModule::update();
++}
+ 
+ bool ALabel::setLabelMarkup(const Glib::ustring& markup) {
+   if (last_label_markup_ == markup.raw()) {
+diff --git a/src/AModule.cpp b/src/AModule.cpp
+index 7e54e60498e8..18a385d94db2 100644
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
 @@ -1,4 +1,5 @@
  #include "AModule.hpp"
 +#include "util/power_menu_stats.hpp"
-
+ 
+ #include <fmt/core.h>
  #include <fmt/format.h>
- #include <spdlog/spdlog.h>
-@@ -10,6 +11,18 @@
-
+@@ -12,6 +13,17 @@
+ 
  namespace waybar {
-
+ 
 +static void updatePowerMenuStats(GtkWidget* widget) {
 +  if (GTK_IS_LABEL(widget) && g_strcmp0(gtk_widget_get_name(widget), "battery-stats") == 0) {
 +    gtk_label_set_text(GTK_LABEL(widget), powerMenuStats().c_str());
@@ -42,14 +74,13 @@
 +  }
 +}
 +
-+
- AModule::AModule(const Json::Value& config, const std::string& name, const std::string& id,
-                  bool enable_click, bool enable_scroll)
-     : name_(name),
-@@ -90,6 +103,21 @@
+ // Once main.cpp has reaped a child and dropped it from reap, its pid may be reused by an unrelated
+ // process, so it must not be signalled any more.
+ static void forgetReapedChildren(std::vector<int>& pids) {
+@@ -123,6 +135,21 @@ AModule::~AModule() {
    }
  }
-
+ 
 +// Mirror only our namespaced classes; preserve the target widget's own styling.
 +void AModule::mirrorStyleClasses(const Glib::RefPtr<Gtk::StyleContext>& source,
 +                                const Glib::RefPtr<Gtk::StyleContext>& target,
@@ -68,14 +99,10 @@
  auto AModule::update() -> void {
    // Run user-provided update handler if configured
    if (config_["on-update"].isString()) {
-@@ -166,12 +194,37 @@
-   }
-
-   // Check that a menu has been configured
--  if (config_["menu"].isString()) {
-+  if (config_["menu"].isString() && menu_ != nullptr && rec != eventMap_.cend()) {
+@@ -231,9 +258,34 @@ bool AModule::handleUserEvent(GdkEventButton* const& e) {
+   if (config_["menu"].isString()) {
      // Check if the event is the one specified for the "menu" option
-     if (rec->second == config_["menu"].asString()) {
+     if (rec->second == config_["menu"].asString() && menu_ != nullptr) {
 +      // Battery refreshes may otherwise show a tooltip over the open popup.
 +      if (auto* child = event_box_.get_child(); child != nullptr) child->set_has_tooltip(false);
        // Popup the menu
@@ -105,41 +132,6 @@
 +      } else {
 +        gtk_menu_popup_at_pointer(GTK_MENU(menu_), reinterpret_cast<GdkEvent*>(e));
 +      }
+       handled = true;
        // Manually reset prelight to make sure the module doesn't stay in a hover state
        if (auto* module = event_box_.get_child(); module != nullptr) {
-         module->unset_state_flags(Gtk::StateFlags::STATE_FLAG_PRELIGHT);
---- a/src/ALabel.cpp
-+++ b/src/ALabel.cpp
-@@ -98,6 +98,12 @@
-       if (menu_ == nullptr) {
-         throw std::runtime_error("Failed to get 'menu' object from GtkBuilder");
-       }
-+      if (tooltipEnabled()) {
-+        // Automatically disconnect if the label is destroyed during a bar reload.
-+        g_signal_connect_object(menu_, "hide", G_CALLBACK(+[](GtkWidget*, GtkWidget* label) {
-+          gtk_widget_set_has_tooltip(label, true);
-+        }), label_.gobj(), G_CONNECT_DEFAULT);
-+      }
-       submenus_ = std::map<std::string, GtkMenuItem*>();
-       menuActionsMap_ = std::map<std::string, std::string>();
-
-@@ -127,7 +133,18 @@
-   }
- }
-
--auto ALabel::update() -> void { AModule::update(); }
-+auto ALabel::update() -> void {
-+  // Opt in per module when a group draws the shared battery/status artwork.
-+  if (config_["group-state"].asBool()) {
-+    if (auto* group = event_box_.get_parent(); group != nullptr) {
-+      mirrorStyleClasses(label_.get_style_context(), group->get_style_context(), name_ + "-");
-+    }
-+  }
-+  if (menu_ != nullptr && gtk_widget_get_visible(GTK_WIDGET(menu_))) {
-+    label_.set_has_tooltip(false);
-+  }
-+  AModule::update();
-+}
-
- std::string ALabel::getIcon(uint16_t percentage, const std::string& alt, uint16_t max) {
-   auto format_icons = config_["format-icons"];

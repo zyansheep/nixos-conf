@@ -15,7 +15,10 @@
 
     # Nixpkgs
     nixpkgs.url = "github:nixos/nixpkgs/nixos-26.05"; # Required by flake-parts
-    latest.url = "github:numtide/nixpkgs-unfree/nixos-unstable";
+    # Upstream nixos-unstable, not numtide/nixpkgs-unfree: its channel sync stopped on 2026-10-11 and left this
+    # system six weeks behind on security fixes. Every `import latest` here sets allowUnfree itself, and its cache
+    # was never a substituter, so the wrapper added nothing.
+    latest.url = "github:nixos/nixpkgs/nixos-unstable";
     stable.follows = "nixpkgs";
     # Zotero 10.0.4 fails to build on unstable (its build script can't patch
     # Firefox's ActorManagerParent); keep 10.0.0 from here until it's fixed.
@@ -245,9 +248,9 @@
         pkgs = import nixpkgs {
           inherit system;
           config.allowUnfree = true;
-          # SideQuest still ships on EOL Electron 29; only used for Quest
-          # sideloading. Drop once nixpkgs bumps it.
-          config.permittedInsecurePackages = ["sidequest-0.10.42"];
+          # SideQuest still ships on EOL Electron 29 (1.4.1 too); only used for
+          # Quest sideloading. Drop once nixpkgs moves it to a supported Electron.
+          config.permittedInsecurePackages = ["sidequest-1.4.1"];
           overlays = [overlays.common-packages overlays.latest-overrides];
         };
       in

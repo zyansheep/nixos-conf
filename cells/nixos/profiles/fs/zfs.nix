@@ -44,7 +44,7 @@ in
     }
 
     (lib.mkIf cfg.enableSystemdRollback {
-      boot.initrd.systemd.enable = lib.mkDefault true;
+      # Stage 1 is always systemd now (nixpkgs removed the scripted initrd), which this rollback unit needs.
       boot.initrd.systemd.services.rollback = {
         description = "Rollback ZFS datasets to a pristine state";
         wantedBy = [ "initrd.target" ];
