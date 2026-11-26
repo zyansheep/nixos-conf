@@ -95,11 +95,6 @@
   # as used, not available) no longer sets it off on its own.
   zramSwap.enable = true;
 
-  # KSM: the kernel merges identical memory pages. ~40 account browsers (dither-accounts) run copies of the same
-  # Chromium; their processes opt in (MemoryKSM=yes on the dither-accounts unit, inherited by every extractor), so
-  # only those pages are scanned.
-  hardware.ksm.enable = true;
-
   # Enable virtualization
   virtualisation.libvirtd.enable = true;
 
