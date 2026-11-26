@@ -1,21 +1,25 @@
+diff --git a/include/AModule.hpp b/include/AModule.hpp
+index cadeb6eabca1..cd3e97f9524e 100644
 --- a/include/AModule.hpp
 +++ b/include/AModule.hpp
-@@ -9,6 +9,7 @@
- #include "IModule.hpp"
+@@ -14,6 +14,7 @@
+ #include "util/coalescing_dispatcher.hpp"
  
  namespace waybar {
 +class HoverMonitor;
  
  class AModule : public IModule {
   public:
-@@ -52,6 +53,7 @@
-   virtual bool handleScroll(GdkEventScroll*);
-   virtual bool handleRelease(GdkEventButton* const& ev);
+@@ -101,6 +102,7 @@ class AModule : public IModule {
+ 
+   bool disable_on_sleep_{false};
    GObject* menu_ = nullptr;
 +  std::unique_ptr<HoverMonitor> hover_monitor_;
  
-  private:
-   bool handleUserEvent(GdkEventButton* const& ev);
+   // Maps a configured event name (e.g. "on-click-middle") to a built-in module
+   // action name. Populated from the `actions` config section, and by modules
+diff --git a/src/AModule.cpp b/src/AModule.cpp
+index 18a385d94db2..55ce8b936b86 100644
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
 @@ -1,4 +1,5 @@
@@ -23,11 +27,11 @@
 +#include "util/hover_monitor.hpp"
  #include "util/power_menu_stats.hpp"
  
- #include <fmt/format.h>
-@@ -31,6 +32,9 @@
-       isExpand{config_["expand"].isBool() ? config_["expand"].asBool() : false},
+ #include <fmt/core.h>
+@@ -41,6 +42,9 @@ AModule::AModule(const Json::Value& config, const std::string& name, const std::
        distance_scrolled_y_(0.0),
-       distance_scrolled_x_(0.0) {
+       distance_scrolled_x_(0.0),
+       cursor_timeout_conn_() {
 +  if (config_["hover-monitor"].isString())
 +    hover_monitor_ = std::make_unique<HoverMonitor>(event_box_, config_["hover-monitor"].asString());
 +

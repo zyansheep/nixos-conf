@@ -1,3 +1,5 @@
+diff --git a/src/AModule.cpp b/src/AModule.cpp
+index 55ce8b936b86..f4a18f8e97fc 100644
 --- a/src/AModule.cpp
 +++ b/src/AModule.cpp
 @@ -2,6 +2,8 @@
@@ -6,10 +8,10 @@
  
 +#include <pango/pangocairo.h>
 +
+ #include <fmt/core.h>
  #include <fmt/format.h>
  #include <spdlog/spdlog.h>
- 
-@@ -12,9 +14,529 @@
+@@ -14,9 +16,529 @@
  
  namespace waybar {
  

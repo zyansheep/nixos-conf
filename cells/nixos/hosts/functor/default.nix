@@ -33,6 +33,7 @@
     services.printing
     services.ssh
     services.tailscale
+    services.tailnet-guard # traffic for the tailnet addresses only from tailscale0, not the LAN
     services.syncthing
     services.containers
     services.zfs-snapshots
