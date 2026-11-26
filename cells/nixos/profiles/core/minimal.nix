@@ -16,4 +16,9 @@ with lib; {
   security.sudo-rs.enable = true;
 
   environment.shellAliases = { neofetch = "fastfetch"; };
+
+  # machined is socket-activated, so a switch that changes it stops its socket and its service and then starts the
+  # socket; the first name lookup in between (nsswitch's `mymachines`) starts the service over D-Bus, the socket then
+  # refuses to start, and the switch fails and rolls back (systemd 262). Restart the service in place instead.
+  systemd.services.systemd-machined.stopIfChanged = false;
 }
