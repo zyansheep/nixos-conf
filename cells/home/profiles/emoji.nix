@@ -1,7 +1,7 @@
 {inputs, ...}: {config, ...}: let
   kaomoji = "cells/home/profiles/_files/kaomoji.txt";
 in {
-  # `emoji-picker` — emoji, kaomoji and math symbols in a Vicinae dmenu list,
+  # `emoji-picker` — emoji, kaomoji and symbols in a Vicinae dmenu list,
   # pasted via the clipboard; Ctrl+E / Ctrl+Shift+N / Ctrl+Shift+K in it edit
   # the kaomoji. Code: github:zyansheep/kaomoji-picker (its README has the keys).
   # Its `vicinae dmenu --action` patch is applied in
