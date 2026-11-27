@@ -251,11 +251,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1794686393,
-        "narHash": "sha256-6dFBBfsRxjn6EbF0wXut/CRKV9gXf2dXwxzngz4wokE=",
+        "lastModified": 1795805506,
+        "narHash": "sha256-BYM+VSF7h1lN2Du6Y2YwskO+Z8XTVCwKL2oWc9YhPdc=",
         "owner": "zyansheep",
         "repo": "kaomoji-picker",
-        "rev": "1fe593fa8fa25db3b4b6a92fbdfd7356b93e7370",
+        "rev": "7691cea2d671e576321196d3d9f7d9ee152794cb",
         "type": "github"
       },
       "original": {
