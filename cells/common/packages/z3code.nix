@@ -13,10 +13,10 @@
   codex,
 }: let
   pname = "t3code"; # binary, desktop file, keyring entry and profile dir all keep the upstream name
-  version = "0.1.13-nightly.20261126.5305-z3.1";
+  version = "0.1.14-nightly.20261127.5345-z3.1";
   src = fetchurl {
     url = "https://github.com/zyansheep/t3code/releases/download/v${version}/Z3-Code-${version}-x86_64.AppImage";
-    hash = "sha256-wRIKg3NJd5TTdtem18hZIIKJQeIPLtjESHEIcBN+bOU=";
+    hash = "sha256-JyWxnqtt+zPT8Ykutgof72syoFYZlNiyRzS+rrCEzFw=";
   };
   contents = appimageTools.extract {inherit pname version src;};
 in
